@@ -317,4 +317,3 @@ NOT RUN or SKIP with the reason, not as a pass.
 | [`device-supplier-setup-guide.md`](device-supplier-setup-guide.md) | Step-by-step for testing a device |
 | [`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md) | The conformance approach and the test-case templates (Postman, Margo scenario schema) |
 | [`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Full protocol detail: every conformance flow end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF |
-| [`client-demo-brief.md`](client-demo-brief.md) | One-page summary for explaining the suite to a vendor or stakeholder |

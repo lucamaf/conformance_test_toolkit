@@ -13,16 +13,18 @@ have expired.
 
 ## What CTT does in this persona
 
-The CTT acts as a **device / WFM-Client**. It fires real HTTPS requests at
-your WFM, checks the responses against the Margo spec, and generates an HTML
-report where every test row is traced to a specific requirement ID.
+Your WFM is the system under test and the CTT acts as a **mock device** (a WFM
+Client). It fires real HTTPS requests at your WFM, checks the responses against
+the Margo spec, and generates an HTML report where every test row is traced to
+a specific requirement ID. For the demo the WFM is the sandbox Symphony; a
+vendor uses their own WFM.
 
 Authentication is **mutual TLS (MIAF)**: the CTT presents an X.509-SVID
 (a SPIFFE-based certificate) that your WFM's MIS issued, and your WFM
 presents its own. No username/password, no API keys.
 
 ```
-CTT (device-agent role)          Your WFM
+CTT (mock device)                Your WFM (demo: Symphony)
   svid-cert.pem  ──mTLS──►  validates against trust-bundle-ca.pem
                  ◄──mTLS──  validates CTT trusts WFM's own cert
         ▼
@@ -83,18 +85,42 @@ client SVID. That is what makes them trust each other.
 ### Sandbox MIS as Centralized SVID Authority (Symphony)
 
 The Margo sandbox MIS (`mis.sh`) acts as the centralized SVID authority for
-all CTT identity setup. 
-Use this path when testing CTT against Symphony (WFM)
-in a local or sandbox environment. It needs the Margo sandbox cloned to
-`~/sandbox` (`git clone https://github.com/margo/sandbox.git ~/sandbox`).
+all CTT identity setup. Use this path when testing the CTT against Symphony
+(WFM) in a local or sandbox environment.
 
+**Before you start — the sandbox itself.** Clone the Margo sandbox to
+`~/sandbox` and set its environment as the sandbox setup guide describes
+(`~/sandbox/docs/setup-guide.md`, Steps 1 and 2: the `.env` files in
+`~/sandbox/scripts/` and the `symphony.machine` / `harbor.machine` entries in
+`/etc/hosts`):
 
-Run prerequisites first — this creates the symphony directory structure:
+```bash
+git clone https://github.com/margo/sandbox.git ~/sandbox
+```
+
+**Install the sandbox WFM prerequisites (once per machine):**
 
 ```bash
 sudo -E bash ~/sandbox/scripts/wfm.sh
 # → 1) PreRequisites: Setup
+# When it ends with "Press Enter to continue...": press Enter, then 8 to exit
 ```
+
+This is the sandbox's own installation of everything Symphony needs: Docker,
+Go, k3s, Redis, ORAS, the Harbor registry, the Symphony sources and its sample
+packages. It takes 3 to 15 minutes.
+
+> **Run it only once.** On a machine where Symphony is already set up, skip it:
+> running it again empties Symphony's accepted-client list and rebuilds Harbor
+> with a new certificate.
+
+It runs as root and leaves the Docker settings of your user owned by root, which
+later stops `oras` from reaching the registry. Give them back to your user:
+
+```bash
+sudo chown -R $USER:$USER ~/.docker
+```
+
 Note:
     > **If `$HOME/symphony/` does not exist after prerequisites:** wfm.sh may have
     > installed symphony to `/root/symphony/` (happens if the `-E` flag was not
@@ -118,9 +144,18 @@ The steps below do exactly that.
 
 **Step 1 — Generate identity via sandbox mis.sh:**
 
-If the sandbox MIS is not installed on this machine yet, install it first by
-following the Margo sandbox setup guide (`~/sandbox/docs/setup-guide.md`,
-"Build and Run MIS": `mis.sh` options 1, 3 and 4).
+If the sandbox MIS is not installed on this machine yet, install it first. Run
+the menu three times, with options 1, 3 and 4 in this order; each time press
+Enter at "Press Enter to continue..." and then `7` to exit:
+
+```bash
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 1) PreRequisites: Setup
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 3) Factory Bootstrap: Generate Root CAs
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 4) Margo Identity Service: Install
+```
+
+> Option 3 creates new CAs. Do not run it again on a MIS that has already
+> issued SVIDs: every SVID issued before stops being trusted.
 
 Then generate the two SVIDs. Run the command from inside `~/mis-deployment` —
 `mis.sh` writes each SVID folder into the directory you run it from:
@@ -169,7 +204,7 @@ sudo chown $USER:$USER \
 
 # Verify the cert and key match (public keys must be identical):
 openssl x509 -in $HOME/symphony/api/certificates/payload-cert.pem -noout -pubkey | openssl md5
-openssl ec  -in $HOME/symphony/api/certificates/payload-key.pem  -pubout   | openssl md5
+openssl ec  -in $HOME/symphony/api/certificates/payload-key.pem  -pubout 2>/dev/null | openssl md5
 # Both lines must print the same MD5 hash — if they differ, re-run mis.sh
 ```
 
@@ -180,32 +215,40 @@ sudo cp ~/mis-deployment/certs/https-ca.crt  $HOME/symphony/api/mis/
 sudo chown $USER:$USER $HOME/symphony/api/mis/https-ca.crt
 ```
 
-**Step 5 — Add mis.margo.org to /etc/hosts:**
+**Step 5 — Point mis.margo.org at this machine in /etc/hosts:**
 
-Symphony resolves the MIS endpoint by hostname. Without this entry it will try
-to reach the public IP, time out, and exit at startup.
+Symphony, and any device-agent you run later, reach the MIS by this hostname.
+The entry must be this machine's own network address — not `127.0.0.1`, which
+a device-agent running in a container cannot use, and not a public address,
+which times out.
 
 ```bash
-# Check if the entry already exists
-grep "mis.margo.org" /etc/hosts
-
-# If missing or pointing to a non-local IP, set it to 127.0.0.1:
 sudo sed -i '/mis\.margo\.org/d' /etc/hosts
-echo "127.0.0.1 mis.margo.org" | sudo tee -a /etc/hosts
+echo "$(hostname -I | awk '{print $1}') mis.margo.org" | sudo tee -a /etc/hosts
 
-# Verify:
+# Verify — prints this machine's address followed by mis.margo.org:
 grep "mis.margo.org" /etc/hosts
-# Should print: 127.0.0.1 mis.margo.org
 ```
 
-**Step 6 — Register CTT's device SPIFFE ID (wfm.sh option 7):**
+**Step 6 — Register the CTT's client SPIFFE ID (wfm.sh option 7):**
 
 ```bash
 sudo -E bash ~/sandbox/scripts/wfm.sh
-# → 7) Manage SPIFFE ID allowlist → 1) ➕ Add SPIFFE IDs
-# → Enter the CTT's client SPIFFE ID (printed by mis.sh in run 2):
-#   spiffe://margo.org/margo/wfm/wfm/client/ctt-client
 ```
+
+Answer the prompts like this:
+
+| Prompt | Answer |
+|---|---|
+| `Enter choice [1-8]:` | `7` |
+| `Use default path? [Y/n]:` | press Enter |
+| `Enter choice [1-3]:` | `1` (Add SPIFFE IDs) |
+| `>` | `spiffe://margo.org/margo/wfm/wfm/client/ctt-client` |
+| `Enter choice [1-3]:` | `3` (Back) |
+| `Press Enter to continue...` | press Enter |
+| `Enter choice [1-8]:` | `8` (Exit) |
+
+The ID is the CTT's client SPIFFE ID that `mis.sh` printed in run 2.
 
 **Step 7 — Copy the MIS-generated client SVID into the CTT (via the CLI):**
 
@@ -218,8 +261,9 @@ bash ctt-runner/ctt-start.sh
 #   Folder containing the client SVID [~/mis-deployment]:   press Enter
 #   Which one is the CTT's client SVID? [2]:   the number of x509svid-wfm-ctt-client
 #
-# The CLI lists every SVID folder it finds. With only the two above, the
-# default [2] is right — press Enter.
+# The CLI lists every SVID folder it finds. Type the number shown next to
+# x509svid-wfm-ctt-client. With only the two folders above it is 2, the default;
+# with more folders (for example after the Device Supplier setup) it is not.
 ```
 
 The CLI copies the client SVID, its key and the MIS CA into
@@ -249,6 +293,7 @@ echo | openssl s_client \
 ```bash
 sudo -E bash ~/sandbox/scripts/wfm.sh
 # → 3) Symphony: Start
+# When it ends with "Press Enter to continue...": press Enter, then 8 to exit
 ```
 
 After a few seconds, verify it stays running:
@@ -258,6 +303,21 @@ sudo docker ps --filter name=symphony-api-container --format "{{.Names}}\t{{.Sta
 # Should show: symphony-api-container   Up N seconds
 # If it shows "Exited", check: sudo docker logs symphony-api-container 2>&1 | tail -20
 ```
+
+**Step 10 — Put the CTT's test package into the sandbox Harbor:**
+
+The `core` group uses one Application Package in the registry, for the
+Application Registry checks and for the deployment it asks Symphony to deliver.
+Push it once:
+
+```bash
+cd $HOME/workspace/conformance_test_toolkit
+bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
+# → Pushed [registry] harbor.machine:8443/library/margo-ctt-hello-world:1.0.0
+```
+
+If it fails with `~/.docker/config.json: permission denied`, run
+`sudo chown -R $USER:$USER ~/.docker` and repeat.
 
 ### Testing a vendor WFM
 
@@ -426,12 +486,7 @@ CTT then polls the WFM for it (up to 300 seconds).
 
 **Symphony sandbox:** press Enter at all three prompts. The CTT creates the
 deployment through Symphony's NBI, so you do not need to create it in the WFM
-console. It uses the fixture package `margo-ctt-hello-world:1.0.0` in the
-sandbox Harbor; if that package is not in your Harbor yet, push it once:
-
-```bash
-bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
-```
+console. It uses the package you pushed in Phase 1, Step 10.
 
 **Your own WFM:** the automatic provisioning speaks Symphony's NBI and will
 report `Provision script failed` — press Enter at the three prompts and let the
@@ -471,6 +526,29 @@ A step shown as `NOT RUN` was not sent because its precondition is missing —
 it is neither a pass nor a failure. Today this applies to the SVID Rotation
 scenario (below).
 
+This report is the artifact you submit as evidence of conformance.
+
+### What to expect on the sandbox Symphony
+
+A `core` run takes about one minute. Against the sandbox Symphony build tested
+with this guide (October 2026) it ends with **45 steps: 32 passed, 11 failed,
+2 not run**. The failures are places where that Symphony build differs from
+Margo 1.0.0-rc.3; they are not a problem of your setup:
+
+| Failing step | What Symphony does |
+|---|---|
+| `wfm-core-cap-3`, `wfm-core-cap-4`, `wfm-core-cap-5` | accepts capabilities with an invalid deployment type, an invalid runtime, or without `vendor` (201 instead of 422) |
+| `wfm-core-cn-1` | answers an unsupported `Accept` with 400 instead of 406 |
+| `wfm-core-ds-2` | answers a request without `Accept` with 400 instead of the manifest |
+| `wfm-core-ds-1`, the poll step of the multi-component scenario | marks the manifest `Cache-Control: ... immutable` |
+| `wfm-core-status-1` | answers a status report for an unknown deployment with 500 |
+| `step-wfm-hi-1.3` | the manifest `ETag` is not the digest of the response body |
+| `wfm-mc-manifest-urls` | manifest URLs have the form `/api/v1/clients/<spiffe-id>/...` |
+| `wfm-mc-bundle-fetch` | the bundle's `Cache-Control` is `public` instead of `private` |
+
+The 2 steps not run are the SVID Rotation scenario; they run and pass after the
+steps in the next section.
+
 ### SVID Rotation scenario
 
 This scenario checks that the WFM keeps accepting the CTT after its client SVID
@@ -483,10 +561,9 @@ the same SPIFFE ID, so it is `NOT RUN` on a first setup. To run it:
    → 6) Generate SVID → principal 2, same IDs).
 3. Run Setup MIAF Identity again (Phase 1, Step 7). The CLI installs the new
    SVID and keeps the one it replaces, and says so.
-4. Run the suite again. The scenario now sends one request with the earlier
-   SVID and one with the new SVID; both must succeed.
-
-This is the artifact you submit as evidence of conformance.
+4. Run the suite again (the group `identity` is enough to see this scenario).
+   It now sends one request with the earlier SVID and one with the new SVID;
+   both must succeed.
 
 ---
 
@@ -558,19 +635,22 @@ bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh --clean
 Phase 1 — Identity (once per WFM, re-run only if cert expires)
 
   Symphony in the sandbox (sandbox MIS, mis.sh):
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 1) PreRequisites: Setup
-  □ MIS installed (sandbox setup guide: mis.sh options 1, 3, 4)
+  □ Sandbox cloned to ~/sandbox, its .env files and /etc/hosts set (sandbox setup guide, Steps 1-2)
+  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 1) PreRequisites: Setup   (once per machine; Enter, then 8)
+  □ sudo chown -R $USER:$USER ~/.docker
+  □ MIS installed: sudo -E bash ~/sandbox/scripts/mis.sh → 1, then again → 3, then again → 4
   □ cd ~/mis-deployment && sudo -E bash ~/sandbox/scripts/mis.sh generate-svid
       run 1: choice 1, WFM ID wfm      run 2: choice 2, WFM ID wfm, client ID ctt-client
   □ sudo chown -R $USER:$USER ~/mis-deployment
   □ ls ~/mis-deployment/ | grep x509svid   (note the directory names)
   □ sudo cp ~/mis-deployment/x509svid-wfm/payload-cert.pem + payload-key.pem → $HOME/symphony/api/certificates/
   □ sudo cp ~/mis-deployment/certs/https-ca.crt  $HOME/symphony/api/mis/
-  □ /etc/hosts: 127.0.0.1 mis.margo.org
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 7 → 1 → add the CTT's client SPIFFE ID
+  □ /etc/hosts: <this machine's address> mis.margo.org   (not 127.0.0.1)
+  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 7 → Enter → 1 → spiffe://margo.org/margo/wfm/wfm/client/ctt-client → 3 → Enter → 8
   □ ctt-start.sh → 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
       (Enter for ~/mis-deployment, then pick the client SVID)
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 3) Symphony: Start
+  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 3) Symphony: Start   (then 8)
+  □ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
 
   Your own WFM (same sandbox MIS):
   □ cd ~/mis-deployment && sudo -E bash ~/sandbox/scripts/mis.sh generate-svid
@@ -591,4 +671,5 @@ Phase 2 — Run (repeat for each test run)
        assign a two-component deployment to device multi-component-test-device)
   □ Wait for run to complete (under a minute once the deployment is assigned; up to ~5 min while polling)
   □ Open report: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>.html
+      (sandbox Symphony: 32 passed, 11 failed, 2 not run — see "What to expect on the sandbox Symphony")
 ```

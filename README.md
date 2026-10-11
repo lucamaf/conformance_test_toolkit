@@ -149,10 +149,10 @@ Why groups exist and how they are created is described in
 |---|---|
 | [`docs/wfm-supplier-setup-guide.md`](docs/wfm-supplier-setup-guide.md) | **WFM Supplier start here.** Step-by-step: identity setup, running a group, reading the report, troubleshooting. |
 | [`docs/device-supplier-setup-guide.md`](docs/device-supplier-setup-guide.md) | **Device Supplier start here.** Step-by-step: identity setup, starting the mock WFM, running a group, connecting a real device-agent. |
+| [`docs/CTT_EXPLAINED.md`](docs/CTT_EXPLAINED.md) | **Read this to understand or present the toolkit.** The rc.3 flow in plain words, how the CTT maps onto it, what each module does, the demo sequence with expected results, likely questions and answers, and the known gaps. |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | What the toolkit is, how the three personas and two CLIs fit together, test groups, and how reports trace back to spec requirements. |
 | [`docs/MARGO_Conformance _Approach.md`](docs/MARGO_Conformance%20_Approach.md) | The conformance approach and the **test-case templates**: Postman collections for the WFM persona, the Margo scenario schema for the device persona. Read this before writing tests. |
 | [`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Every conformance flow explained end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF. |
-| [`docs/client-demo-brief.md`](docs/client-demo-brief.md) | One-page summary for explaining the suite to a vendor or stakeholder. |
 
 ---
 

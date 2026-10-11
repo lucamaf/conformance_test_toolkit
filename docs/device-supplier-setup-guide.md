@@ -21,23 +21,23 @@ device-agent that exercises every required protocol flow against it.
 
 ## How the Device Supplier test works
 
+Your device is the system under test and the CTT acts as a **mock WFM**. For
+the demo the device is the Margo sandbox device-agent; a vendor uses their own
+device.
+
 ```
- ctt-runner/device-supplier/
- ┌───────────────────────────────────────────────────────────┐
- │  bin/server   ←  Mock WFM Server                         │
- │  port 3003    ←  Management Interface, mTLS (X.509-SVID)  │
- │  port 3001    ←  health / telemetry status only           │
- └──────────────────────────┬────────────────────────────────┘
-                             │ HTTPS / mTLS
- ┌──────────────────────────▼────────────────────────────────┐
- │  bin/run_tests  ←  CTT simulated device-agent             │
- │  Fires: capability reports, desired-state polls,          │
- │  deployment-status updates, negative-test flows           │
- └───────────────────────────────────────────────────────────┘
-                             │
-                             ▼
- ctt-runner/reports/device-supplier/
-   conformance-report-<timestamp>.html
+ Device under test                        CTT
+ (sandbox device-agent                    ┌──────────────────────────────────────────┐
+  or your own device)                     │  Mock WFM server                         │
+ ┌────────────────────┐   HTTPS / mTLS    │  port 3003  Management Interface (mTLS)  │
+ │  WFM Client        │ ────────────────► │  port 3001  health / telemetry status    │
+ └────────────────────┘                   │  judges every request with               │
+                                          │  assertions.json and records it          │
+                                          └───────────────────┬──────────────────────┘
+                                                              │ group `core` reads the verdicts
+                                                              ▼
+                                          ctt-runner/reports/device-supplier/
+                                            conformance-report-<timestamp>.html
 ```
 
 The mock WFM implements the rc.3 Management Interface: it enforces mTLS and
@@ -45,15 +45,14 @@ accepts only SVIDs that belong to its own WFM identity, serves desired-state
 manifests, bundles and deployments with correct ETag / digest, validates every
 request body, and returns errors as RFC 9457 problem details.
 
-The test runner acts as the device-agent, making every call the spec requires —
-happy-path calls AND deliberately broken ones (bad enum, missing field, wrong
-digest) — and checks the mock WFM's answer to each one. Requests to the
-Management Interface that are not authenticated by mTLS are rejected.
+There are two kinds of test groups:
 
-**If you want to test your real device-agent**: start the mock WFM server,
-point your device-agent at it, and observe how it behaves. The mock WFM logs
-every request and validates it against the spec. See [Testing a real
-device-agent](#testing-a-real-device-agent) below.
+- **`core` and its subsets judge your device.** The device connects to the mock
+  WFM and the CTT checks what it sends — also when the mock WFM serves a
+  manifest the device must reject. See
+  [Testing a real device-agent](#testing-a-real-device-agent).
+- **`self-check` needs no device.** The CTT's own simulated device runs against
+  the mock WFM, to confirm the setup before a device is connected (Phase 3).
 
 ---
 
@@ -83,8 +82,9 @@ cd ~
 git clone https://github.com/margo/sandbox.git sandbox
 ```
 
-> If the sandbox is already cloned elsewhere, note the path — you will need
-> `mis.sh` from `<sandbox>/scripts/mis.sh` in Phase 1.
+> The sandbox scripts expect to be in `~/sandbox`. Set the sandbox environment
+> as its own guide describes (`~/sandbox/docs/setup-guide.md`, Steps 1 and 2)
+> before using `mis.sh`.
 
 **3. Verify tooling:**
 
@@ -122,9 +122,19 @@ One MIS issues every SVID: one for the mock WFM, one for the CTT's test runner,
 and later one for each real device you test. The examples below use the WFM ID
 `ctt-mock-wfm`.
 
-If the sandbox MIS is not installed on this machine yet, install it first by
-following the Margo sandbox setup guide (`~/sandbox/docs/setup-guide.md`,
-"Build and Run MIS": `mis.sh` options 1, 3 and 4).
+If the sandbox MIS is not installed on this machine yet, install it first. Run
+the menu three times, with options 1, 3 and 4 in this order; each time press
+Enter at "Press Enter to continue..." and then `7` to exit:
+
+```bash
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 1) PreRequisites: Setup
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 3) Factory Bootstrap: Generate Root CAs
+sudo -E bash ~/sandbox/scripts/mis.sh     # → 4) Margo Identity Service: Install
+```
+
+> If the MIS is already installed (for example for the WFM Supplier setup on
+> this machine), skip this: option 3 creates new CAs, and every SVID issued
+> before stops being trusted.
 
 Then generate the two SVIDs. Run the command from inside `~/mis-deployment` —
 `mis.sh` writes each SVID folder into the directory you run it from:
@@ -185,8 +195,9 @@ bash ctt-runner/ctt-start.sh
 #   Which one is the WFM SVID?    [1]:   the number of x509svid-ctt-mock-wfm
 #   Which one is the Client SVID? [2]:   the number of x509svid-ctt-mock-wfm-ctt-runner
 #
-# The CLI lists every SVID folder it finds. With only the two above, the
-# defaults [1] and [2] are right — press Enter twice.
+# The CLI lists every SVID folder it finds. Type the numbers shown next to
+# those two folders. With the names used in this guide they are 1 and 2, the
+# defaults — press Enter twice.
 ```
 
 It must end with `Identity setup complete — both SVIDs verified against the MIS CA`
@@ -466,7 +477,8 @@ request your device sends and judges it with the rules of `assertions.json`,
 which it loads when it starts. Each step reads one of those verdicts. Between
 steps the CTT changes the desired state on the mock WFM — also to manifests and
 content a device must reject — and waits for the device to read it. A run takes
-about 15 minutes; lines starting with `⏳ waiting for the device` are normal.
+about 12 minutes with the sandbox device-agent (it reads its desired state every
+15 seconds); lines starting with `⏳ waiting for the device` are normal.
 
 | Scenario | What the device must do |
 |---|---|
@@ -522,133 +534,174 @@ and which requirements cannot be judged, is listed in
 
 ---
 
-### Integration with the Margo sandbox device-agent
+### Testing the Margo sandbox device-agent (the demo device)
 
-The Margo sandbox ships a reference device-agent (`workload-fleet-management-client`)
-that is the canonical example of a correct, spec-conformant device. Testing the
-CTT mock WFM against it is the strongest integration validation: if the mock WFM
-handles the sandbox device-agent correctly, vendors can use it with confidence.
+The Margo sandbox ships a reference device-agent
+(`workload-fleet-management-client`). These are the steps to set it up from
+nothing and test it against the mock WFM. They were run exactly as written, with
+the device-agent on the same machine as the CTT and the MIS; the differences for
+a separate device machine are noted.
 
-With the sandbox MIS, both the mock WFM and the real device-agent use SVIDs
-from the **same MIS** — no cert exchange between teams, no trust-bundle
-configuration on the device side. The device-agent continues to talk to MIS
-the same way it does in production; the only changes are the WFM URL and,
-if the mock WFM has its own WFM ID, one allowlist entry.
+It needs the Margo sandbox cloned to `~/sandbox` on the device machine, with its
+environment set as the sandbox setup guide describes
+(`~/sandbox/docs/setup-guide.md`, Steps 1 and 2).
 
-#### Step 1 — Complete Phase 1 and Phase 2 above
+#### Step 1 — Phase 1, Phase 2 and the device SVID
 
-A sandbox device-agent that is already set up for Symphony has an SVID for
-Symphony's WFM ID (for example `wfm`). The simplest way to test it is to give
-the mock WFM that same WFM ID: in Phase 1, pick the folder of that WFM SVID
-(for example `x509svid-wfm`) as "WFM SVID" instead of `x509svid-ctt-mock-wfm`,
-and generate the CTT test runner's client SVID for that WFM ID too. The device
-then needs no new SVID: the mock WFM only accepts clients of its own WFM ID,
-and the device only accepts the WFM its SVID belongs to.
+Complete Phase 1 and Phase 2 above, then issue the device its SVID as in
+[Step 1 — Issue the device an SVID](#step-1--issue-the-device-an-svid)
+(WFM ID `ctt-mock-wfm`, client ID `vendor-device-1`).
 
-Then start the mock WFM (Phase 2) and note the two values the CLI prints:
+#### Step 2 — Give the device-agent its certificates
 
-```
-  Management Interface : https://<ctt-host-ip>:3003/v1alpha2/margo
-  WFM SPIFFE ID        : spiffe://<trust-domain>/margo/wfm/<wfm-id>
-```
-
-#### Step 2 — Check the device-agent's SVID and allowlist
-
-The sandbox device-agent already has an SVID from the MIS (used when it talks
-to Symphony). Use that same SVID — no new cert is needed. Confirm its SPIFFE ID
-starts with the WFM SPIFFE ID from Step 1:
+The sandbox device-agent takes its files from `~/certs`:
 
 ```bash
-# On the device-agent machine. The cert is the file that miaf.x509.certPath
-# points to in ~/sandbox/poc/device/agent/config/config.yaml.
-openssl x509 -in <path-to-device-svid-cert> -noout -ext subjectAltName
-# → URI:spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<client-id>
+mkdir -p $HOME/certs/compose-identity
+cp ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-cert.pem $HOME/certs/compose-identity/
+cp ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-key.pem  $HOME/certs/compose-identity/
+cp ~/mis-deployment/certs/https-ca.crt                                     $HOME/certs/
+sudo cp ~/sandbox/scripts/harbor/certs/harbor.crt                          $HOME/certs/
+sudo chown -R $USER:$USER $HOME/certs
 ```
 
-The device-agent only talks to WFMs on its SPIFFE ID allowlist. If the mock WFM
-uses the same WFM SVID as Symphony, it is already on the list. Otherwise add the
-WFM SPIFFE ID from Step 1:
+On a separate device machine, create `~/certs/compose-identity` there and copy
+the same four files from the MIS / WFM machine with `scp`.
+
+#### Step 3 — Make the MIS reachable by name
+
+The device-agent fetches its trust bundle from `https://mis.margo.org:9443`. In
+`/etc/hosts` of the device machine that name must point at the MIS machine's
+network address. `127.0.0.1` does not work, also on the same machine, because
+the device-agent runs in a container:
 
 ```bash
-# On the device-agent machine:
-sudo -E bash ~/sandbox/scripts/device-agent.sh
-# → 11) Manage SPIFFE ID allowlist → add the WFM SPIFFE ID
+sudo sed -i '/mis\.margo\.org/d' /etc/hosts
+echo "$(hostname -I | awk '{print $1}') mis.margo.org" | sudo tee -a /etc/hosts
 ```
 
-If the device SVID is expired or missing, generate a new one with `mis.sh`
-(Phase 1, Step 1 — option 6, principal 2, same WFM ID) and install it on the
-device-agent machine the same way it was installed for Symphony.
+(On a separate device machine, write the MIS machine's address in place of
+`$(hostname -I | awk '{print $1}')`.)
 
-#### Step 3 — Point the sandbox device-agent at the mock WFM
+#### Step 4 — Point the device-agent at the mock WFM
 
-`device-agent.sh` writes the WFM URL into the agent's config from
-`device-agent.env` every time it starts the agent, so change it there (editing
-`config.yaml` by hand is overwritten on the next start):
+Edit `~/sandbox/scripts/device-agent.env` so that it has these two lines, with
+the address the CLI printed in Phase 2 (`Management Interface : https://<ctt-host-ip>:3003/...`):
 
 ```bash
-# On the device-agent machine, in ~/sandbox/scripts/device-agent.env:
-export WFM_HOST=<ctt-host-ip>     # the CTT machine from Step 1
+export WFM_HOST=<ctt-host-ip>     # for example 10.0.0.7 — not localhost
 export WFM_PORT=3003              # the mock WFM's mTLS port
 ```
 
-Leave all MIAF / MIS settings unchanged — the device-agent continues to use
-the same MIS as before.
+`device-agent.sh` writes this URL into the agent's config every time it starts
+the agent, so change it here and not in `config.yaml`.
 
-#### Step 4 — Restart the sandbox device-agent
+#### Step 5 — Install, allow the mock WFM, start
 
 ```bash
-# On the device-agent machine:
+sudo -E bash ~/sandbox/scripts/device-agent.sh docker install
+# must end with: prerequisites installation completed.
+```
+
+The device-agent only talks to the WFM on its allowlist. Add the WFM SPIFFE ID
+the CLI printed in Phase 2:
+
+```bash
+sudo -E bash ~/sandbox/scripts/device-agent.sh docker
+```
+
+| Prompt | Answer |
+|---|---|
+| `Enter choice [1-12]:` | `11` |
+| `Use default path? [Y/n]:` | press Enter |
+| `Enter choice [1-2]:` | `1` (Set SPIFFE ID) |
+| `Enter SPIFFE ID:` | `spiffe://margo.org/margo/wfm/ctt-mock-wfm` |
+| `Enter choice [1-2]:` | `2` (Back) |
+| `Press Enter to continue...` | press Enter |
+| `Enter choice [1-12]:` | `12` (Exit) |
+
+Start it:
+
+```bash
+sudo -E bash ~/sandbox/scripts/device-agent.sh docker start-docker
+sudo docker ps --filter name=workload-fleet-management-client --format "{{.Names}}\t{{.Status}}"
+# Should show: workload-fleet-management-client   Up N seconds
+```
+
+If it shows `Restarting`, look at the reason:
+
+```bash
+sudo docker logs workload-fleet-management-client 2>&1 | tail -5
+```
+
+| Message | Fix |
+|---|---|
+| `mis.margo.org ... dial tcp 127.0.0.1:9443: connect: connection refused` | Step 3 — the hosts entry is `127.0.0.1` |
+| `Required certificate file not found` | Step 2 — a file is missing in `~/certs` |
+
+Within a few seconds the mock WFM's log (`tail -f /tmp/wfm-server.log`) shows
+the lines listed under
+[Step 3 — Start the device and watch the log](#step-3--start-the-device-and-watch-the-log).
+
+#### Step 6 — Run `core` and restart the device when asked
+
+Run the group `core` as in
+[Step 4 — Get the conformance report for the device](#step-4--get-the-conformance-report-for-the-device).
+When the line `👉 Restart the device under test now` appears, restart the
+device-agent — and, to include SVID rotation, give it a re-issued SVID first:
+
+```bash
+# re-issue the device's SVID (same answers as in Step 1) and install it:
+cd ~/mis-deployment
+sudo -E bash ~/sandbox/scripts/mis.sh generate-svid      # 2, ctt-mock-wfm, vendor-device-1
+sudo cp -f ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-cert.pem \
+           ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-key.pem \
+           ~/sandbox/poc/device/agent/config/compose-identity/
+
+# restart the device-agent:
 sudo -E bash ~/sandbox/scripts/device-agent.sh docker stop-docker
 sudo -E bash ~/sandbox/scripts/device-agent.sh docker start-docker
 ```
 
-For K3s:
+You have 3 minutes from the moment the line appears; have the commands ready.
+
+#### What to expect with the sandbox device-agent
+
+A `core` run takes about 12 minutes. With the sandbox device-agent tested with
+this guide (October 2026, restarted with a re-issued SVID when asked) it ends
+with **53 passed, 3 failed, 5 skipped**:
+
+| Result | Step | Why |
+|---|---|---|
+| FAIL | "does not fetch anything by a digest of the unsupported algorithm" | on a `sha512` manifest the device-agent still asks for `.../sha512:...` |
+| FAIL | "keeps its previous state" (unsupported digest algorithm) | it stores the ETag of the manifest it had to reject |
+| FAIL | "keeps its previous state" (deployment file does not match its digest) | it stores the ETag of the manifest it had to reject |
+| SKIP | standalone cluster role | the device-agent declares Compose, not Helm |
+| SKIP | bundle does not match its digest (2 steps) | this device-agent fetches the deployment files, not the bundle |
+| SKIP | observability (2 steps) | no OpenTelemetry collector is pointed at the CTT |
+
+These are findings about that device-agent build, not problems of your setup.
+
+For a K3s device-agent the commands are `device-agent.sh k3s install`,
+`start-k3s` and `stop-k3s`, and the certificates go to `~/certs/helm-identity`;
+this path was not run for this guide.
+
+#### Putting the sandbox device-agent back on Symphony
+
+Change `~/sandbox/scripts/device-agent.env` back, set the allowlist to
+Symphony's WFM SPIFFE ID (menu option 11), and restart:
 
 ```bash
-sudo -E bash ~/sandbox/scripts/device-agent.sh k3s stop-k3s
-sudo -E bash ~/sandbox/scripts/device-agent.sh k3s start-k3s
-```
-
-#### Step 5 — Watch the mock WFM logs
-
-Back on the CTT machine:
-
-```bash
-tail -f /tmp/wfm-server.log
-```
-
-You should see the lines listed under
-[Step 3 — Start the device and watch the log](#step-3--start-the-device-and-watch-the-log)
-above: capabilities accepted, the desired-state poll, the deployment fetch, and
-status reports.
-
-#### What the mock WFM does with the real device-agent
-
-The mock WFM accepts a device whose SVID chains to the MIS CA and belongs to
-this WFM:
-
-- Validates the mTLS client cert chains to the MIS CA (`svid-ca.pem`)
-- Extracts the device's SPIFFE ID from the cert's `Subject Alternative Name URI`
-  and checks it is `<WFM SPIFFE ID>/client/<client-id>`
-- Creates a client record keyed by SPIFFE ID
-- Serves a desired-state manifest and tracks deployment status
-- Enforces all spec requirements (correct headers, ETag, digest, content-type)
-
-Any spec violation in either direction (wrong headers from the device, wrong
-response from the WFM) will be visible in the logs.
-
-#### Restoring the sandbox device-agent to its normal config
-
-After integration testing, point the device-agent back at Symphony and restart it:
-
-```bash
-# On the device-agent machine, in ~/sandbox/scripts/device-agent.env:
-export WFM_HOST=symphony.machine   # or your real WFM hostname
+# in ~/sandbox/scripts/device-agent.env:
+export WFM_HOST=symphony.machine
 export WFM_PORT=8084
 
 sudo -E bash ~/sandbox/scripts/device-agent.sh docker stop-docker
 sudo -E bash ~/sandbox/scripts/device-agent.sh docker start-docker
 ```
+
+The device then also needs an SVID for Symphony's WFM ID in
+`~/sandbox/poc/device/agent/config/compose-identity/`.
 
 ---
 
@@ -714,16 +767,25 @@ Phase 2 — Start the mock WFM
   □ ctt-start.sh → 2) Device Supplier → 2) Start Mock WFM Server  (builds from source each time)
   □ Note the Management Interface URL and WFM SPIFFE ID it prints
 
-Phase 3 — CTT self-test (CTT simulates device-agent against mock WFM)
-  □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → self-check → Enter, Enter at the URL prompts   (setup check, no device)
-  □ With a real device connected: 3) Run Tests → core → restart the device when asked
-  □ Open report: ctt-runner/reports/device-supplier/conformance-report-<ts>.html
+Phase 3 — Check the setup (no device needed)
+  □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → self-check → Enter, Enter at the URL prompts
+  □ Must end with: Test Results: 90 PASSED, 0 FAILED
 
-Testing a real device (the Phase 3 report does not cover it)
+Testing a real device (this is the conformance result)
   □ Issue it an SVID: generate-svid → choice 2, WFM ID ctt-mock-wfm, client ID = a name for the device
   □ Give the owner: the SVID + key, the Management Interface URL, the WFM SPIFFE ID,
       and either ~/mis-deployment/certs/ca.crt or the MIS address + https-ca.crt + hosts entry
   □ Mock WFM running (Phase 2); device can reach port 3003
   □ tail -f /tmp/wfm-server.log → capabilities 201, deployments 200, deployment fetch 200, status 200, later polls 304
-  □ Sandbox device-agent: see "Integration with the Margo sandbox device-agent"
+  □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → core → Enter, Enter; restart the device when asked
+  □ Open report: ctt-runner/reports/device-supplier/conformance-report-<ts>.html
+
+Sandbox device-agent (the demo device) — see "Testing the Margo sandbox device-agent"
+  □ ~/certs/compose-identity/payload-cert.pem + payload-key.pem, ~/certs/https-ca.crt, ~/certs/harbor.crt
+  □ /etc/hosts: <MIS machine's address> mis.margo.org   (not 127.0.0.1)
+  □ ~/sandbox/scripts/device-agent.env: WFM_HOST=<ctt-host-ip>, WFM_PORT=3003
+  □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker install
+  □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker → 11 → Enter → 1 → spiffe://margo.org/margo/wfm/ctt-mock-wfm → 2 → Enter → 12
+  □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker start-docker
+  □ core: 53 passed, 3 failed, 5 skipped with the sandbox device-agent of October 2026
 ```
