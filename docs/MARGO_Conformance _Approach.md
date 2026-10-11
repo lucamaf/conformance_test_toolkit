@@ -296,6 +296,163 @@ Note : Further details are described below in the section [Margo schema for serv
 
 - The schema is provided here – [https://schema.postman.com/collection/json/v2.1.0/draft-07/docs/index.html]
 
+- Write the requests in Postman, export the collection (v2.1), place the file in a folder and create a group from it with `ctt-creator`. `ctt-runner` then runs that group against the Workload Fleet Manager. Every request is sent over mutual TLS with the X.509-SVID set up in the CTT (Margo 1.0.0-rc.3).
+
+- A working example is `test-suites/wfm-supplier/vendor-positive-extended/postman_collection.json` (positive cases) and `test-suites/wfm-supplier/vendor-negative-scenarios/postman_collection.json` (negative cases).
+
+- How the Conformance Framework reads a collection:
+
+<table>
+<tr>
+<th>
+**In the Postman collection**
+</th>
+<th>
+**What the Conformance Framework does**
+</th>
+</tr>
+<tr>
+<td>
+Order of the requests, folders
+</td>
+<td>
+Requests run top to bottom. Folders are opened in place. The whole collection is one scenario.
+</td>
+</tr>
+<tr>
+<td>
+`{{baseUrl}}`
+</td>
+<td>
+Replaced by the WFM URL entered in `ctt-runner`.
+</td>
+</tr>
+<tr>
+<td>
+`{{name}}` in the URL, a header or the body; `:name` in the path
+</td>
+<td>
+Replaced by the variable `name`. Its starting value is the collection variable of that name. A literal typed in the Path Variables table is not used.
+</td>
+</tr>
+<tr>
+<td>
+`GET /api/v1/deployments`
+</td>
+<td>
+After a successful response these variables are set for the following requests: `deploymentId`, `deploymentDigest`, `bundleDigest`, `manifestVersion`, `manifestEtag`.
+</td>
+</tr>
+<tr>
+<td>
+Request `id`
+</td>
+<td>
+The test ID listed in `group.json` and shown in the report. When a request has no `id`, its name is used in lower case with `\_` for spaces.
+</td>
+</tr>
+<tr>
+<td>
+Expected status
+</td>
+<td>
+The status code of the saved example. Without a saved example: the status in the test script (`pm.response.to.have.status(200)` or `pm.expect(\[200, 201]).to.include(pm.response.code)`), otherwise 200.
+</td>
+</tr>
+<tr>
+<td>
+Test scripts
+</td>
+<td>
+Not executed. Add the checks in the `validations` field (see below).
+</td>
+</tr>
+<tr>
+<td>
+Requirement IDs
+</td>
+<td>
+Every ID written in the request name or description (for example `MARGO-WFM-MANAGEMENTINTERFACE-030`) is shown next to the test in the report.
+</td>
+</tr>
+</table>
+
+*Table : How a Postman collection is read*
+
+- These fields can be added to a request in the exported JSON file. They are written exactly as in the Margo schema described below.
+
+<table>
+<tr>
+<th>
+**Field**
+</th>
+<th>
+**Purpose**
+</th>
+</tr>
+<tr>
+<td>
+`crIds`
+</td>
+<td>
+Requirement IDs for the report, when they are not written in the name or description
+</td>
+</tr>
+<tr>
+<td>
+`expected\_status`
+</td>
+<td>
+Expected HTTP status code
+</td>
+</tr>
+<tr>
+<td>
+`accepted\_statuses`
+</td>
+<td>
+Other status codes that also pass, for example `\[200]` for a request that expects 201
+</td>
+</tr>
+<tr>
+<td>
+`validations`
+</td>
+<td>
+Checks on the response body and headers
+</td>
+</tr>
+<tr>
+<td>
+`extract\_context`
+</td>
+<td>
+Save response values as variables for later requests
+</td>
+</tr>
+</table>
+
+*Table : Margo fields in a Postman request*
+
+```json
+{
+  "id": "8ac42a20-2df5-4833-bcae-3b3c28946784",
+  "name": "GET Deployments — If-None-Match returns 304 Not Modified",
+  "request": {
+    "method": "GET",
+    "url": { "raw": "{{baseUrl}}/api/v1/deployments", "host": ["{{baseUrl}}"], "path": ["api", "v1", "deployments"] },
+    "header": [
+      { "key": "Accept", "value": "application/vnd.margo.manifest.v1+json" },
+      { "key": "If-None-Match", "value": "{{manifestEtag}}" }
+    ]
+  },
+  "crIds": ["MARGO-WFM-MANAGEMENTINTERFACE-030"],
+  "expected_status": 304
+}
+```
+
+- A collection generated from the OpenAPI file (`ctt-creator` → WFM Supplier → OpenAPI spec based contract tests) describes each endpoint once, with several saved responses. For such a collection the Conformance Framework sends its own valid request for each endpoint, runs the endpoints in device order (capabilities, deployments, deployment, bundle, status, unregister) and turns every saved response into one check. A response that a client cannot provoke (for example 403 by WFM policy) is reported as NOT RUN.
+
 #### Margo template for Expressing sequence of API exchanges , Server side test-cases
 
 See the section below [Margo schema for server-side test-cases].
@@ -312,9 +469,9 @@ See the section below [Margo schema for server-side test-cases].
 
 ```json
 [
-  { "id": "lorem", “name: “”, "steps": [ ... ], description: “” },
-  { "id": "ipsum", “name: “”, "steps": [ ... ], description: “” },
-  { "id": "stratos", “name: “”, "steps": [ ... ], description: “” }
+  { "id": "lorem", "name": "", "description": "", "steps": [ ... ] },
+  { "id": "ipsum", "name": "", "description": "", "steps": [ ... ] },
+  { "id": "stratos", "name": "", "description": "", "steps": [ ... ] }
 ]
 ```
 
@@ -323,6 +480,7 @@ See the section below [Margo schema for server-side test-cases].
   "id": "scenario-unique-id",
   "name": "Human Readable Name",
   "description": "What this scenario validates",
+  "crIds": ["MARGO-DEV-MANAGEMENTINTERFACE-016"],
   "steps": [ ... ]
 }
 ```
@@ -347,7 +505,7 @@ See the section below [Margo schema for server-side test-cases].
 Yes
 </td>
 <td>
-Unique string among all scenarios. Used for filtering: `./bin/run\_tests -scenario scenario-onboarding`
+Unique string among all scenarios. Listed in `group.json` to select the scenario. Used for filtering: `./bin/run\_tests -scenario scenario-capabilities`
 </td>
 </tr>
 <tr>
@@ -383,6 +541,28 @@ Yes
 Ordered array of step objects (see below)
 </td>
 </tr>
+<tr>
+<td>
+`crIds`
+</td>
+<td>
+No
+</td>
+<td>
+Margo requirement IDs this scenario covers, shown in the report. A step can list its own.
+</td>
+</tr>
+<tr>
+<td>
+`optional`
+</td>
+<td>
+No
+</td>
+<td>
+Default `false`. Set `true` for a scenario that needs something not present on every setup (for example an OpenTelemetry collector). A failure is then reported as SKIP.
+</td>
+</tr>
 </table>
 
 *Table 1 : Field descripotion of Scenario object*
@@ -397,31 +577,38 @@ Ordered array of step objects (see below)
 
 ```json
 {
-  "id": "step-1.2",
-  "name": "Onboard Trusted Device",
-  "method": "POST",
-  "endpoint": "/api/v1/onboarding",
-  "request_body": 
+  "id": "step-2.1",
+  "name": "Report Capabilities",
+  "crIds": ["MARGO-DEV-DEPLOYMENT-002"],
+  "method": "PUT",
+  "endpoint": "/api/v1/capabilities/device-001",
+  "mtls": true,
+  "request_body":
   {
-    "apiVersion": "onboarding.margo.org/v1alpha1",
-    "kind": "OnboardingRequest",
-    "certificate": "./certs/device-valid-cert.pem",
-  }
-  "headers": 
-  {
-    "Accept": "application/vnd.margo.manifest.v1+json"
+    "properties":
+    {
+      "id": "device-001",
+      "vendor": "Acme Corp",
+      "modelNumber": "ACM-XYZ",
+      "serialNumber": "SN-12345",
+      "cpus": [{ "cores": 4, "architecture": "arm64" }],
+      "memory": "16Gi",
+      "storage": "256Gi",
+      "interfaces": [{ "type": "ethernet" }],
+      "peripherals": [],
+      "otelCollector": false,
+      "supportedRuntimes": ["oci"],
+      "supportedDeploymentTypes": ["helm", "compose"]
+    }
   },
+  "headers": {},
   "expected_status": 201,
-  "validations": 
+  "accepted_statuses": [200],
+  "validations":
   [
-    { "field": "clientId", "operation": "is_string" }
+    { "field": "status", "operation": "equals", "value": "capabilities_received" }
   ],
-  "extract_context": 
-  {
-    "clientId": "clientId"
-  },
-  "skip_signing": false,
-  "skip_certificate_injection": false
+  "extract_context": {}
 }
 ```
 
@@ -451,7 +638,7 @@ Yes
 string
 </td>
 <td>
-Unique step ID. Convention: `step-X.Y` where X is scenario number and Y is step number. Used for filtering: `./bin/run\_tests -step step-1.2`
+Unique step ID. Convention: `step-X.Y` where X is scenario number and Y is step number. Listed in `group.json` to select the step. Used for filtering: `./bin/run\_tests -step step-2.1`
 </td>
 </tr>
 <tr>
@@ -479,7 +666,7 @@ Yes
 string
 </td>
 <td>
-HTTP verb: `"GET"`, `"POST"`, or `"PUT"`
+HTTP verb: `"GET"`, `"POST"`, `"PUT"`, or `"DELETE"`
 </td>
 </tr>
 <tr>
@@ -507,7 +694,7 @@ No
 object
 </td>
 <td>
-JSON body sent with POST/PUT. Omit entirely for GET requests
+JSON body sent with POST/PUT. Omit entirely for GET requests. Values support `{placeholder}` substitution
 </td>
 </tr>
 <tr>
@@ -521,7 +708,7 @@ No
 object
 </td>
 <td>
-Custom HTTP headers. Applied after signing. Values support `{placeholder}` substitution
+Custom HTTP headers. Values support `{placeholder}` substitution
 </td>
 </tr>
 <tr>
@@ -535,7 +722,7 @@ Yes
 number
 </td>
 <td>
-HTTP status code the step expects. Anything else → FAIL
+HTTP status code the step expects. Anything else → FAIL, unless listed in `accepted\_statuses`
 </td>
 </tr>
 <tr>
@@ -568,21 +755,63 @@ Save response values as variables for later steps (see Context section below)
 </tr>
 <tr>
 <td>
-`skip\_signing`
+`crIds`
 </td>
 <td>
 No
 </td>
 <td>
-bool
+array
 </td>
 <td>
-Default `false`. Set `true` to omit RFC 9421 Signature headers — use for GET requests or negative signature tests
+Margo requirement IDs this step covers, shown next to the step in the report
 </td>
 </tr>
 <tr>
 <td>
-`skip\_certificate\_injection`
+`mtls`
+</td>
+<td>
+Yes (rc.3)
+</td>
+<td>
+bool
+</td>
+<td>
+Set `true`. The request is sent over mutual TLS: the Conformance Framework presents its X.509-SVID and checks the SPIFFE ID of the other side. All Margo 1.0.0-rc.3 Management Interface requests use it
+</td>
+</tr>
+<tr>
+<td>
+`accepted\_statuses`
+</td>
+<td>
+No
+</td>
+<td>
+array
+</td>
+<td>
+Other HTTP status codes that also pass, for example `\[200]` on a step that expects 201 so the test-case can be run again
+</td>
+</tr>
+<tr>
+<td>
+`poll`
+</td>
+<td>
+No
+</td>
+<td>
+object
+</td>
+<td>
+Repeat the request until the response meets the conditions: `{ "interval\_seconds": 5, "timeout\_seconds": 120, "until": \[ ...validations... ] }`. FAIL when the time is over
+</td>
+</tr>
+<tr>
+<td>
+`expect\_manifest\_rejected`
 </td>
 <td>
 No
@@ -591,7 +820,49 @@ No
 bool
 </td>
 <td>
-Default `false`. Set `true` to send `certificate` field as a literal string without loading from file — use for rejection/blocklist tests
+Device test-cases. PASS when the desired-state manifest in the response breaks a rule a device MUST enforce (unsupported digest algorithm, digest that does not match, `manifestVersion` that does not increase)
+</td>
+</tr>
+<tr>
+<td>
+`expect\_manifest\_accepted`
+</td>
+<td>
+No
+</td>
+<td>
+bool
+</td>
+<td>
+Device test-cases. PASS when the desired-state manifest in the response breaks none of those rules
+</td>
+</tr>
+<tr>
+<td>
+`expect\_transport\_error`
+</td>
+<td>
+No
+</td>
+<td>
+bool
+</td>
+<td>
+PASS when the connection is refused during the TLS handshake, for example when the other side presents an identity that must not be accepted
+</td>
+</tr>
+<tr>
+<td>
+`skip\_signing`, `skip\_certificate\_injection`
+</td>
+<td>
+No
+</td>
+<td>
+bool
+</td>
+<td>
+Used before 1.0.0-rc.3 (HTTP Message Signatures and the onboarding API). Not used in rc.3 test-cases
 </td>
 </tr>
 </table>
@@ -609,12 +880,12 @@ This class of tests requires validation of a sequence of incoming API requests f
 ```json
 "validations":
  [
-  { "field": "clientId",    "operation": "is_string" },
-  { "field": "status",      "operation": "equals",    "value": "capabilities_received" },
-  { "field": "error",       "operation": "contains",  "value": "Client rejected" },
-  { "field": "certificate", "operation": "not_empty" },
-  { "field": "deployments", "operation": "is_array"  },
-  { "field": "_headers.ETag", "operation": "not_empty" }
+  { "field": "manifestVersion",   "operation": "is_number" },
+  { "field": "status",            "operation": "equals",    "value": "capabilities_received" },
+  { "field": "detail",            "operation": "contains",  "value": "supportedDeploymentTypes" },
+  { "field": "bundle.digest",     "operation": "matches_regex", "value": "^sha256:[0-9a-f]{64}$" },
+  { "field": "deployments",       "operation": "is_array"  },
+  { "field": "_headers.ETag",     "operation": "not_empty" }
 ]
 ```
 
@@ -709,7 +980,99 @@ No
 Field value is a JSON array
 </td>
 </tr>
+<tr>
+<td>
+`is\_object`
+</td>
+<td>
+No
+</td>
+<td>
+Field value is a JSON object
+</td>
+</tr>
+<tr>
+<td>
+`not\_contains`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value (string) does not contain `value`
+</td>
+</tr>
+<tr>
+<td>
+`one\_of`
+</td>
+<td>
+Yes (array)
+</td>
+<td>
+Field value equals one of the entries of `value`
+</td>
+</tr>
+<tr>
+<td>
+`matches\_regex`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value (string) matches the regular expression in `value`
+</td>
+</tr>
+<tr>
+<td>
+`gte`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value is a number greater than or equal to `value`
+</td>
+</tr>
+<tr>
+<td>
+`greater\_than`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value is a number greater than `value`
+</td>
+</tr>
+<tr>
+<td>
+`array\_length\_gte`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value is an array with at least `value` entries
+</td>
+</tr>
+<tr>
+<td>
+`array\_length\_equals`
+</td>
+<td>
+Yes
+</td>
+<td>
+Field value is an array with exactly `value` entries
+</td>
+</tr>
 </table>
+
+- An operation that the Conformance Framework does not know fails the step, with the name of the operation in the report.
+
+- WFM test-cases have these additional operations: `etag\_is\_body\_digest` (the `ETag` header is the sha256 digest of the exact response body), `body\_sha256\_equals` (the exact response body has the digest given in `value`) and `manifest\_urls\_are\_content\_addressed` (the URLs in the manifest have the form defined by the specification).
 
 #### Context or State Variables
 
@@ -728,7 +1091,7 @@ Field value is a JSON array
 </tr>
 <tr>
 <td>
-`"clientId"`
+`"manifestVersion"`
 </td>
 <td>
 Top-level field
@@ -744,10 +1107,10 @@ Nested field
 </tr>
 <tr>
 <td>
-`"deployments.0.id"`
+`"deployments.0.deploymentId"`
 </td>
 <td>
-First array element's `id`
+First array element's `deploymentId`
 </td>
 </tr>
 <tr>
@@ -770,7 +1133,7 @@ HTTP response header (prefix with `\_headers.`)
 
 ```json
 "extract\_context": {
-  "clientId":      "clientId",
+  "deploymentId":  "deployments.0.deploymentId",
   "manifestEtag":  "\_headers.ETag"
 }
 ```
@@ -780,7 +1143,7 @@ HTTP response header (prefix with `\_headers.`)
 - Using a saved value:
 
 ```json
-"endpoint": "/api/v1/clients/{clientId}/capabilities",
+"endpoint": "/api/v1/deployments/{deploymentId}/status",
 
 "headers": {
   "If-None-Match": "{manifestEtag}"
@@ -1192,30 +1555,27 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 </tr>
 </table>
 
-### Providing Certificates for verifying the Client Envelope in the HTTP Header
+### Providing the Identity (X.509-SVID) for mutual TLS
 
-- The `certificate` field inside `request\_body` of the ‘step’ gets special treatment.
+- In Margo 1.0.0-rc.3 every Management Interface request is sent over mutual TLS. Both sides present an X.509-SVID issued by the Margo Identity Service (MIS).
 
-- **Load from file (positive tests):**
+- The test-case does not carry certificates. A step only sets `"mtls": true`:
 
 ```json
-"request\_body": {
-  "certificate": "./certs/device-valid-cert.pem"
+{
+  "id": "step-3.1",
+  "name": "Get Deployments",
+  "method": "GET",
+  "endpoint": "/api/v1/deployments",
+  "mtls": true,
+  "headers": { "Accept": "application/vnd.margo.manifest.v1+json" },
+  "expected_status": 200
 }
 ```
 
-- The Conformance Framework detects the path prefix and reads the file. Actual PEM content is sent to the server.
+- The SVID, its private key and the MIS CA certificate are given to the Conformance Framework once, in `ctt-runner` (Device Supplier → Setup Identity, WFM Supplier → Setup MIAF Identity). The steps are in `docs/device-supplier-setup-guide.md` and `docs/wfm-supplier-setup-guide.md`.
 
-- **Use literal string (rejection/negative tests):**
-
-```json
-"request\_body": {
-  "certificate": "rnd-key-7f3a91b2c4d8e6"
-},
-"skip\_certificate\_injection": true
-```
-
-- Conformance Framework skips file loading. Literal string `"rnd-key-7f3a91b2c4d8e6"` is sent — server's rejection list blocks it with 403.
+- On every `mtls` step the Conformance Framework checks the certificate of the other side against the MIS CA and checks its SPIFFE ID: the WFM is `spiffe://<trust-domain>/margo/wfm/<wfm-id>` and its client is `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`.
 
 ## APPENDIX
 
@@ -1223,8 +1583,8 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 
 ```json
 [
-  { "id": "scenario-onboarding", ... },
   { "id": "scenario-capabilities", ... },
+  { "id": "scenario-desired-state", ... },
   {
     "id": "X",
     "name": "My New Test",
@@ -1240,28 +1600,29 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 
 ### Examples of ‘Steps’ in the Test-Cases
 
-- Example ‘Step’ in a test-case: Verify server accepts a valid onboarding request.
+- Example ‘Step’ in a test-case: Verify the desired-state manifest is returned.
 
 ```json
 {
   "id": "step-X.1",
-  "name": "Onboard with valid certificate",
-  "method": "POST",
-  "endpoint": "/api/v1/onboarding",
-  "request_body": 
+  "name": "Get Deployments",
+  "method": "GET",
+  "endpoint": "/api/v1/deployments",
+  "mtls": true,
+  "headers": 
   {
-    "apiVersion": "onboarding.margo.org/v1alpha1",
-    "kind": "OnboardingRequest",
-    "certificate": "./certs/device-valid-cert.pem"
+    "Accept": "application/vnd.margo.manifest.v1+json"
   },
-  "expected_status": 201,
+  "expected_status": 200,
   "validations": 
   [
-    { "field": "clientId", "operation": "is_string" }
+    { "field": "manifestVersion", "operation": "is_number" },
+    { "field": "deployments", "operation": "is_array" },
+    { "field": "_headers.ETag", "operation": "not_empty" }
   ],
   "extract_context": 
   {
-    "clientId": "clientId"
+    "manifestEtag": "_headers.ETag"
   }
 }
 ```
@@ -1271,18 +1632,27 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 ```json
 {
   "id": "step-X.2",
-  "name": "Reject onboarding with missing kind",
-  "method": "POST",
-  "endpoint": "/api/v1/onboarding",
+  "name": "Reject capabilities with an unknown deployment type",
+  "method": "PUT",
+  "endpoint": "/api/v1/capabilities/my-device-001",
+  "mtls": true,
   "request_body": 
   {
-    "apiVersion": "onboarding.margo.org/v1alpha1",
-    "certificate": "./certs/device-valid-cert.pem"
+    "properties": 
+    {
+      "id": "my-device-001",
+      "vendor": "MyVendor",
+      "modelNumber": "MDL-100",
+      "serialNumber": "SN-99999",
+      "supportedRuntimes": ["oci"],
+      "supportedDeploymentTypes": ["not-a-deployment-type"]
+    }
   },
-  "expected_status": 400,
+  "expected_status": 422,
   "validations": 
   [
-    { "field": "error", "operation": "contains", "value": "kind" }
+    { "field": "_headers.Content-Type", "operation": "contains", "value": "application/problem+json" },
+    { "field": "type", "operation": "not_empty" }
   ],
   "extract_context": {}
 }
@@ -1293,59 +1663,68 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 ```json
 {
   "id": "step-X.1",
-  "name": "Onboard Device",
-  "method": "POST",
-  "endpoint": "/api/v1/onboarding",
-  "request_body": 
+  "name": "Get Deployments",
+  "method": "GET",
+  "endpoint": "/api/v1/deployments",
+  "mtls": true,
+  "headers": 
   {
-    "apiVersion": "onboarding.margo.org/v1alpha1",
-    "kind": "OnboardingRequest",
-    "certificate": "./certs/device-valid-cert.pem"
+    "Accept": "application/vnd.margo.manifest.v1+json"
   },
-  "expected_status": 201,
+  "expected_status": 200,
   "validations": 
   [
-    { "field": "clientId", "operation": "exists" }
+    { "field": "deployments", "operation": "array_length_gte", "value": 1 }
   ],
   "extract_context": 
   {
-    "clientId": "clientId"
+    "deploymentId": "deployments.0.deploymentId",
+    "manifestVersion": "manifestVersion"
   }
 }
 {
   "id": "step-X.2",
-  "name": "Report Capabilities",
+  "name": "Report Deployment Status",
   "method": "POST",
-  "endpoint": "/api/v1/clients/{clientId}/capabilities",
+  "endpoint": "/api/v1/deployments/{deploymentId}/status",
+  "mtls": true,
   "request_body": 
   {
-    "apiVersion": "device.margo.org/v1alpha1",
-    "kind": "DeviceCapabilitiesManifest",
-    "properties": 
-    {
-      "id": "my-device-001",
-      "vendor": "MyVendor",
-      "modelNumber": "MDL-100",
-      "serialNumber": "SN-99999",
-      "roles": ["Standalone Device"],
-      "resources": 
-      {
-        "cpu": { "cores": 4, "architecture": "arm64" },
-        "memory": "8Gi",
-        "storage": "64Gi",
-        "interfaces": [{ "type": "ethernet" }],
-        "peripherals": []
-      }
-   }
+    "deploymentId": "{deploymentId}",
+    "adoptedManifestVersion": "{manifestVersion}",
+    "status": { "state": "installed" },
+    "components": []
   },
-  "expected_status": 201,
-  "validations": [
-  { "field": "status", 
-    "operation": "equals", 
-    "value": "capabilities_received" 
-  }
-],
+  "expected_status": 200,
+  "accepted_statuses": [201],
+  "validations": [],
   "extract_context": {}
+}
+```
+
+- Example ‘Step’ in a test-case: Repeat a request until a condition is met
+
+```json
+{
+  "id": "step-X.3",
+  "name": "Wait for a deployment to be assigned",
+  "method": "GET",
+  "endpoint": "/api/v1/deployments",
+  "mtls": true,
+  "headers": 
+  {
+    "Accept": "application/vnd.margo.manifest.v1+json"
+  },
+  "expected_status": 200,
+  "poll": 
+  {
+    "interval_seconds": 5,
+    "timeout_seconds": 120,
+    "until": 
+    [
+      { "field": "deployments", "operation": "array_length_gte", "value": 1 }
+    ]
+  }
 }
 ```
 
