@@ -24,7 +24,7 @@ import (
 // evaluating could only have been fetched under MIAF in the first place — or
 // else with an RFC 9421-signed GET for the legacy flow.
 func signedGET(endpoint string) (int, []byte, error) {
-	if mc, err := mtlsClient(); err == nil {
+	if mc, err := mtlsClient(""); err == nil {
 		resp, err := mc.Get(MIAFServer + endpoint)
 		if err != nil {
 			return 0, nil, err

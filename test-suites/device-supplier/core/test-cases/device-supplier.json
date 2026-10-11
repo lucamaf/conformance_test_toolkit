@@ -4,25 +4,26 @@
     "name": "Capabilities Reporting",
     "description": "POST and PUT capability manifests that match the spec-aligned schema.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003",
       "MARGO-DEV-DEPLOYMENT-002",
       "MARGO-DEV-DEPLOYMENT-004",
       "MARGO-DEV-DEPLOYMENT-005",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ],
     "steps": [
       {
         "id": "step-2.1",
-        "name": "Report Capabilities with POST",
+        "name": "Report Capabilities (create)",
         "crIds": [
+          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-003",
           "MARGO-DEV-DEPLOYMENT-002",
           "MARGO-DEV-DEPLOYMENT-004",
           "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/device-001",
@@ -77,11 +78,12 @@
       },
       {
         "id": "step-2.2",
-        "name": "Report Capabilities with PUT",
+        "name": "Report Capabilities (update)",
         "crIds": [
           "MARGO-DEV-DEPLOYMENT-002",
           "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005"
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/device-001",
@@ -139,15 +141,14 @@
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-007",
       "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019",
-      "MARGO-DEV-MANAGEMENTINTERFACE-031"
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
       {
         "id": "step-3.1",
         "name": "Get Current Deployments",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-031"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -210,13 +211,16 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.3",
         "name": "Download Deployment Bundle",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-031",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -255,12 +259,16 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.5",
         "name": "Download Individual Deployment Manifest",
         "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -305,13 +313,17 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.7",
         "name": "Report Deployment Status",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "POST",
         "endpoint": "/api/v1/deployments/{deploymentId}/status",
@@ -339,6 +351,84 @@
         ],
         "extract_context": {},
         "mtls": true
+      },
+      {
+        "id": "step-3.8",
+        "name": "Report Deployment Status: failed, with error details",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "failed",
+            "error": {
+              "code": "IMAGE_PULL_FAILED",
+              "source": "device",
+              "message": "Conformance test error"
+            }
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "failed",
+              "error": {
+                "code": "IMAGE_PULL_FAILED",
+                "source": "device",
+                "message": "Conformance test error"
+              }
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "acknowledgement",
+            "operation": "equals",
+            "value": "received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.9",
+        "name": "Report Deployment Status: removing",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "removing"
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "removing"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "acknowledgement",
+            "operation": "equals",
+            "value": "received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
       }
     ]
   },
@@ -346,10 +436,7 @@
     "id": "scenario-capabilities-errors",
     "name": "Capabilities Error Handling",
     "description": "Negative tests for digest, schema, role, interface, and client validation.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-DEPLOYMENT-002"
-    ],
+    "crIds": [],
     "steps": [
       {
         "id": "step-5.1",
@@ -363,6 +450,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -413,6 +505,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -459,6 +556,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -505,6 +607,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -518,7 +625,6 @@
     "description": "Negative coverage for deployment content negotiation, immutable resource lookup, and status schema validation.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
       "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
@@ -554,7 +660,13 @@
           "Accept": "application/json"
         },
         "expected_status": 406,
-        "validations": [],
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          }
+        ],
         "extract_context": {},
         "mtls": true
       },
@@ -573,6 +685,11 @@
             "field": "error",
             "operation": "contains",
             "value": "Bundle not found"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -593,6 +710,11 @@
             "field": "error",
             "operation": "contains",
             "value": "Deployment not found for digest"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -625,6 +747,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -656,6 +783,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -688,6 +820,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -698,9 +835,8 @@
   {
     "id": "scenario-live-assertion-demo",
     "name": "Live Assertion Demo \u2014 Dynamic Error Code",
-    "description": "DEMO SCENARIO: Proves server reloads assertions.json on every restart. Step 7.1 sends an invalid capabilities request (missing apiVersion) which triggers a validation error. The expected HTTP status code comes directly from error_responses.unprocessable.status_code in assertions.json. Change that one value, restart, re-run \u2014 the code changes without touching any Go code.",
+    "description": "The mock WFM accepts a memory value in a non-standard format, because the specification places no format constraint on it. The rules the mock WFM applies come from assertions.json, which it reads at start.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
       "MARGO-DEV-APPLICATIONDESCRIPTION-001",
       "MARGO-DEV-APPLICATIONDESCRIPTION-002"
     ],
@@ -764,14 +900,14 @@
     "name": "Capability Reporting \u2014 Device Role Variants",
     "description": "Per docs.margo.org/specification/margo-management-interface/device-capabilities and the Device Supplier conformance requirements, a device fills either the Standalone Cluster role (Kubernetes + Helm) or the Standalone Device role (Compose) \u2014 supportedDeploymentTypes is how a device declares which. This scenario covers both role variants as positive cases, plus negative coverage for invalid enum values and a malformed cpus[] entry not exercised by other groups.",
     "crIds": [
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003",
       "MARGO-DEV-DEPLOYMENT-002",
       "MARGO-DEV-DEPLOYMENT-004",
       "MARGO-DEV-DEPLOYMENT-005",
       "MARGO-DEV-DEPLOYMENT-006",
       "MARGO-DEV-DEPLOYMENT-007",
       "MARGO-DEV-DEPLOYMENT-008",
-      "MARGO-DEV-DEPLOYMENT-009",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+      "MARGO-DEV-DEPLOYMENT-009"
     ],
     "steps": [
       {
@@ -927,6 +1063,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -975,6 +1116,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1022,6 +1168,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1056,7 +1207,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-core-2.2",
@@ -1092,7 +1246,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-core-2-cleanup",
@@ -1112,12 +1269,162 @@
     ]
   },
   {
+    "id": "device-unregister",
+    "name": "Unregister A Device (DELETE capabilities)",
+    "description": "A device is registered, unregistered with DELETE (204), and a second DELETE for the same device is answered 404 device-not-found with problem details. The device can then register again.",
+    "steps": [
+      {
+        "id": "step-unreg-1",
+        "name": "Report Capabilities For The Device To Unregister",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-unregister-test",
+        "request_body": {
+          "properties": {
+            "id": "device-unregister-test",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [
+              {
+                "type": "camera"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true,
+        "accepted_statuses": [
+          200
+        ]
+      },
+      {
+        "id": "step-unreg-2",
+        "name": "Unregister The Device \u2014 204 No Content",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "DELETE",
+        "endpoint": "/api/v1/capabilities/device-unregister-test",
+        "headers": {},
+        "expected_status": 204,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-unreg-3",
+        "name": "Unregister The Same Device Again \u2014 404 device-not-found",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "DELETE",
+        "endpoint": "/api/v1/capabilities/device-unregister-test",
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "contains",
+            "value": "device-not-found"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-unreg-4",
+        "name": "Report Capabilities Again \u2014 The Device Is Registered Anew",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-unregister-test",
+        "request_body": {
+          "properties": {
+            "id": "device-unregister-test",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [
+              {
+                "type": "camera"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true,
+        "accepted_statuses": [
+          200
+        ]
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
+    ]
+  },
+  {
     "id": "device-mi008-unsupported-digest-algorithm",
     "name": "MI-008 \u2014 Manifest With Unsupported Digest Algorithm Must Be Rejected",
     "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-008 ('If a manifest references an unsupported digest algorithm, the client MUST treat the manifest as invalid and abort processing'). The mock is armed with the 'unsupported_digest_algorithm' negative fixture so GET /deployments returns a manifest whose digests use sha512 instead of sha256. The suite then asserts (a) the fixture is actually present in the response and (b) its own manifest-conformance check (expect_manifest_rejected) flags the manifest for rejection. This proves the suite would correctly fail a real device that acted on such a manifest.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-008",
-      "MARGO-DEV-MANAGEMENTINTERFACE-027"
+      "MARGO-DEV-MANAGEMENTINTERFACE-008"
     ],
     "steps": [
       {
@@ -1145,8 +1452,7 @@
         "id": "step-mi008-1.2",
         "name": "GET Deployments \u2014 Manifest Uses An Unsupported Digest Algorithm And Must Be Rejected",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-008",
-          "MARGO-DEV-MANAGEMENTINTERFACE-027"
+          "MARGO-DEV-MANAGEMENTINTERFACE-008"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -1254,8 +1560,8 @@
     "name": "MI-019 \u2014 Any Fetched Artifact With A Wrong Digest Must Be Rejected",
     "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-019: the client MUST verify the digest of every fetched artifact. The 'deployment_digest_mismatch' fixture corrupts the first deployments[].digest only (the bundle digest stays correct), so the violation is caught on a per-deployment artifact, not the bundle.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-019",
-      "MARGO-DEV-MANAGEMENTINTERFACE-006"
+      "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
       {
@@ -1276,6 +1582,7 @@
         "id": "step-mi019-1.2",
         "name": "GET Deployments \u2014 Deployment Digest Mismatch Must Be Rejected",
         "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -1487,6 +1794,7 @@
     "name": "MI-018 \u2014 Device Trusts The WFM Server Certificate Via The Root CA",
     "description": "MARGO-DEV-MANAGEMENTINTERFACE-018: the client MUST trust the WFM's server certificate through a securely obtained root of trust. Under MIAF this is the trust bundle fetched from MIS (CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.3 Phase 2), not a bespoke /onboarding/certificate call -- mtlsClient() in signing.go already verifies the WFM's SVID chains to that bundle on every single mtls step in this suite, so a successful connection here IS the positive proof. NEGATIVE CASE RETIRED -- the old :3002 untrusted-cert listener isn't mTLS-capable with a real SVID yet; needs its own MIAF-shaped negative fixture, tracked as a follow-up, not silently dropped.",
     "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-005",
       "MARGO-DEV-MANAGEMENTINTERFACE-018"
     ],
     "steps": [
@@ -1494,6 +1802,7 @@
         "id": "step-mi018-1.0",
         "name": "Connect To The WFM Over mTLS \u2014 Server SVID Verified Against The Trust Bundle",
         "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-005",
           "MARGO-DEV-MANAGEMENTINTERFACE-018"
         ],
         "method": "GET",
@@ -1564,7 +1873,10 @@
         "extract_context": {
           "bundleEtag": "_headers.ETag"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-bundle-etag-match",
@@ -1591,11 +1903,19 @@
             "field": "error",
             "operation": "contains",
             "value": "Bundle not found"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -1604,8 +1924,8 @@
     "description": "POST/PUT capabilities under this suite's static mTLS identity (MIAF has no per-run onboarding, so no shared clientId/scenario-ordering dependency exists anymore). Includes a positive case that omits properties.resources entirely (regression test for the assertions.json conditional-required fix) and a negative case where resources is present but incomplete (proves its children are still enforced whenever resources is present at all).",
     "steps": [
       {
-        "id": "flex-capabilities-post-full",
-        "name": "Report Capabilities with POST (full resources)",
+        "id": "flex-capabilities-create",
+        "name": "Report Capabilities (create, full resources)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -1655,11 +1975,17 @@
         "mtls": true,
         "accepted_statuses": [
           200
+        ],
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ]
       },
       {
-        "id": "flex-capabilities-put-full",
-        "name": "Report Capabilities with PUT (full resources)",
+        "id": "flex-capabilities-update",
+        "name": "Report Capabilities (update, full resources)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -1705,11 +2031,17 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
-        "id": "flex-capabilities-post-no-resources",
-        "name": "Report Capabilities With Empty Peripherals (regression test)",
+        "id": "flex-capabilities-empty-peripherals",
+        "name": "Report Capabilities With Empty Peripherals",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -1755,7 +2087,7 @@
         "mtls": true
       },
       {
-        "id": "flex-capabilities-reject-resources-missing-cpu",
+        "id": "flex-capabilities-cpus-omitted",
         "name": "Report Capabilities With cpus Omitted (optional per schema \u2014 only id/vendor/modelNumber/serialNumber are required)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
@@ -1801,13 +2133,18 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       },
       {
-        "id": "flex-capabilities-reject-invalid-role",
+        "id": "flex-capabilities-reject-invalid-peripheral-type",
         "name": "Reject Capabilities With Invalid Peripheral Type",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
@@ -1851,6 +2188,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1897,6 +2239,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1943,11 +2290,22 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ]
   },
   {
@@ -2008,7 +2366,10 @@
         "extract_context": {
           "deploymentEtag": "_headers.ETag"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-deployment-manifest-etag-match",
@@ -2035,11 +2396,19 @@
             "field": "error",
             "operation": "contains",
             "value": "Deployment not found for digest"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -2097,7 +2466,10 @@
           "deploymentId": "deployments.0.deploymentId",
           "deploymentDigest": "deployments.0.digest"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "flex-desired-state-etag-match",
@@ -2111,7 +2483,10 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "flex-desired-state-reject-bad-accept",
@@ -2122,10 +2497,19 @@
           "Accept": "application/json"
         },
         "expected_status": 406,
-        "validations": [],
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          }
+        ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ]
   },
   {
@@ -2265,7 +2649,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-reconciliation-fetch-manifest",
@@ -2282,7 +2669,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-reconciliation-status-pending",
@@ -2312,7 +2702,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-status-installing",
@@ -2342,7 +2735,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-status-installed",
@@ -2372,7 +2768,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-add-second-deployment",
@@ -2425,7 +2824,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-remove-second-deployment",
@@ -2477,7 +2879,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-get-final-state",
@@ -2503,6 +2908,10 @@
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -2588,7 +2997,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-a-compose",
@@ -2635,7 +3047,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-a-installing",
@@ -2665,7 +3080,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-a-installed",
@@ -2695,7 +3113,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-b-manifest",
@@ -2722,7 +3143,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-b-compose",
@@ -2769,7 +3193,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-b-installing",
@@ -2799,7 +3226,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-b-installed",
@@ -2829,7 +3259,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-remove-app-b",
@@ -2894,7 +3327,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-restore-default",
@@ -2931,6 +3367,10 @@
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -2986,7 +3426,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-status-post-with-deviceid",
@@ -3017,7 +3460,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-status-reject-invalid-state",
@@ -3043,6 +3489,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -3071,6 +3522,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -3100,34 +3556,44 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007"
     ]
   },
   {
     "id": "scenario-miaf-identity-mtls",
     "name": "MIAF Identity \u2014 mTLS SVID Authentication",
-    "description": "Verifies the Device Supplier presents a valid X.509-SVID for mTLS authentication and that the CTT mock WFM validates it against the trust bundle. See docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md \u00a74.",
+    "description": "Identity over mTLS: the client presents its X.509-SVID and is accepted; a client without a certificate, and one with a certificate the MIS did not issue, are refused by the mock WFM.",
     "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-005",
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
     ],
     "steps": [
       {
         "id": "step-miaf-mtls-1",
-        "name": "Device Presents Valid SVID on Capabilities PUT",
+        "name": "Client Presents Its SVID On A Capabilities Report \u2014 Accepted",
         "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-005",
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001"
         ],
         "method": "PUT",
-        "endpoint": "/api/v1/capabilities/{deviceId}",
+        "endpoint": "/api/v1/capabilities/device-identity-check",
         "mtls": true,
         "request_body": {
           "properties": {
-            "id": "{deviceId}",
+            "id": "device-identity-check",
             "vendor": "TestVendor",
             "modelNumber": "CTT-MIAF-001",
             "serialNumber": "SN-MIAF-001",
@@ -3166,11 +3632,14 @@
         ],
         "extract_context": {
           "deviceSpiffeId": "_client_cert.spiffe_id"
-        }
+        },
+        "accepted_statuses": [
+          200
+        ]
       },
       {
         "id": "step-miaf-mtls-2",
-        "name": "Device SPIFFE ID Matches Accepted Client Policy",
+        "name": "Client's SPIFFE ID Is Recognised By The WFM \u2014 Request Accepted",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
         ],
@@ -3192,70 +3661,101 @@
           }
         ],
         "extract_context": {}
+      },
+      {
+        "id": "step-miaf-mtls-3",
+        "name": "A Client Without A Certificate Is Refused",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "svid_source": "none",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 0,
+        "accepted_statuses": [
+          403
+        ],
+        "expect_transport_error": true,
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "step-miaf-mtls-4",
+        "name": "A Client Certificate The MIS Did Not Issue Is Refused",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "svid_source": "untrusted",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 0,
+        "accepted_statuses": [
+          403
+        ],
+        "expect_transport_error": true,
+        "validations": [],
+        "extract_context": {}
       }
     ]
   },
   {
     "id": "scenario-miaf-identity-svid-rotation",
     "name": "MIAF Identity \u2014 SVID Rotation Continuity",
-    "description": "Verifies the Device Supplier continues to function after SVID rotation without manual re-registration.",
+    "description": "After the client SVID is rotated, access continues without re-registration: a request with the pre-rotation SVID and a request with the re-issued SVID (same SPIFFE ID) are both accepted. Runs only once the client SVID has been re-issued and installed again through Setup Identity, which keeps the SVID it replaces; until then both steps are reported as SKIP.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
     ],
     "steps": [
       {
         "id": "step-miaf-rotation-1",
-        "name": "Device Sends Status With Original SVID (baseline)",
+        "name": "Request With The Pre-Rotation SVID (baseline)",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
         ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/miaf-rotation-test/status",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
         "mtls": true,
-        "request_body": {
-          "deploymentId": "miaf-rotation-test",
-          "adoptedManifestVersion": 1,
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "miaf-test-component",
-              "state": "installed"
-            }
-          ]
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
         },
-        "headers": {},
         "expected_status": 200,
-        "validations": [],
-        "extract_context": {}
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {},
+        "svid_source": "previous"
       },
       {
         "id": "step-miaf-rotation-2",
-        "name": "Device Sends Status With Rotated SVID (post-rotation)",
+        "name": "Request With The Re-Issued SVID (after rotation)",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
         ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/miaf-rotation-test/status",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
         "mtls": true,
         "svid_source": "refreshed",
-        "request_body": {
-          "deploymentId": "miaf-rotation-test",
-          "adoptedManifestVersion": 1,
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "miaf-test-component",
-              "state": "installed"
-            }
-          ]
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
         },
-        "headers": {},
         "expected_status": 200,
-        "validations": [],
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
         "extract_context": {}
       }
     ]
@@ -3264,13 +3764,21 @@
     "id": "scenario-otel-observability",
     "name": "OTEL Observability \u2014 otelCollector Capability and Telemetry Push",
     "description": "Verifies the vendor device's OTEL collector actively pushes telemetry to the CTT's OTLP HTTP receiver (port 4318) and Prometheus Remote Write endpoint (port 9090). PRECONDITION: configure the device's OTEL collector to push to http://<ctt-host>:4318 (OTLP HTTP) and http://<ctt-host>:9090/api/v1/write (Prometheus Remote Write) before running this scenario. Matches the sandbox observability architecture: device \u2192 Jaeger OTLP / Prometheus Remote Write \u2192 WFM observability stack.",
-    "crIds": [],
+    "crIds": [
+      "MARGO-DEV-OBSERVABILITY-006",
+      "MARGO-DEV-OBSERVABILITY-010",
+      "MARGO-DEV-OBSERVABILITY-023"
+    ],
     "optional": true,
     "steps": [
       {
         "id": "step-otel-2",
         "name": "Wait for Device OTEL Collector to Push Telemetry (traces or metrics)",
-        "crIds": [],
+        "crIds": [
+          "MARGO-DEV-OBSERVABILITY-006",
+          "MARGO-DEV-OBSERVABILITY-010",
+          "MARGO-DEV-OBSERVABILITY-023"
+        ],
         "method": "GET",
         "endpoint": "/health/telemetry",
         "skip_signing": true,
@@ -3303,7 +3811,9 @@
       {
         "id": "step-otel-3",
         "name": "Confirm Prometheus Remote Write Also Received",
-        "crIds": [],
+        "crIds": [
+          "MARGO-DEV-OBSERVABILITY-006"
+        ],
         "method": "GET",
         "endpoint": "/health/telemetry",
         "skip_signing": true,

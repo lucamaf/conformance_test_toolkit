@@ -2,12 +2,14 @@
   {
     "id": "wfm-otel-observability",
     "name": "OTEL Observability — WFM Accepts Device with otelCollector Capability",
-    "description": "Verifies the vendor's WFM correctly accepts a device capabilities manifest that declares otelCollector:true, indicating the device has an OTEL collector that will push telemetry to the WFM's observability stack (Jaeger OTLP port 30417, Prometheus Remote Write port 30909). This is the SBI-side conformance check: the WFM must store and acknowledge the otelCollector flag without error. Full telemetry pipeline (device OTEL collector → WFM Jaeger/Prometheus) is validated in the device-supplier persona's scenario-otel-observability.",
-    "crIds": [],
+    "description": "The otelCollector capability: the WFM accepts a device that reports a collector and one that reports none, and rejects a value that is not a boolean. Whether telemetry reaches the WFM's observability backend is not checked here.",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
+    ],
     "steps": [
       {
         "id": "wfm-otel-cap-1",
-        "name": "Report Capabilities with otelCollector: true — WFM Must Accept",
+        "name": "Report Capabilities With otelCollector: true — Accepted",
         "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
@@ -51,7 +53,7 @@
       },
       {
         "id": "wfm-otel-cap-2",
-        "name": "Update Capabilities — WFM Preserves otelCollector: true on Second PUT",
+        "name": "Report Capabilities With otelCollector: false — Accepted",
         "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
@@ -75,7 +77,7 @@
                 "type": "ethernet"
               }
             ],
-            "otelCollector": true,
+            "otelCollector": false,
             "supportedRuntimes": [
               "oci"
             ],
@@ -92,6 +94,62 @@
           201
         ],
         "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-otel-cap-3",
+        "name": "Reject Capabilities — otelCollector Is Not A Boolean",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": "yes",
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose",
+              "helm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
         "extract_context": {}
       }
     ]

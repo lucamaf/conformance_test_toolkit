@@ -50,7 +50,10 @@
         "extract_context": {
           "bundleEtag": "_headers.ETag"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-bundle-etag-match",
@@ -77,11 +80,19 @@
             "field": "error",
             "operation": "contains",
             "value": "Bundle not found"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -90,8 +101,8 @@
     "description": "POST/PUT capabilities under this suite's static mTLS identity (MIAF has no per-run onboarding, so no shared clientId/scenario-ordering dependency exists anymore). Includes a positive case that omits properties.resources entirely (regression test for the assertions.json conditional-required fix) and a negative case where resources is present but incomplete (proves its children are still enforced whenever resources is present at all).",
     "steps": [
       {
-        "id": "flex-capabilities-post-full",
-        "name": "Report Capabilities with POST (full resources)",
+        "id": "flex-capabilities-create",
+        "name": "Report Capabilities (create, full resources)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -141,11 +152,17 @@
         "mtls": true,
         "accepted_statuses": [
           200
+        ],
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ]
       },
       {
-        "id": "flex-capabilities-put-full",
-        "name": "Report Capabilities with PUT (full resources)",
+        "id": "flex-capabilities-update",
+        "name": "Report Capabilities (update, full resources)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -191,11 +208,17 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
-        "id": "flex-capabilities-post-no-resources",
-        "name": "Report Capabilities With Empty Peripherals (regression test)",
+        "id": "flex-capabilities-empty-peripherals",
+        "name": "Report Capabilities With Empty Peripherals",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
         "request_body": {
@@ -241,7 +264,7 @@
         "mtls": true
       },
       {
-        "id": "flex-capabilities-reject-resources-missing-cpu",
+        "id": "flex-capabilities-cpus-omitted",
         "name": "Report Capabilities With cpus Omitted (optional per schema \u2014 only id/vendor/modelNumber/serialNumber are required)",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
@@ -287,13 +310,18 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       },
       {
-        "id": "flex-capabilities-reject-invalid-role",
+        "id": "flex-capabilities-reject-invalid-peripheral-type",
         "name": "Reject Capabilities With Invalid Peripheral Type",
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/flex-device-001",
@@ -337,6 +365,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -383,6 +416,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -429,11 +467,22 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ]
   },
   {
@@ -494,7 +543,10 @@
         "extract_context": {
           "deploymentEtag": "_headers.ETag"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-deployment-manifest-etag-match",
@@ -521,11 +573,19 @@
             "field": "error",
             "operation": "contains",
             "value": "Deployment not found for digest"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -583,7 +643,10 @@
           "deploymentId": "deployments.0.deploymentId",
           "deploymentDigest": "deployments.0.digest"
         },
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "flex-desired-state-etag-match",
@@ -597,7 +660,10 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "flex-desired-state-reject-bad-accept",
@@ -608,10 +674,19 @@
           "Accept": "application/json"
         },
         "expected_status": 406,
-        "validations": [],
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          }
+        ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ]
   },
   {
@@ -751,7 +826,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-reconciliation-fetch-manifest",
@@ -768,7 +846,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-reconciliation-status-pending",
@@ -798,7 +879,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-status-installing",
@@ -828,7 +912,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-status-installed",
@@ -858,7 +945,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-add-second-deployment",
@@ -911,7 +1001,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-remove-second-deployment",
@@ -963,7 +1056,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-reconciliation-get-final-state",
@@ -989,6 +1085,10 @@
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -1074,7 +1174,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-a-compose",
@@ -1121,7 +1224,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-a-installing",
@@ -1151,7 +1257,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-a-installed",
@@ -1181,7 +1290,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-b-manifest",
@@ -1208,7 +1320,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ]
       },
       {
         "id": "flex-multiapp-fetch-app-b-compose",
@@ -1255,7 +1370,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-b-installing",
@@ -1285,7 +1403,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-status-app-b-installed",
@@ -1315,7 +1436,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-remove-app-b",
@@ -1380,7 +1504,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-multiapp-restore-default",
@@ -1417,6 +1544,10 @@
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
@@ -1472,7 +1603,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-status-post-with-deviceid",
@@ -1503,7 +1637,10 @@
           }
         ],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ]
       },
       {
         "id": "flex-status-reject-invalid-state",
@@ -1529,6 +1666,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1557,6 +1699,11 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
@@ -1586,11 +1733,19 @@
           {
             "field": "errors",
             "operation": "is_array"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/problem+json"
           }
         ],
         "extract_context": {},
         "mtls": true
       }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007"
     ]
   }
 ]

@@ -2,7 +2,7 @@
   "name": "identity",
   "version": "1.0.0-rc.3",
   "persona": "device-supplier",
-  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, certificate conformance, trust in the WFM through the MIS CA, SVID rotation.",
+  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, clients that are refused (no certificate, a certificate the MIS did not issue), trust in the WFM through the MIS CA, SVID rotation.",
   "FolderPath": [
     "../test-suites/device-supplier/identity/test-cases"
   ],
@@ -15,6 +15,8 @@
     "step-mi018-1.0",
     "step-miaf-mtls-1",
     "step-miaf-mtls-2",
+    "step-miaf-mtls-3",
+    "step-miaf-mtls-4",
     "step-miaf-rotation-1",
     "step-miaf-rotation-2"
   ]

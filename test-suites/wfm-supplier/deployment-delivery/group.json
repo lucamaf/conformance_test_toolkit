@@ -12,9 +12,15 @@
     "efd8ad9d-1a6f-4b12-bf9d-040f11eddec6",
     "f55c84c8-3c29-4cd0-b11a-49bde4aeafe4",
     "wfm-mc-bundle-fetch",
+    "wfm-mc-bundle-not-modified",
     "wfm-mc-bundle-wrong-digest",
     "wfm-mc-deployment-wrong-digest",
     "wfm-mc-manifest-urls",
+    "wfm-mc-status-failed",
+    "wfm-mc-status-installing",
+    "wfm-mc-status-invalid-state",
+    "wfm-mc-status-missing-status",
+    "wfm-mc-status-pending",
     "wfm-multi-component-deployment"
   ]
 }

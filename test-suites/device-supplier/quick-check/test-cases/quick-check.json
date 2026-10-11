@@ -4,25 +4,26 @@
     "name": "Capabilities Reporting",
     "description": "POST and PUT capability manifests that match the spec-aligned schema.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003",
       "MARGO-DEV-DEPLOYMENT-002",
       "MARGO-DEV-DEPLOYMENT-004",
       "MARGO-DEV-DEPLOYMENT-005",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ],
     "steps": [
       {
         "id": "step-2.1",
-        "name": "Report Capabilities with POST",
+        "name": "Report Capabilities (create)",
         "crIds": [
+          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-003",
           "MARGO-DEV-DEPLOYMENT-002",
           "MARGO-DEV-DEPLOYMENT-004",
           "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/device-001",
@@ -77,11 +78,12 @@
       },
       {
         "id": "step-2.2",
-        "name": "Report Capabilities with PUT",
+        "name": "Report Capabilities (update)",
         "crIds": [
           "MARGO-DEV-DEPLOYMENT-002",
           "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005"
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/device-001",
@@ -139,15 +141,14 @@
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-007",
       "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019",
-      "MARGO-DEV-MANAGEMENTINTERFACE-031"
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
       {
         "id": "step-3.1",
         "name": "Get Current Deployments",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-031"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -210,13 +211,16 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.3",
         "name": "Download Deployment Bundle",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-031",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -255,12 +259,16 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.5",
         "name": "Download Individual Deployment Manifest",
         "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -305,13 +313,17 @@
         "expected_status": 304,
         "validations": [],
         "extract_context": {},
-        "mtls": true
+        "mtls": true,
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ]
       },
       {
         "id": "step-3.7",
         "name": "Report Deployment Status",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
         "method": "POST",
         "endpoint": "/api/v1/deployments/{deploymentId}/status",
@@ -324,6 +336,84 @@
             {
               "name": "app-component-1",
               "state": "installed"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "acknowledgement",
+            "operation": "equals",
+            "value": "received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.8",
+        "name": "Report Deployment Status: failed, with error details",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "failed",
+            "error": {
+              "code": "IMAGE_PULL_FAILED",
+              "source": "device",
+              "message": "Conformance test error"
+            }
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "failed",
+              "error": {
+                "code": "IMAGE_PULL_FAILED",
+                "source": "device",
+                "message": "Conformance test error"
+              }
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "acknowledgement",
+            "operation": "equals",
+            "value": "received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.9",
+        "name": "Report Deployment Status: removing",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "removing"
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "removing"
             }
           ],
           "adoptedManifestVersion": 1

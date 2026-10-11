@@ -110,6 +110,7 @@
         "id": "ar-006-manifest-pullable",
         "name": "Retrieving the Application Package Manifest works via the standard OCI 'pull manifest' pattern",
         "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
           "MARGO-WFM-APPLICATIONREGISTRY-006"
         ],
         "oras": {
@@ -123,6 +124,7 @@
         "id": "ar-005-blobs-pullable",
         "name": "Retrieving each Application Package part works via the standard OCI 'pull blob' pattern, not a custom download mechanism",
         "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
           "MARGO-WFM-APPLICATIONREGISTRY-005"
         ],
         "oras": {
@@ -187,6 +189,7 @@
         "id": "ar-008-registry-api-surface",
         "name": "The full OCI Registry API surface (tags, manifest, blobs) is usable end to end, not a partial/bespoke subset",
         "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
           "MARGO-WFM-APPLICATIONREGISTRY-008"
         ],
         "oras": {
@@ -202,6 +205,20 @@
         ],
         "endpoint": null
       }
+    ],
+    "crIds": [
+      "MARGO-WFM-APPLICATIONREGISTRY-001",
+      "MARGO-WFM-APPLICATIONREGISTRY-002",
+      "MARGO-WFM-APPLICATIONREGISTRY-003",
+      "MARGO-WFM-APPLICATIONREGISTRY-004",
+      "MARGO-WFM-APPLICATIONREGISTRY-005",
+      "MARGO-WFM-APPLICATIONREGISTRY-006",
+      "MARGO-WFM-APPLICATIONREGISTRY-007",
+      "MARGO-WFM-APPLICATIONREGISTRY-008",
+      "MARGO-WFM-APPLICATIONREGISTRY-009",
+      "MARGO-WFM-APPLICATIONREGISTRY-010",
+      "MARGO-WFM-APPLICATIONREGISTRY-011",
+      "MARGO-WFM-APPLICATIONREGISTRY-012"
     ]
   }
 ]

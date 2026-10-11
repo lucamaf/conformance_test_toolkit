@@ -46,6 +46,7 @@ ctt-runner/device-supplier/
 | `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation |
 | `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT |
 | `random-order` | The lifecycle scenarios executed in random order (`"flexibleOrder": true` in `group.json`) |
+| `real-device` | Observation steps (`"observe"`) that judge the requests a real device sent to the mock WFM |
 
 ## How to Add or Update a Test Group
 

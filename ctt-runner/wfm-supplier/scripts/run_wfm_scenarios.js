@@ -158,13 +158,36 @@ function recognizeWfm(peerCertificate) {
   return undefined;
 }
 
+// step.svid_source "untrusted": a certificate with the CTT's own SPIFFE ID that
+// the MIS did not issue (self-signed, made here with openssl). A WFM must refuse it.
+let untrustedIdentityCache = null;
+function untrustedIdentity() {
+  if (untrustedIdentityCache) return untrustedIdentityCache;
+  const { execFileSync } = require('child_process');
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'ctt-untrusted-'));
+  const keyFile = path.join(dir, 'key.pem');
+  const certFile = path.join(dir, 'cert.pem');
+  try {
+    execFileSync('openssl', ['ecparam', '-name', 'prime256v1', '-genkey', '-noout', '-out', keyFile], { stdio: 'ignore' });
+    execFileSync('openssl', ['req', '-new', '-x509', '-days', '1', '-key', keyFile, '-out', certFile,
+      '-subj', '/CN=ctt-untrusted-client',
+      '-addext', `subjectAltName=URI:${ownSpiffeId}`,
+      '-addext', 'basicConstraints=critical,CA:FALSE',
+      '-addext', 'extendedKeyUsage=clientAuth'], { stdio: 'ignore' });
+    untrustedIdentityCache = { cert: fs.readFileSync(certFile, 'utf8'), key: fs.readFileSync(keyFile, 'utf8'), ca: miafIdentity.ca };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return untrustedIdentityCache;
+}
+
 // step.svid_source drives the SVID Rotation scenario: "previous" presents the
 // SVID in use before the rotation, "refreshed" the current one. Without a kept
 // previous SVID no rotation has happened, so there is nothing to test — the
 // step is reported as NOT RUN instead of passing on the unrotated SVID.
 // Returns the reason a step cannot run, or ''.
 function svidSourceBlocker(step) {
-  if (!step.svid_source) return '';
+  if (!step.svid_source || step.svid_source === 'untrusted') return '';
   if (!previousIdentity) {
     return 'no SVID rotation to test — re-issue the client SVID for the same SPIFFE ID and run Setup MIAF Identity again (it keeps the SVID it replaces)';
   }
@@ -1047,6 +1070,7 @@ function validate(responseSource, validation) {
         ? ''
         : `layer(s) with a non-Margo-specific mediaType: ${generic.join(', ')}`;
     }
+    case 'bundle_null_iff_no_deployments':
     case 'bundle_null_when_no_deployments': {
       // MI-009: when there are zero deployments the `bundle` field MUST be
       // present with the value null (not omitted). JSON.parse keeps the key, so
@@ -1059,7 +1083,40 @@ function validate(responseSource, validation) {
           ? ''
           : 'bundle must be present and null when the deployments array is empty (MI-009)';
       }
+      // With deployments there must be a bundle to fetch (an archive is never empty, MI-033).
+      if (validation.operation === 'bundle_null_iff_no_deployments' && Array.isArray(deployments)) {
+        return bundle && typeof bundle === 'object' && bundle.digest
+          ? ''
+          : `bundle must describe the archive when there are deployments (${deployments.length}), got ${JSON.stringify(bundle)}`;
+      }
       return '';
+    }
+    case 'bundle_contains_exactly_deployments': {
+      // MI-024: the bundle archive holds exactly the YAML files the manifest's
+      // deployments[] refer to — compared by sha256 of each file in the tar.gz.
+      const wanted = (Array.isArray(expected) ? expected : []).map((d) => (d && d.digest) || d).filter(Boolean).sort();
+      if (!wanted.length) return 'no deployments[] from the manifest to compare with (value must be the saved deployments array)';
+      let tar;
+      try {
+        tar = require('zlib').gunzipSync(exactBody(responseSource));
+      } catch (e) {
+        return `bundle is not a gzip archive: ${e.message}`;
+      }
+      const found = [];
+      for (let off = 0; off + 512 <= tar.length;) {
+        const header = tar.subarray(off, off + 512);
+        if (header.every((b) => b === 0)) break;
+        const size = parseInt(header.subarray(124, 136).toString('ascii').replace(/\0.*$/, '').trim() || '0', 8);
+        const type = String.fromCharCode(header[156] || 48);
+        if (type === '0' || type === '\0') {
+          found.push('sha256:' + crypto.createHash('sha256').update(tar.subarray(off + 512, off + 512 + size)).digest('hex'));
+        }
+        off += 512 + Math.ceil(size / 512) * 512;
+      }
+      found.sort();
+      return JSON.stringify(found) === JSON.stringify(wanted)
+        ? ''
+        : `bundle holds ${found.length} file(s) ${JSON.stringify(found.map((d) => d.slice(0, 19) + '…'))}, the manifest lists ${wanted.length} deployment(s) ${JSON.stringify(wanted.map((d) => d.slice(0, 19) + '…'))}`;
     }
     case 'bundle_media_type': {
       // MI-031: bundle.mediaType MUST be application/vnd.margo.bundle.v1+tar+gzip.
@@ -1311,7 +1368,9 @@ async function performHTTPStep(step) {
     // mtls_wrong_server_ca: true → MIAF-002 negative test: present real client SVID
     // but verify the WFM's server cert against the wrong CA (device self-signed CA).
     // The WFM's SVID cannot chain to the device CA → TLS handshake fails → transport error.
-    const ownIdentity = step.svid_source === 'previous' ? previousIdentity : miafIdentity;
+    const ownIdentity = step.svid_source === 'previous' ? previousIdentity
+      : step.svid_source === 'untrusted' ? untrustedIdentity()
+      : miafIdentity;
     const identity = step.mtls_wrong_server_ca
       ? { cert: ownIdentity.cert, key: ownIdentity.key, ca: caCertificate }
       : ownIdentity;
@@ -1476,7 +1535,7 @@ async function runStep(scenario, step) {
       scenarioName: scenario.name,
       step: step.id,
       name: step.name,
-      crIds: (step.crIds && step.crIds.length ? step.crIds : scenario.crIds) || [],
+      crIds: step.crIds || [],
       method: (step.method || 'GET').toUpperCase(),
       endpoint: substitute(step.endpoint || ''),
       expected: step.expected_status,
@@ -1616,7 +1675,7 @@ async function runStep(scenario, step) {
       scenarioName: scenario.name,
       step: step.id,
       name: step.name,
-      crIds: (step.crIds && step.crIds.length ? step.crIds : scenario.crIds) || [],
+      crIds: step.crIds || [],
       method,
       endpoint,
       expected: step.expected_status,

@@ -115,10 +115,16 @@ bodies.
 ### Device Supplier
 
 The toolkit plays the role of a conformant WFM (the mock WFM, mTLS on port
-3003). It can be used in two ways: the toolkit's own device client runs the
-group's scenarios against the mock WFM, or the vendor's real device agent
-connects to it and the mock WFM's log shows each request with the status it
-was answered with and, for a rejection, the reason.
+3003). It is used in two ways:
+
+- The toolkit's own device client runs a group's scenarios against the mock
+  WFM. This checks the mock WFM and shows what a conforming device sends; it
+  says nothing about a vendor's device.
+- The vendor's real device agent connects to the mock WFM, and the group
+  `real-device` judges it. A device only ever calls out, so nothing is sent
+  to it: the mock WFM records every request it receives, the group changes
+  the desired state (also to manifests a device must reject), and each step
+  checks what the device then sent or did not send.
 
 ### Application Supplier
 
@@ -254,6 +260,7 @@ The groups shipped with the toolkit:
 | `postman-lifecycle`, `postman-error-handling` | WFM | The same kind of tests written as Postman collections |
 | `manifest-integrity` | Device | Manifests a device must reject, and one it must accept |
 | `random-order` | Device | The lifecycle scenarios in a different random order on every run |
+| `real-device` | Device | A real device, judged from the requests it sent to the mock WFM |
 | `core` | both | The full set (WFM: everything except `device-unregister`) — the conformance result |
 
 `core` holds the complete test-case file of a persona. Each other group has

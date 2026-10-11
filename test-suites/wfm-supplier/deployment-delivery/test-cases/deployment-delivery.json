@@ -6,13 +6,18 @@
       "MARGO-WFM-APPLICATIONDESCRIPTION-001",
       "MARGO-WFM-APPLICATIONDESCRIPTION-002",
       "MARGO-WFM-MANAGEMENTINTERFACE-014",
-      "MARGO-WFM-MANAGEMENTINTERFACE-015",
+      "MARGO-WFM-MANAGEMENTINTERFACE-023",
+      "MARGO-WFM-MANAGEMENTINTERFACE-024",
       "MARGO-WFM-MANAGEMENTINTERFACE-025",
+      "MARGO-WFM-MANAGEMENTINTERFACE-027",
+      "MARGO-WFM-MANAGEMENTINTERFACE-030",
       "MARGO-WFM-MANAGEMENTINTERFACE-031",
       "MARGO-WFM-MANAGEMENTINTERFACE-034",
-      "MARGO-WFM-MANAGEMENTINTERFACE-035"
+      "MARGO-WFM-MANAGEMENTINTERFACE-035",
+      "MARGO-WFM-MANAGEMENTINTERFACE-036",
+      "MARGO-WFM-MANAGEMENTINTERFACE-038"
     ],
-    "description": "Verifies a real WFM serves a multi-component compose ApplicationDeployment faithfully, WITHOUT deploying any container. Covers MARGO-WFM-APPLICATIONDESCRIPTION-001 (the client MAY be told wait=false for compose — the WFM's only obligation is to relay the operator-set `wait` value unchanged) plus the content-addressing / caching contract that the same fetched deployment lets us check: MI-014/MI-034 (ETag digest grammar), MI-015 (ETag == sha256 of the served body), MI-025 (served body sha256 == the digest advertised in the desired-state manifest), MI-031 (bundle media type) and MI-009 (bundle present & non-null once a deployment exists). MIAF transport: caller identity comes from the mTLS client SVID (mtls:true) — no onboarding call, no {clientId} path segment (CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.4/6). PRECONDITION: an operator must assign the reference deployment in fixtures/multi-component-app-deployment.yaml (one component `wait: true`, one `wait: false`) to this suite's registered SPIFFE ID via the WFM console while step 2 polls.",
+    "description": "A WFM serves a multi-component compose ApplicationDeployment faithfully, without anything being deployed: content-addressed URLs, the deployment YAML with both `wait` values and its digest, the bundle archive with exactly the listed YAML files, its cache headers and 304, wrong digests answered 404, and status reports for every state, with invalid reports rejected. PRECONDITION: a deployment with two components (wait: true and wait: false) is assigned to the CTT's device while the second step is polling.",
     "steps": [
       {
         "id": "f55c84c8-3c29-4cd0-b11a-49bde4aeafe4",
@@ -56,6 +61,9 @@
         "extract_context": {},
         "accepted_statuses": [
           200
+        ],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
         ]
       },
       {
@@ -106,8 +114,14 @@
         "extract_context": {
           "deploymentId": "deployments.0.deploymentId",
           "deploymentDigest": "deployments.0.digest",
-          "manifestVersion": "manifestVersion"
-        }
+          "manifestVersion": "manifestVersion",
+          "manifestDeployments": "deployments"
+        },
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034",
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ]
       },
       {
         "id": "wfm-mc-manifest-urls",
@@ -169,7 +183,15 @@
             "value": "{deploymentDigest}"
           }
         ],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-014",
+          "MARGO-WFM-MANAGEMENTINTERFACE-025",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036",
+          "MARGO-WFM-APPLICATIONDESCRIPTION-001",
+          "MARGO-WFM-APPLICATIONDESCRIPTION-002"
+        ]
       },
       {
         "id": "wfm-mc-deployment-wrong-digest",
@@ -198,11 +220,14 @@
       },
       {
         "id": "wfm-mc-bundle-fetch",
-        "name": "Download The Deployment Bundle (content-addressed)",
+        "name": "Download The Deployment Bundle — Digest, Cache Headers, And Exactly The Listed Deployment Files",
         "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-024",
           "MARGO-WFM-MANAGEMENTINTERFACE-025",
-          "MARGO-WFM-MANAGEMENTINTERFACE-027"
+          "MARGO-WFM-MANAGEMENTINTERFACE-027",
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036",
+          "MARGO-WFM-MANAGEMENTINTERFACE-038"
         ],
         "method": "GET",
         "endpoint": "/api/v1/bundles/{bundleDigest}",
@@ -239,6 +264,32 @@
             "field": "bundleDigest",
             "operation": "body_sha256_equals",
             "value": "{bundleDigest}"
+          },
+          {
+            "operation": "bundle_contains_exactly_deployments",
+            "value": "{manifestDeployments}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-not-modified",
+        "name": "Download The Bundle Again With If-None-Match — 304 With An Empty Body",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-030"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {
+          "If-None-Match": "\"{bundleDigest}\""
+        },
+        "expected_status": 304,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "equals",
+            "value": ""
           }
         ],
         "extract_context": {}
@@ -269,6 +320,118 @@
         "extract_context": {}
       },
       {
+        "id": "wfm-mc-status-pending",
+        "name": "Report Deployment Status: pending",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "pending"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "pending"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-installing",
+        "name": "Report Deployment Status: installing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "installing"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installing"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installing"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-failed",
+        "name": "Report Deployment Status: failed, with error details",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "failed",
+            "error": {
+              "code": "IMAGE_PULL_FAILED",
+              "source": "device",
+              "message": "Conformance test error"
+            }
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "failed",
+              "error": {
+                "code": "IMAGE_PULL_FAILED",
+                "source": "device",
+                "message": "Conformance test error"
+              }
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
         "id": "e9089cb2-d210-4434-b736-5cc1f61d2d07",
         "name": "Report Deployment Status: installed (no container actually run)",
         "method": "POST",
@@ -297,7 +460,95 @@
           201
         ],
         "validations": [],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-invalid-state",
+        "name": "Reject Deployment Status — State Outside The Allowed Set",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "not-a-state"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "not-a-state"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "not-a-state"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-missing-status",
+        "name": "Reject Deployment Status — Required Field status Is Missing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installed"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
       }
     ]
   }

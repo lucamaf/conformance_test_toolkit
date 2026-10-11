@@ -1271,17 +1271,28 @@ execute_device_tests() {
         cp "$test_scenarios" ./device-scenarios/test-scenarios.json
     fi
     
-    device_stop_stale_server
+    # A group that observes a real device needs the mock WFM the device is
+    # already connected to: it is used as it is, and left running afterwards.
+    local observes_real_device=false
+    if jq -e '[.[].steps[]? | select(has("observe"))] | length > 0' ./device-scenarios/test-scenarios.json >/dev/null 2>&1; then
+        observes_real_device=true
+        if [[ ! -f /tmp/wfm-server.pid ]] || ! kill -0 "$(cat /tmp/wfm-server.pid)" 2>/dev/null; then
+            error "This group judges a real device. Start the mock WFM first (ctt-start.sh → Device Supplier → 2), point the device at it, then run the group again."
+        fi
+        log "Using the running Mock WFM Server (PID: $(cat /tmp/wfm-server.pid)) — the device under test must be connected to it."
+    else
+        device_stop_stale_server
 
-    # Repair ownership on cert paths that sudo-based setup may have left as root
-    local current_user
-    current_user=$(id -un)
-    sudo chown -R "${current_user}:${current_user}" "./certs" 2>/dev/null || true
-    sudo chown -R "${current_user}:${current_user}" "${HOME}/.docker" 2>/dev/null || true
+        # Repair ownership on cert paths that sudo-based setup may have left as root
+        local current_user
+        current_user=$(id -un)
+        sudo chown -R "${current_user}:${current_user}" "./certs" 2>/dev/null || true
+        sudo chown -R "${current_user}:${current_user}" "${HOME}/.docker" 2>/dev/null || true
 
-    log "🚀 Starting Mock WFM Server (background)..."
-    device_launch_server "./certs"
-    success "Mock WFM Server started (PID: $(cat /tmp/wfm-server.pid))"
+        log "🚀 Starting Mock WFM Server (background)..."
+        device_launch_server "./certs"
+        success "Mock WFM Server started (PID: $(cat /tmp/wfm-server.pid))"
+    fi
 
     # Run tests against mock server
     log "▶️  Running Device Conformance Tests (as device agent)..."
@@ -1301,8 +1312,10 @@ execute_device_tests() {
     fi
     
     # Stop mock server
-    log "⛔ Stopping Mock WFM Server..."
-    if [[ -f /tmp/wfm-server.pid ]]; then
+    if [[ "$observes_real_device" == true ]]; then
+        log "Mock WFM Server left running for the device under test."
+    elif [[ -f /tmp/wfm-server.pid ]]; then
+        log "⛔ Stopping Mock WFM Server..."
         local pid=$(cat /tmp/wfm-server.pid)
         if kill -0 $pid 2>/dev/null; then
             kill -15 $pid
@@ -1310,11 +1323,6 @@ execute_device_tests() {
             success "Mock server stopped (PID: $pid)"
         fi
         rm -f /tmp/wfm-server.pid
-    fi
-    
-    # Check test result
-    if [[ $test_result -ne 0 ]]; then
-        error "Device test execution failed. Check $RUNNER_DEVICE/test-execution.log"
     fi
     
     # Find and copy generated report
@@ -1328,6 +1336,11 @@ execute_device_tests() {
     else
         success "Device Tests Completed"
         info "Reports location: $CONFORMANCE_DIR/device-supplier/reports/"
+    fi
+
+    # The report is written also when tests fail; the failure is reported last.
+    if [[ $test_result -ne 0 ]]; then
+        error "Some device tests failed. See the report above and $RUNNER_DEVICE/test-execution.log"
     fi
 }
 
@@ -1998,6 +2011,23 @@ device_generate_certs() {
         return 1
     fi
 
+    # A rotation: the client SVID is replaced by another one for the same SPIFFE
+    # ID. The replaced SVID is kept (while still valid and from the same MIS CA)
+    # so the SVID Rotation scenario can present it as the pre-rotation identity.
+    local rotation_note="not run until the client SVID is re-issued for this same SPIFFE ID and this step is run again"
+    if [[ -f "$cert_dir/svid-cert.pem" && -f "$cert_dir/svid-key.pem" ]] \
+       && ! cmp -s "$cert_dir/svid-cert.pem" "$stage/svid-cert.pem"; then
+        if [[ "$(device_spiffe_id "$cert_dir/svid-cert.pem")" == "$client_spiffe_id" ]] \
+           && openssl verify -CAfile "$stage/svid-ca.pem" "$cert_dir/svid-cert.pem" >/dev/null 2>&1 \
+           && openssl x509 -in "$cert_dir/svid-cert.pem" -noout -checkend 0 >/dev/null 2>&1; then
+            cp -f "$cert_dir/svid-cert.pem" "$cert_dir/svid-previous-cert.pem"
+            cp -f "$cert_dir/svid-key.pem"  "$cert_dir/svid-previous-key.pem"
+        else
+            rm -f "$cert_dir/svid-previous-cert.pem" "$cert_dir/svid-previous-key.pem"
+        fi
+    fi
+    [[ -f "$cert_dir/svid-previous-cert.pem" ]] && rotation_note="ready — the replaced client SVID was kept as the pre-rotation identity"
+
     for f in miaf-server-cert.pem miaf-server-key.pem svid-cert.pem svid-key.pem svid-ca.pem; do
         mv -f "$stage/$f" "$cert_dir/$f"
     done
@@ -2009,6 +2039,7 @@ device_generate_certs() {
     echo "  Certs       : $cert_dir"
     echo "  WFM SVID    : $wfm_spiffe_id"
     echo "  Client SVID : $client_spiffe_id"
+    echo "  SVID Rotation scenario: $rotation_note."
     echo ""
     echo "  ➜  A real device tested against this mock WFM must trust the same MIS CA"
     echo "     ($cert_dir/svid-ca.pem) and hold an SVID of the form"

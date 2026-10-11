@@ -7,11 +7,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -114,6 +116,16 @@ type TestStep struct {
 	// signing.go. Mutually exclusive with SkipSigning/SigningKey/VerifyTLS,
 	// which are all RFC-9421-flow concepts that don't apply under MIAF.
 	MTLS bool `json:"mtls,omitempty"`
+	// SvidSource selects the client identity an mtls step presents:
+	//   ""/"refreshed" the SVID installed by Setup Identity
+	//   "previous"     the SVID it replaced (SVID Rotation scenario)
+	//   "untrusted"    a certificate with our SPIFFE ID that the MIS did not issue
+	//   "none"         no client certificate at all
+	// "previous"/"refreshed" steps are reported as SKIP when no SVID was rotated.
+	SvidSource string `json:"svid_source,omitempty"`
+	// Observe: instead of sending a request, judge what a real device sent to
+	// the mock WFM (see observe.go).
+	Observe *ObserveSpec `json:"observe,omitempty"`
 	// Poll retries this step until all Until conditions are met or TimeoutSeconds
 	// elapses. Mirrors the wfm-supplier JS runner's poll field.
 	Poll *PollConfig `json:"poll,omitempty"`
@@ -283,7 +295,9 @@ func runScenarioSteps(scenario TestScenario, ctx *TestContext, stepFilter string
 		result := runStep(step, ctx)
 		result.ScenarioID = scenario.ID
 		result.ScenarioName = scenario.Name
-		result.CRIds = mergeCRIds(scenario.CRIds, step.CRIds)
+		// A step is evidence only for the requirements it lists itself; the
+		// scenario's list is a summary of its steps, not inherited by them.
+		result.CRIds = mergeCRIds(step.CRIds)
 
 		// Optional scenarios: convert "fail" to "skip" so the report distinguishes
 		// a precondition-missing scenario from a genuine conformance failure.
@@ -300,7 +314,10 @@ func runScenarioSteps(scenario TestScenario, ctx *TestContext, stepFilter string
 			}
 		}
 
-		if result.Status == "pass" {
+		if result.Status == "pass" && step.Observe != nil {
+			fmt.Printf("    ✅ PASS - %s\n", result.Reason)
+			pass++
+		} else if result.Status == "pass" {
 			fmt.Printf("    ✅ PASS - HTTP %d (Expected: %d)\n", result.StatusCode, step.ExpectedStatus)
 			pass++
 		} else if result.Status == "skip" {
@@ -389,6 +406,13 @@ func runFlexibleOrder(scenarios []TestScenario, scenarioFilter, stepFilter strin
 // runStep wraps executeStep with optional poll/retry logic (step.Poll).
 // When Poll is nil it behaves identically to a direct executeStep call.
 func runStep(step TestStep, ctx *TestContext) TestResult {
+	if step.Observe != nil {
+		return runObserve(step, ctx)
+	}
+	// A change of the desired state starts a new observation window.
+	if strings.Contains(step.Endpoint, "/api/v1/test/deployments") {
+		markJournal(ctx)
+	}
 	if step.Poll == nil {
 		return executeStep(step, ctx)
 	}
@@ -552,7 +576,12 @@ func executeStep(step TestStep, ctx *TestContext) TestResult {
 	// SVID and verifies the WFM's SVID against the trust bundle CA (MIAF).
 	client := tlsSkipClient()
 	if step.MTLS {
-		mc, mcErr := mtlsClient()
+		if reason := svidSourceBlocker(step.SvidSource); reason != "" {
+			result.Status = "skip"
+			result.Reason = reason
+			return result
+		}
+		mc, mcErr := mtlsClient(step.SvidSource)
 		if mcErr != nil {
 			result.Status = "fail"
 			result.Reason = fmt.Sprintf("could not build mTLS client: %v", mcErr)
@@ -571,8 +600,15 @@ func executeStep(step TestStep, ctx *TestContext) TestResult {
 	resp, err := client.Do(req)
 	if err != nil {
 		if step.ExpectTransportError {
+			// A server that cannot be reached proves nothing about what it refuses.
+			var opErr *net.OpError
+			if errors.As(err, &opErr) && opErr.Op == "dial" {
+				result.Status = "fail"
+				result.Reason = fmt.Sprintf("the server could not be reached, so the refusal could not be tested: %v", err)
+				return result
+			}
 			result.Status = "pass"
-			result.Reason = fmt.Sprintf("transport error as expected: %v", err)
+			result.Reason = fmt.Sprintf("connection refused as expected: %v", err)
 			return result
 		}
 		result.Status = "fail"
@@ -581,8 +617,16 @@ func executeStep(step TestStep, ctx *TestContext) TestResult {
 	}
 	defer resp.Body.Close()
 	if step.ExpectTransportError {
+		result.StatusCode = resp.StatusCode
+		for _, accepted := range step.AcceptedStatuses {
+			if resp.StatusCode == accepted {
+				result.Status = "pass"
+				result.Reason = fmt.Sprintf("refused with HTTP %d", resp.StatusCode)
+				return result
+			}
+		}
 		result.Status = "fail"
-		result.Reason = fmt.Sprintf("expected a transport error but request succeeded (HTTP %d)", resp.StatusCode)
+		result.Reason = fmt.Sprintf("expected the connection to be refused but the request was answered (HTTP %d)", resp.StatusCode)
 		return result
 	}
 
@@ -770,7 +814,7 @@ func waitForServer(timeout time.Duration) bool {
 	// authenticated or not. If an SVID is present, fall back to presenting it
 	// so readiness-probing a MIAF target doesn't spuriously time out.
 	var mtls *http.Client
-	if mc, mcErr := mtlsClient(); mcErr == nil {
+	if mc, mcErr := mtlsClient(""); mcErr == nil {
 		mtls = mc
 	}
 

@@ -9,6 +9,7 @@
   "testCases": [
     "wfm-otel-cap-1",
     "wfm-otel-cap-2",
+    "wfm-otel-cap-3",
     "wfm-otel-observability"
   ]
 }

@@ -70,9 +70,10 @@ conformance_test_toolkit/
 ```
 
 The full set of each persona is the `core` group:
-`test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 37
+`test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 45
 steps) and `test-suites/device-supplier/core/test-cases/device-supplier.json`
-(24 scenarios, 112 steps).
+(25 scenarios, 120 steps). A real device is judged by the device group
+`real-device`, which checks the requests the device sent to the mock WFM.
 
 ---
 
@@ -133,6 +134,7 @@ carries the group name and version.
 | `device-unregister` | WFM | `DELETE` capabilities, kept out of `core` |
 | `postman-lifecycle`, `postman-error-handling` | WFM | Tests written in Postman |
 | `manifest-integrity`, `random-order` | Device | Manifests a device must reject; scenarios in random order |
+| `real-device` | Device | Judges a real device from the requests it sent to the mock WFM |
 | `core` | both | The full set — run this for a conformance result |
 
 Why groups exist and how they are created is described in

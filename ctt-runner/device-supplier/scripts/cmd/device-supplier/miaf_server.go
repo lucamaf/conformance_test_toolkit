@@ -471,7 +471,16 @@ func handleMIAFPostStatus(w http.ResponseWriter, r *http.Request) {
 // desired-state timeline against a real device-agent under mTLS, exactly the
 // way the legacy test-control endpoint does for RFC 9421 clients.
 func handleMIAFTestSetDeployments(w http.ResponseWriter, r *http.Request) {
+	// The desired state is set for the caller, or — when testing a real device —
+	// for the client named in ?client=<SPIFFE ID> (it must be a client of this WFM).
 	spiffeID := callerSPIFFEID(r)
+	if target := r.URL.Query().Get("client"); target != "" {
+		if err := recognizeWFMClient(target); err != nil {
+			respondMalformedBody(w, r, "client: "+err.Error())
+			return
+		}
+		spiffeID = target
+	}
 
 	var body struct {
 		DeploymentIDs        []string        `json:"deploymentIds"`
@@ -565,6 +574,7 @@ func startMIAFServer(router *mux.Router) {
 	router.HandleFunc("/v1alpha2/margo/api/v1/deployments/{deploymentId}/{digest}", requireSVID(handleMIAFGetDeploymentManifest)).Methods("GET")
 	router.HandleFunc("/v1alpha2/margo/api/v1/deployments/{deploymentId}/status", requireSVID(handleMIAFPostStatus)).Methods("POST")
 	router.HandleFunc("/v1alpha2/margo/api/v1/test/deployments", requireSVID(handleMIAFTestSetDeployments)).Methods("PUT")
+	router.HandleFunc("/v1alpha2/margo/api/v1/test/requests", requireSVID(handleTestRequests)).Methods("GET")
 
 	certFile := os.Getenv("MIAF_SERVER_CERT")
 	keyFile := os.Getenv("MIAF_SERVER_KEY")

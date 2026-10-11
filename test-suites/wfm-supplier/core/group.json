@@ -6,7 +6,6 @@
   "FolderPath": [
     "../test-suites/wfm-supplier/core/test-cases"
   ],
-  "flexibleOrder": false,
   "testCases": [
     "ar-002-application-description-present",
     "ar-003-tags-listing",
@@ -30,6 +29,7 @@
     "wfm-core-cap-2",
     "wfm-core-cap-3",
     "wfm-core-cap-4",
+    "wfm-core-cap-5",
     "wfm-core-capabilities",
     "wfm-core-cn-1",
     "wfm-core-content-negotiation",
@@ -48,12 +48,19 @@
     "wfm-identity-tb-3",
     "wfm-identity-trust-bundle",
     "wfm-mc-bundle-fetch",
+    "wfm-mc-bundle-not-modified",
     "wfm-mc-bundle-wrong-digest",
     "wfm-mc-deployment-wrong-digest",
     "wfm-mc-manifest-urls",
+    "wfm-mc-status-failed",
+    "wfm-mc-status-installing",
+    "wfm-mc-status-invalid-state",
+    "wfm-mc-status-missing-status",
+    "wfm-mc-status-pending",
     "wfm-multi-component-deployment",
     "wfm-otel-cap-1",
     "wfm-otel-cap-2",
+    "wfm-otel-cap-3",
     "wfm-otel-observability"
   ]
 }

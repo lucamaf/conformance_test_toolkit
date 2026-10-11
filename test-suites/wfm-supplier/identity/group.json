@@ -2,7 +2,7 @@
   "name": "identity",
   "version": "1.0.0-rc.3",
   "persona": "wfm-supplier",
-  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, trust bundle, clients the WFM must refuse, SVID rotation.",
+  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, clients the WFM must refuse (no certificate, a certificate the MIS did not issue), SVID rotation.",
   "FolderPath": [
     "../test-suites/wfm-supplier/identity/test-cases"
   ],

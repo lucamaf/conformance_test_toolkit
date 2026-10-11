@@ -551,7 +551,7 @@ Ordered array of step objects (see below)
 No
 </td>
 <td>
-Margo requirement IDs this scenario covers, shown in the report. A step can list its own.
+Summary of the requirement IDs its steps list. In the report a step is shown as evidence only for the IDs the step lists itself.
 </td>
 </tr>
 <tr>
@@ -766,7 +766,7 @@ No
 array
 </td>
 <td>
-Margo requirement IDs this step covers, shown next to the step in the report
+Margo requirement IDs this step is evidence for, shown next to the step in the report. List an ID only on a step that checks it
 </td>
 </tr>
 <tr>
@@ -851,6 +851,34 @@ bool
 </td>
 <td>
 PASS when the connection is refused during the TLS handshake, for example when the other side presents an identity that must not be accepted
+</td>
+</tr>
+<tr>
+<td>
+`svid\_source`
+</td>
+<td>
+No
+</td>
+<td>
+string
+</td>
+<td>
+Which identity an `mtls` step presents. `"untrusted"`: a certificate with the right SPIFFE ID that the MIS did not issue — use with `expect\_transport\_error`. `"previous"` and `"refreshed"`: the SVID before and after a rotation; reported as NOT RUN / SKIP when no SVID was rotated. Device test-cases also have `"none"` (no client certificate)
+</td>
+</tr>
+<tr>
+<td>
+`observe`
+</td>
+<td>
+No
+</td>
+<td>
+object
+</td>
+<td>
+Device test-cases. The step sends nothing: it judges a request a real device sent to the mock WFM (see [Judging a real device: observe steps])
 </td>
 </tr>
 <tr>
@@ -1074,7 +1102,7 @@ Field value is an array with exactly `value` entries
 
 - An operation that the Conformance Framework does not know fails the step, with the name of the operation in the report.
 
-- WFM test-cases have these additional operations: `etag\_is\_body\_digest` (the `ETag` header is the sha256 digest of the exact response body), `body\_sha256\_equals` (the exact response body has the digest given in `value`) and `manifest\_urls\_are\_content\_addressed` (the URLs in the manifest have the form defined by the specification).
+- WFM test-cases have these additional operations: `etag\_is\_body\_digest` (the `ETag` header is the sha256 digest of the exact response body), `body\_sha256\_equals` (the exact response body has the digest given in `value`), `manifest\_urls\_are\_content\_addressed` (the URLs in the manifest have the form defined by the specification), `bundle\_null\_iff\_no\_deployments` (`bundle` is `null` exactly when `deployments` is empty) and `bundle\_contains\_exactly\_deployments` (the bundle archive holds exactly the files of the `deployments` array given in `value`, compared by digest).
 
 #### Context or State Variables
 
@@ -1586,6 +1614,108 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 - The SVID, its private key and the MIS CA certificate are given to the Conformance Framework once, in `ctt-runner` (Device Supplier → Setup Identity, WFM Supplier → Setup MIAF Identity). The steps are in `docs/device-supplier-setup-guide.md` and `docs/wfm-supplier-setup-guide.md`.
 
 - On every `mtls` step the Conformance Framework checks the certificate of the other side against the MIS CA and checks its SPIFFE ID: the WFM is `spiffe://<trust-domain>/margo/wfm/<wfm-id>` and its client is `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`.
+
+### Judging a real device: observe steps
+
+- A real device only calls out; the Conformance Framework cannot send it a request. For a real device the mock WFM records every request it receives, and an `observe` step checks what the device sent — or, for a manifest the device must reject, what it did not send.
+
+- The group `test-suites/device-supplier/real-device` is written this way. A normal step that changes the desired state on the mock WFM (`PUT /api/v1/test/deployments?client={deviceClient}`) starts a new observation window.
+
+```json
+{
+  "id": "rd-2-desired-state-status",
+  "name": "The device reports the deployment status with the manifest version it adopted",
+  "crIds": ["MARGO-DEV-MANAGEMENTINTERFACE-007"],
+  "observe":
+  {
+    "method": "POST",
+    "path_regex": "^/api/v1/deployments/[^/]+/status$",
+    "status": [200, 201],
+    "within_seconds": 300,
+    "check":
+    [
+      { "field": "body.adoptedManifestVersion", "operation": "is_number" }
+    ]
+  }
+}
+```
+
+<table>
+<tr>
+<th>
+**Field**
+</th>
+<th>
+**Description**
+</th>
+</tr>
+<tr>
+<td>
+`method`, `path\_regex`
+</td>
+<td>
+Which request of the device is meant. The path is the part after the base URL
+</td>
+</tr>
+<tr>
+<td>
+`where`
+</td>
+<td>
+Validations a request must meet to be the one that is meant. Fields: `status`, `client`, `headers.Accept`, `headers.If-None-Match`, `body.\*` (request body), `response.\*` (the answer of the mock WFM)
+</td>
+</tr>
+<tr>
+<td>
+`expect`
+</td>
+<td>
+`"present"` (default): the request must be seen. `"absent"`: the request must not be seen
+</td>
+</tr>
+<tr>
+<td>
+`status`
+</td>
+<td>
+`present`: the answers of the mock WFM that pass. Default: any 2xx or 304
+</td>
+</tr>
+<tr>
+<td>
+`check`
+</td>
+<td>
+`present`: validations on the request that was seen. A failed one fails the step
+</td>
+</tr>
+<tr>
+<td>
+`within\_seconds`
+</td>
+<td>
+How long to wait for the device. Default 180
+</td>
+</tr>
+<tr>
+<td>
+`after\_polls`, `settle\_seconds`
+</td>
+<td>
+`absent`: the device must first have read the desired state this many times, plus the settle time, before its silence is judged
+</td>
+</tr>
+<tr>
+<td>
+`only\_if`, `only\_if\_reason`
+</td>
+<td>
+`absent`: a request (`method`, `path\_regex`, `where`) the device must have sent for the check to apply. Otherwise the step is reported as SKIP "not applicable" with the reason
+</td>
+</tr>
+</table>
+
+- `extract\_context` on an observe step saves values of the request that was seen. `{deviceClient}` is set to the SPIFFE ID of the first device that sent a request.
 
 ## APPENDIX
 

@@ -2,13 +2,14 @@
   "name": "management-interface",
   "version": "1.0.0-rc.3",
   "persona": "device-supplier",
-  "description": "The Management Interface API as a device uses it: capabilities, desired-state manifest, deployment and bundle retrieval, status reporting, and the errors for each.",
+  "description": "The Management Interface API as a device uses it: capabilities, desired-state manifest, deployment and bundle retrieval, status reporting, unregistering, and the errors for each.",
   "FolderPath": [
     "../test-suites/device-supplier/management-interface/test-cases"
   ],
   "testCases": [
     "device-core-capability-roles",
     "device-core-manifest-semantics",
+    "device-unregister",
     "scenario-capabilities",
     "scenario-capabilities-errors",
     "scenario-deployments",
@@ -22,6 +23,8 @@
     "step-3.5",
     "step-3.6",
     "step-3.7",
+    "step-3.8",
+    "step-3.9",
     "step-5.1",
     "step-5.2",
     "step-5.3",
@@ -41,6 +44,10 @@
     "step-core-2-cleanup",
     "step-core-2.1",
     "step-core-2.2",
-    "step-core-2.3"
+    "step-core-2.3",
+    "step-unreg-1",
+    "step-unreg-2",
+    "step-unreg-3",
+    "step-unreg-4"
   ]
 }

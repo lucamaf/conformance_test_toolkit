@@ -1,0 +1,973 @@
+[
+  {
+    "id": "rd-1-capabilities",
+    "name": "Real device \u2014 identity and capabilities",
+    "description": "The device under test connects to the mock WFM over mTLS with its own X.509-SVID and reports its capabilities. Nothing is sent to the device: each step checks a request the device sent.",
+    "steps": [
+      {
+        "id": "rd-1-capabilities-reported",
+        "name": "The device reports its capabilities over mTLS and the report is accepted",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+          "MARGO-DEV-DEPLOYMENT-003"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 180,
+          "check": [
+            {
+              "field": "client",
+              "operation": "not_empty"
+            },
+            {
+              "field": "body.properties.id",
+              "operation": "not_empty"
+            },
+            {
+              "field": "body.properties.vendor",
+              "operation": "not_empty"
+            },
+            {
+              "field": "body.properties.modelNumber",
+              "operation": "not_empty"
+            },
+            {
+              "field": "body.properties.serialNumber",
+              "operation": "not_empty"
+            }
+          ]
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-1-capabilities-runtime",
+        "name": "The capabilities declare a container runtime and a deployment type",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 30,
+          "check": [
+            {
+              "field": "body.properties.supportedRuntimes",
+              "operation": "array_length_gte",
+              "value": 1
+            },
+            {
+              "field": "body.properties.supportedDeploymentTypes",
+              "operation": "array_length_gte",
+              "value": 1
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-1-capabilities-otel",
+        "name": "The capabilities declare an OpenTelemetry collector",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 30,
+          "check": [
+            {
+              "field": "body.properties.otelCollector",
+              "operation": "equals",
+              "value": true
+            }
+          ]
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-003",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001"
+    ]
+  },
+  {
+    "id": "rd-2-desired-state",
+    "name": "Real device \u2014 desired state, fetch and status",
+    "description": "The device reads its desired-state manifest, fetches the bundle or the deployment it lists by digest, and reports the status of the deployment with the manifest version it adopted.",
+    "steps": [
+      {
+        "id": "rd-2-desired-state-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-2-desired-state-read",
+        "name": "The device reads the desired-state manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 180
+        }
+      },
+      {
+        "id": "rd-2-desired-state-fetch",
+        "name": "The device fetches the bundle or a deployment by its digest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/(bundles|deployments/[^/]+)/sha256:[0-9a-f]+$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 240
+        }
+      },
+      {
+        "id": "rd-2-desired-state-status",
+        "name": "The device reports the deployment status with the manifest version it adopted",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/[^/]+/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "check": [
+            {
+              "field": "body.adoptedManifestVersion",
+              "operation": "is_number"
+            },
+            {
+              "field": "body.status.state",
+              "operation": "not_empty"
+            }
+          ]
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
+    ]
+  },
+  {
+    "id": "rd-3-new-deployment",
+    "name": "Real device \u2014 a deployment is added",
+    "description": "The mock WFM adds a deployment to the desired state. The device reads the new manifest and reports status for the new deployment.",
+    "steps": [
+      {
+        "id": "rd-3-new-deployment-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-3-new-deployment-assign",
+        "name": "Mock WFM: add deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01 to the desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-3-new-deployment-read",
+        "name": "The device reads the new manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200
+          ],
+          "within_seconds": 240,
+          "where": [
+            {
+              "field": "response.manifestVersion",
+              "operation": "equals",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-3-new-deployment-status",
+        "name": "The device reports status for the added deployment",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "check": [
+            {
+              "field": "body.adoptedManifestVersion",
+              "operation": "gte",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-3-new-deployment-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
+    ]
+  },
+  {
+    "id": "rd-4-manifest-version",
+    "name": "Real device \u2014 a manifest version that does not increase is rejected",
+    "description": "The mock WFM serves a changed manifest whose manifestVersion is 1, lower than or equal to the version the device has adopted. The device must reject it.",
+    "steps": [
+      {
+        "id": "rd-4-manifest-version-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-4-manifest-version-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02"
+          ],
+          "negativeFixture": "non_increasing_manifest_version"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-4-manifest-version-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-010"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20
+        }
+      },
+      {
+        "id": "rd-4-manifest-version-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-010",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5
+        }
+      },
+      {
+        "id": "rd-4-manifest-version-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-010",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015"
+    ]
+  },
+  {
+    "id": "rd-5-digest-algorithm",
+    "name": "Real device \u2014 an unsupported digest algorithm is rejected",
+    "description": "The mock WFM serves a manifest whose digests use sha512. The device must treat the manifest as invalid and stop processing it.",
+    "steps": [
+      {
+        "id": "rd-5-digest-algorithm-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-5-digest-algorithm-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03"
+          ],
+          "negativeFixture": "unsupported_digest_algorithm"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-5-digest-algorithm-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-008"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20
+        }
+      },
+      {
+        "id": "rd-5-digest-algorithm-no-fetch",
+        "name": "The device does not fetch anything by a digest of the unsupported algorithm",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-008"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/(bundles|deployments/[^/]+)/sha512:",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 10
+        }
+      },
+      {
+        "id": "rd-5-digest-algorithm-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-008",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5
+        }
+      },
+      {
+        "id": "rd-5-digest-algorithm-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-008",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015"
+    ]
+  },
+  {
+    "id": "rd-6-bundle-digest",
+    "name": "Real device \u2014 a bundle that does not match its digest is rejected",
+    "description": "The mock WFM serves a manifest whose bundle digest does not match the bundle archive. A device that fetches the bundle must abort the update and keep its previous state.",
+    "steps": [
+      {
+        "id": "rd-6-bundle-digest-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-6-bundle-digest-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04"
+          ],
+          "negativeFixture": "bundle_digest_mismatch"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-6-bundle-digest-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
+          "MARGO-DEV-MANAGEMENTINTERFACE-009"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/bundles/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download the bundle archive, so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-6-bundle-digest-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-009",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/bundles/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download the bundle archive, so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-6-bundle-digest-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015"
+    ]
+  },
+  {
+    "id": "rd-7-deployment-digest",
+    "name": "Real device \u2014 a deployment that does not match its digest is rejected",
+    "description": "The mock WFM serves a manifest in which the digest of the new deployment does not match its YAML file. A device that fetches that file must abort the update.",
+    "steps": [
+      {
+        "id": "rd-7-deployment-digest-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-7-deployment-digest-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05",
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ],
+          "negativeFixture": "deployment_digest_mismatch"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-7-deployment-digest-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download this deployment file, so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-7-deployment-digest-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-009",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download this deployment file, so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-7-deployment-digest-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
+    ]
+  },
+  {
+    "id": "rd-8-size-bytes",
+    "name": "Real device \u2014 sizeBytes is not used for integrity",
+    "description": "The mock WFM serves a manifest with a wrong sizeBytes and correct digests. The device must still accept it.",
+    "steps": [
+      {
+        "id": "rd-8-size-bytes-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client"
+        }
+      },
+      {
+        "id": "rd-8-size-bytes-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06 in a manifest with a wrong sizeBytes",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06"
+          ],
+          "negativeFixture": "wrong_size_bytes"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-8-size-bytes-accepted",
+        "name": "The device accepts the manifest and reports status for its new deployment",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-025",
+          "MARGO-DEV-MANAGEMENTINTERFACE-026"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300
+        }
+      },
+      {
+        "id": "rd-8-size-bytes-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ],
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-025",
+      "MARGO-DEV-MANAGEMENTINTERFACE-026"
+    ]
+  }
+]

@@ -560,7 +560,7 @@ status‑report test case needs to check this field now, including on removal.
 | B | **Trust‑bundle fetch from the MIS** (WFM‑supplier persona) — `GET /.well-known/margo` then `GET <trustBundleUri>` | **Available as a command** (`run_wfm_scenarios.js --fetch-trust-bundle`). The normal setup takes the MIS CA from the identity folder. |
 | C | **A 2‑endpoint discovery stub** in the mock WFM (device‑supplier persona) | **Not built.** A device under test gets the Trust Bundle from the MIS itself. |
 | D | **Our own SVID** (cert + key) to present in every mTLS handshake, on both personas | **Done.** Issued by the MIS, installed by the identity setup step of the runner. |
-| E | **Negative SVID/TLS cases** | **Partly.** Covered: no client certificate, a WFM certificate from a CA that is not trusted. Not yet: expired SVID, wrong trust domain, `cA=true` leaf, two URI SANs. |
+| E | **Negative SVID/TLS cases** | **Partly.** Covered in both personas: no client certificate, a client certificate the MIS did not issue. Not yet: expired SVID, a client of another WFM, wrong trust domain, `cA=true` leaf, two URI SANs. |
 | F | **`application/problem+json` assertions** | **Done** with the ordinary validations (`Content-Type` contains `application/problem+json`, `type` present) — no dedicated operators. |
 | G | **Accepted‑client‑policy test** — a valid SVID that is *not* accepted → `403` `not-authorized`; and `wfm-client-relationship-retired` | **Not yet a scenario.** The mock WFM does answer `403` `not-authorized` to a client whose SPIFFE ID is not one of its own clients. |
 | H | **Live allow‑list revocation test** (device‑supplier persona) | **Not built.** |
@@ -591,7 +591,7 @@ status‑report test case needs to check this field now, including on removal.
   the rules are in `MARGO_Conformance _Approach.md`).
 - **Device persona:** one scenario file,
   `test-suites/device-supplier/core/test-cases/device-supplier.json`
-  (24 scenarios): capabilities and deployments with their error cases, the
+  (25 scenarios): capabilities and deployments with their error cases, the
   manifest cases a device must reject (unsupported digest algorithm, bundle or
   deployment digest mismatch, non‑increasing `manifestVersion`) and one it
   must accept (wrong `sizeBytes`, valid digest), identity (mTLS, certificate
@@ -616,7 +616,9 @@ status‑report test case needs to check this field now, including on removal.
   only the health check and telemetry status. `negative_fixtures.go` and
   `manifest_rules.go` (digest logic) were kept.
 - `run_tests.go` (the suite's own device client): presents a client SVID and
-  validates the mock WFM's SVID; no signing.
+  validates the mock WFM's SVID; no signing. It also has *observe* steps
+  (`observe.go`) that judge a real device from the mock WFM's request
+  journal (`journal.go`) — the device group `real-device`.
 
 ---
 

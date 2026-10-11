@@ -1841,6 +1841,8 @@ func main() {
 			log.Printf("[Router] %s %s from %s → %d", r.Method, r.RequestURI, r.RemoteAddr, rec.status)
 		})
 	})
+	// Record every Management Interface request for the real-device report.
+	router.Use(journaled)
 
 	// Health check
 	router.HandleFunc("/health", handleHealth).Methods("GET")

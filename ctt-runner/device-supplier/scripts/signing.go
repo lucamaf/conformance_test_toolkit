@@ -2,12 +2,17 @@ package main
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -84,11 +89,62 @@ func caVerifyingClient() (*http.Client, error) {
 // signing entirely for steps that opt in via "mtls": true. See
 // CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.3/7.1. Loaded fresh per call
 // like caVerifyingClient, for the same reason: cheap, and never on a hot path.
-func mtlsClient() (*http.Client, error) {
+// svidSourceBlocker says why a step that needs a rotated SVID cannot be run,
+// or "" when it can. Rotation is real only when Setup Identity replaced one
+// SVID with another for the same SPIFFE ID and kept the one it replaced.
+func svidSourceBlocker(source string) string {
+	if source != "previous" && source != "refreshed" {
+		return ""
+	}
+	prev, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-previous-cert.pem"), filepath.Join(certDir, "svid-previous-key.pem"))
+	if err != nil {
+		return "no SVID rotation to test — re-issue the client SVID for the same SPIFFE ID and run Setup Identity again (it keeps the SVID it replaces)"
+	}
+	cur, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-cert.pem"), filepath.Join(certDir, "svid-key.pem"))
+	if err != nil {
+		return fmt.Sprintf("current SVID could not be loaded: %v", err)
+	}
+	prevLeaf, err1 := x509.ParseCertificate(prev.Certificate[0])
+	curLeaf, err2 := x509.ParseCertificate(cur.Certificate[0])
+	if err1 != nil || err2 != nil || len(prevLeaf.URIs) != 1 || len(curLeaf.URIs) != 1 || prevLeaf.URIs[0].String() != curLeaf.URIs[0].String() {
+		return "the kept pre-rotation SVID belongs to a different SPIFFE ID than the current SVID"
+	}
+	if source == "previous" && time.Now().After(prevLeaf.NotAfter) {
+		return "the pre-rotation SVID has expired"
+	}
+	return ""
+}
+
+// untrustedSVID makes a certificate that carries our own SPIFFE ID but is
+// self-signed — the MIS did not issue it, so a WFM must refuse it.
+func untrustedSVID(own *x509.Certificate) (tls.Certificate, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: "ctt-untrusted-client"},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		URIs:                  own.URIs,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
+}
+
+func mtlsClient(source string) (*http.Client, error) {
 	certPath := filepath.Join(certDir, "svid-cert.pem")
 	keyPath := filepath.Join(certDir, "svid-key.pem")
 	caPath := filepath.Join(certDir, "svid-ca.pem")
 
+	// The installed SVID always decides which WFM we expect to be talking to.
 	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("load SVID from %s/%s: %w", certPath, keyPath, err)
@@ -96,6 +152,23 @@ func mtlsClient() (*http.Client, error) {
 	ownLeaf, err := x509.ParseCertificate(cert.Certificate[0])
 	if err != nil {
 		return nil, fmt.Errorf("parse SVID %s: %w", certPath, err)
+	}
+	presented := []tls.Certificate{cert}
+	switch source {
+	case "previous":
+		prev, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-previous-cert.pem"), filepath.Join(certDir, "svid-previous-key.pem"))
+		if err != nil {
+			return nil, fmt.Errorf("load pre-rotation SVID: %w", err)
+		}
+		presented = []tls.Certificate{prev}
+	case "untrusted":
+		bad, err := untrustedSVID(ownLeaf)
+		if err != nil {
+			return nil, fmt.Errorf("make untrusted certificate: %w", err)
+		}
+		presented = []tls.Certificate{bad}
+	case "none":
+		presented = nil
 	}
 	caPEM, err := os.ReadFile(caPath)
 	if err != nil {
@@ -114,7 +187,15 @@ func mtlsClient() (*http.Client, error) {
 	return &http.Client{
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			Certificates:       []tls.Certificate{cert},
+			// Always present the chosen certificate, also when the server's list of
+			// acceptable CAs does not include its issuer — that is the case under test
+			// for "untrusted". With "none" nothing is presented.
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				if len(presented) == 0 {
+					return &tls.Certificate{}, nil
+				}
+				return &presented[0], nil
+			},
 			InsecureSkipVerify: true, //nolint:gosec // chain is verified manually below; only hostname checking is skipped
 			MinVersion:         tls.VersionTLS12,
 			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {

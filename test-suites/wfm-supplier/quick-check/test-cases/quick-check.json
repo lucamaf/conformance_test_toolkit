@@ -5,12 +5,14 @@
     "crIds": [
       "MARGO-WFM-MANAGEMENTINTERFACE-023"
     ],
-    "description": "MIAF replacement for wfm-core/postman_collection.json's capabilities items (see CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md §7.2 — Postman can't present an mTLS client SVID, so this consolidated file is the all-declarative equivalent for the WFM-supplier persona going forward). No onboarding call (none exists under MIAF); capabilities is PUT-only (no more POST-then-PUT); no apiVersion/kind envelope.",
+    "description": "Device capabilities: the first report creates the device, a second report updates it, and reports with a value outside the allowed set or without a required field are rejected with problem details.",
     "steps": [
       {
         "id": "wfm-core-cap-1",
         "name": "Report Device Capabilities (create)",
-        "crIds": [],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-core-device",
         "mtls": true,
@@ -55,7 +57,9 @@
       {
         "id": "wfm-core-cap-2",
         "name": "Update Device Capabilities (same deviceId, second call)",
-        "crIds": [],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-core-device",
         "mtls": true,
@@ -108,20 +112,14 @@
     "crIds": [
       "MARGO-WFM-MANAGEMENTINTERFACE-004",
       "MARGO-WFM-MANAGEMENTINTERFACE-006",
-      "MARGO-WFM-MANAGEMENTINTERFACE-007",
-      "MARGO-WFM-MANAGEMENTINTERFACE-008",
       "MARGO-WFM-MANAGEMENTINTERFACE-009",
-      "MARGO-WFM-MANAGEMENTINTERFACE-014",
-      "MARGO-WFM-MANAGEMENTINTERFACE-015",
-      "MARGO-WFM-MANAGEMENTINTERFACE-025",
       "MARGO-WFM-MANAGEMENTINTERFACE-027",
       "MARGO-WFM-MANAGEMENTINTERFACE-030",
-      "MARGO-WFM-MANAGEMENTINTERFACE-031",
+      "MARGO-WFM-MANAGEMENTINTERFACE-033",
       "MARGO-WFM-MANAGEMENTINTERFACE-034",
-      "MARGO-WFM-MANAGEMENTINTERFACE-035",
-      "MARGO-WFM-MANAGEMENTINTERFACE-038"
+      "MARGO-WFM-MANAGEMENTINTERFACE-035"
     ],
-    "description": "Covers GET /deployments (both with and without an explicit Accept header — MI-007 default-negotiation requirement) and, when a deployment happens to be assigned, the digest-addressed bundle/deployment-YAML fetches. Bundle/deployment fetches are conditional on deployments being non-empty (PRECONDITION, see wfm-multi-component group for the operator-assignment flow) so this group only asserts what's true unconditionally.",
+    "description": "The desired-state manifest: served with and without an Accept header, with a quoted sha256 ETag and without `immutable` caching; `bundle` is null exactly when there are no deployments; a conditional request with the current ETag is answered 304.",
     "steps": [
       {
         "id": "wfm-core-ds-1",
@@ -129,9 +127,11 @@
         "crIds": [
           "MARGO-WFM-MANAGEMENTINTERFACE-004",
           "MARGO-WFM-MANAGEMENTINTERFACE-006",
-          "MARGO-WFM-MANAGEMENTINTERFACE-007",
+          "MARGO-WFM-MANAGEMENTINTERFACE-009",
           "MARGO-WFM-MANAGEMENTINTERFACE-027",
-          "MARGO-WFM-MANAGEMENTINTERFACE-034"
+          "MARGO-WFM-MANAGEMENTINTERFACE-033",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034",
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -153,7 +153,15 @@
           {
             "field": "_headers.etag",
             "operation": "matches_regex",
-            "value": "^\"?sha256:[0-9a-f]{64}\"?$"
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          },
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          },
+          {
+            "operation": "bundle_null_iff_no_deployments"
           }
         ],
         "extract_context": {

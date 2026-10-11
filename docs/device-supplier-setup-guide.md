@@ -9,13 +9,13 @@ The Device Supplier persona is self-contained: **no external WFM is needed**.
 The CTT provides a spec-compliant mock WFM server locally and a simulated
 device-agent that exercises every required protocol flow against it.
 
-> **What the report covers.** The tests in Phase 3 run the CTT's *own*
-> simulated device against the CTT's mock WFM. They prove the mock WFM is set
-> up and working — the report says nothing about your device.
+> **What the report covers.** The groups in Phase 3 (`core` and the others) run
+> the CTT's *own* simulated device against the CTT's mock WFM. They prove the
+> mock WFM is set up and working — their report says nothing about your device.
 > To test a real device, do Phases 1 and 2, then follow
-> [Testing a real device-agent](#testing-a-real-device-agent). There is no
-> automatic report for a real device yet: you read the mock WFM's log, and that
-> section tells you what to look for.
+> [Testing a real device-agent](#testing-a-real-device-agent). Its last step
+> runs the `real-device` group, which judges the requests your device sent and
+> writes the report for the device.
 
 ---
 
@@ -325,7 +325,8 @@ a time and the report states which set was run:
 | `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation | While working on MIAF |
 | `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (SKIP otherwise) |
 | `random-order` | The lifecycle scenarios in a different random order on every run | To show that no scenario depends on another |
-| `core` | Every scenario of the suite | For the conformance result |
+| `core` | Every scenario of the suite | To check the mock WFM and the CTT's own device client |
+| `real-device` | What a real device sent to the mock WFM | For the result of a real device — see [Testing a real device-agent](#testing-a-real-device-agent) |
 
 ### URLs to enter
 
@@ -361,8 +362,8 @@ coverage summary, per-scenario table, and a full step-detail table.
 ## Testing a real device-agent
 
 The mock WFM from Phase 2 is the target. The device gets its identity from the
-same MIS, connects to the mock WFM, and you read the mock WFM's log to see what
-it sent and how each request was answered.
+same MIS and connects to the mock WFM. You can watch the mock WFM's log to see
+what it sends (Step 3), and the `real-device` group writes the report (Step 4).
 
 ### Step 1 — Issue the device an SVID
 
@@ -443,6 +444,54 @@ export CTT_SAMPLE_REPOSITORY=oci://<registry>/<path>   # e.g. a compose package 
 export CTT_SAMPLE_REVISION=<version>                    # e.g. 1.0.0
 bash ctt-runner/ctt-start.sh    # → 2) Device Supplier → 2) Start Mock WFM Server
 ```
+
+### Step 4 — Get the report for the device
+
+With the mock WFM running and the device connected to it:
+
+```bash
+cd ~/workspace/conformance_test_toolkit
+bash ctt-runner/ctt-start.sh
+```
+
+Select **2) Device Supplier → 3. Run Tests** and choose the group `real-device`.
+Press Enter for the two URLs. (Without the menu:
+`bash ctt-runner/ctt-start.sh device real-device`.)
+
+In this group the CTT sends nothing to the device. Each step reads what the
+mock WFM received from your device and judges it. Between steps the CTT changes
+the desired state on the mock WFM, also to manifests a device must reject, and
+waits for the device to read it — so the run takes several minutes; lines
+starting with `⏳ waiting for the device` are normal.
+
+| Scenario | What the device must do |
+|---|---|
+| Identity and capabilities | connect over mTLS with its SVID and report valid capabilities |
+| Desired state, fetch and status | read the manifest, fetch the bundle or the deployment by digest, report status with `adoptedManifestVersion` |
+| A deployment is added | read the new manifest and report status for the new deployment |
+| Manifest version does not increase | not act on it, and keep its previous state |
+| Unsupported digest algorithm (`sha512`) | not act on it, not fetch anything it names, and keep its previous state |
+| Bundle / deployment does not match its digest | not act on it — judged only if the device downloaded the mismatching content, otherwise reported as SKIP "not applicable" |
+| Wrong `sizeBytes`, correct digests | accept the manifest and report status for its new deployment |
+
+How to read the result:
+
+- **PASS** on a "must not" step means the device did not send the forbidden
+  request after it had read the manifest two or three times.
+- **FAIL** shows the request that was wrong, for example
+  `the device sent a request it must not send here: GET /api/v1/bundles/sha512:...`.
+- **"it does not send the ETag of the rejected manifest back"** fails when the
+  device answers the next poll with `If-None-Match` of a manifest it had to
+  reject: it has stored that manifest as its state.
+- The deployments added during the run point at the same placeholder package as
+  the first one, so a device reports them as `failed` unless
+  `CTT_SAMPLE_REPOSITORY` is set. Any status report counts as "acted on it".
+
+The mock WFM keeps everything it received since it was started. For a clean
+run with another device, stop and start the mock WFM first (options 4 and 2).
+
+The report is written to `ctt-runner/reports/device-supplier/`, like every
+other device report, with the requirement IDs next to each step.
 
 ---
 
