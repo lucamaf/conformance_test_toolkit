@@ -204,310 +204,148 @@ function isPostmanCollection(data) {
   return false;
 }
 
-// Rename :paramName segments to {contextVar} with semantic disambiguation.
-// The Postman spec uses ":digest" for both bundle download and deployment YAML —
-// these need different context variables because they come from different response fields.
-function postmanSegToContextVar(seg, precedingPath) {
-  if (!seg.startsWith(':')) return seg;
-  const varName = seg.slice(1);
-  if (varName === 'digest') {
-    const joined = precedingPath.join('/');
-    if (joined.endsWith('bundles')) return '{bundleDigest}';
-    return '{deploymentDigest}';
+// A Postman collection is converted to one scenario of mTLS steps (rc.3 has no
+// other transport). Postman variables become the runner's context placeholders:
+// ":name" path segments and "{{name}}" anywhere turn into "{name}".
+function postmanVarsToPlaceholders(value) {
+  if (typeof value === 'string') return value.replace(/\{\{\s*([^}\s]+)\s*\}\}/g, '{$1}');
+  if (Array.isArray(value)) return value.map(postmanVarsToPlaceholders);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, postmanVarsToPlaceholders(v)]));
   }
-  return `{${varName}}`;
+  return value;
 }
 
-// postmanPathToEndpoint rebuilds a usable "/api/v1/..." endpoint string from a
-// Postman request's url.path array (Postman stores a path as a list of
-// segments, e.g. ["api","v1","clients",":clientId","capabilities"] instead of
-// one string). Each segment is passed through postmanSegToContextVar, which
-// turns a literal placeholder segment like ":clientId" into our own "{clientId}"
-// template syntax so the rest of the runner (which only understands "{var}",
-// not Postman's ":var") can substitute it the same way as a native scenario step.
-function postmanPathToEndpoint(pathArr) {
-  return '/' + pathArr.map((seg, i) => postmanSegToContextVar(seg, pathArr.slice(0, i))).join('/');
+// The spec names the path parameter "digest" on both the bundle and the
+// deployment endpoint; they are different values, so they get different names.
+// A ":name" segment takes the variable its Path Variables row refers to
+// ("{{myDevice}}"), otherwise the variable called "name". A literal typed in
+// that row is ignored: generated collections fill it with sample text.
+function postmanSegToContextVar(seg, precedingPath, pathVariables) {
+  const match = /^:(.+)$/.exec(seg) || /^\{\{\s*([^}\s]+)\s*\}\}$/.exec(seg);
+  if (!match) return postmanVarsToPlaceholders(seg);
+  const row = (pathVariables || []).find((v) => v.key === match[1]);
+  const reference = /^\{\{\s*([^}\s]+)\s*\}\}$/.exec((row && row.value) || '');
+  const name = reference ? reference[1] : match[1];
+  if (name === 'digest') {
+    return precedingPath[precedingPath.length - 1] === 'bundles' ? '{bundleDigest}' : '{deploymentDigest}';
+  }
+  return `{${name}}`;
 }
 
-// Rules keyed by "METHOD /endpoint" (with {vars} substituted in).
-// body:        replace request body entirely
-// bodyMerge:   shallow-merge top-level fields into the parsed Postman body
-// bodyNested:  set nested fields (dot-notation keys like "properties.id")
-// extract_context, validations, skip_signing: override defaults
-// Current spec (docs.margo.org/specification/margo-management-interface/device-capabilities):
-// no "roles" field (removed, not renamed), and "resources" is gone — cpus/memory/storage/
-// peripherals/interfaces are flat under properties, cpus is an array (was singular "cpu"),
-// plus three new fields: otelCollector, supportedRuntimes, supportedDeploymentTypes.
-const DEVICE_CAPABILITIES_BODY = {
-  apiVersion: 'device.margo.org/v1alpha1',
-  kind: 'DeviceCapabilitiesManifest',
-  properties: {
-    id: '{deviceId}',
-    vendor: 'Acme Corp',
-    modelNumber: 'ACM-XYZ',
-    serialNumber: 'SN-12345',
-    cpus: [{ cores: 4, architecture: 'arm64' }],
-    memory: '16Gi',
-    storage: '256Gi',
-    peripherals: [],
-    interfaces: [{ type: 'ethernet' }],
-    otelCollector: false,
-    supportedRuntimes: ['oci'],
-    supportedDeploymentTypes: ['helm', 'compose'],
-  },
-};
+// The request path after the base URL, as segments. Uses url.path when the
+// export has it, otherwise the raw URL without "{{baseUrl}}" or scheme and host.
+function postmanRequestPath(url) {
+  if (url && typeof url === 'object' && Array.isArray(url.path) && url.path.length) return url.path;
+  const raw = (typeof url === 'string' ? url : (url && url.raw) || '')
+    .replace(/^\{\{[^}]+\}\}/, '')
+    .replace(/^[a-z]+:\/\/[^/]+/i, '')
+    .split('?')[0];
+  return raw.split('/').filter(Boolean);
+}
 
+function postmanPathToEndpoint(pathArr, pathVariables) {
+  return '/' + pathArr.map((seg, i) => postmanSegToContextVar(seg, pathArr.slice(0, i), pathVariables)).join('/');
+}
+
+// The JSON request body. A bare {{name}} used as a value (for example a number)
+// is quoted first so the body parses; substitute() puts the typed value back.
+function postmanRequestBody(req) {
+  const raw = req.body && req.body.raw;
+  if (!raw) return null;
+  const parseable = raw.replace(/([:\[,]\s*)\{\{\s*([^}\s]+)\s*\}\}(\s*[,}\]])/g, '$1"{{$2}}"$3');
+  try {
+    return postmanVarsToPlaceholders(JSON.parse(parseable));
+  } catch (_) {
+    return null;
+  }
+}
+
+// What the runner knows about the rc.3 endpoints.
+//  - extract_context: values kept from a successful response, so later requests
+//    can use {deploymentId}, {deploymentDigest}, {bundleDigest}, {manifestVersion}, {manifestEtag}.
+//  - order, headers, request_body: used only for a request that documents several
+//    responses (an API description, typically generated from the OpenAPI file).
+//    Its sample values are not a usable request, so the runner sends this one
+//    and places the endpoint in device lifecycle order.
 const POSTMAN_ENDPOINT_RULES = {
-  'GET /api/v1/clients/{clientId}/deployments': {
+  'PUT /api/v1/capabilities/{deviceId}': {
+    order: 0,
+    request_body: {
+      properties: {
+        id: '{deviceId}', vendor: 'Conformance Test Suite', modelNumber: 'CTS-POSTMAN-1', serialNumber: 'SN-POSTMAN-001',
+        cpus: [{ cores: 4, architecture: 'arm64' }], memory: '16Gi', storage: '256Gi',
+        interfaces: [{ type: 'ethernet' }], peripherals: [], otelCollector: false,
+        supportedRuntimes: ['oci'], supportedDeploymentTypes: ['helm', 'compose'],
+      },
+    },
+  },
+  'GET /api/v1/deployments': {
+    order: 1,
+    headers: { Accept: 'application/vnd.margo.manifest.v1+json' },
     extract_context: {
       deploymentId: 'deployments.0.deploymentId',
-      bundleDigest: 'bundle.digest',
       deploymentDigest: 'deployments.0.digest',
+      bundleDigest: 'bundle.digest',
+      manifestVersion: 'manifestVersion',
+      manifestEtag: '_headers.etag',
     },
-    validations: [
-      { field: 'manifestVersion', operation: 'is_number' },
-      // MI-009: bundle present & null when deployments is empty.
-      { operation: 'bundle_null_when_no_deployments' },
-      // MI-031: correct bundle media type when a bundle is present.
-      { operation: 'bundle_media_type' },
-      // MI-034: the ETag digest must be bare — quoted per HTTP ETag syntax and
-      // nothing else (no weak prefix, no whitespace, no extra characters).
-      { field: '_headers.etag', operation: 'matches_regex', value: '^"sha256:[0-9a-f]{64}"$' },
-      // MI-035: a manifest response MUST NOT be marked immutable.
-      { field: '_headers.cache-control', operation: 'not_contains', value: 'immutable' },
-      // MI-015: the ETag MUST be a strong validator = sha256 of the exact body.
-      { operation: 'etag_is_body_digest' },
-    ],
   },
-  'GET /api/v1/clients/{clientId}/bundles/{bundleDigest}': {
-    // Bundle endpoint: passes when a bundle exists (200); 404 is expected when no deployments configured
-    accepted_statuses: [200, 404],
-  },
-  'GET /api/v1/clients/{clientId}/deployments/{deploymentId}/{deploymentDigest}': {
-    // Deployment YAML: passes when a deployment exists; 404 is expected when none configured
-    accepted_statuses: [200, 404],
-  },
-  'POST /api/v1/clients/{clientId}/deployments/{deploymentId}/status': {
-    bodyMerge: {
-      apiVersion: 'deployment.margo.org/v1alpha1',
-      kind: 'DeploymentStatusManifest',
-      deploymentId: '{deploymentId}',
+  'GET /api/v1/deployments/{deploymentId}/{deploymentDigest}': { order: 2, headers: { Accept: 'application/yaml' } },
+  'GET /api/v1/bundles/{bundleDigest}': { order: 3, headers: { Accept: 'application/vnd.margo.bundle.v1+tar+gzip' } },
+  'POST /api/v1/deployments/{deploymentId}/status': {
+    order: 4,
+    request_body: {
+      deploymentId: '{deploymentId}', adoptedManifestVersion: '{manifestVersion}',
+      status: { state: 'installing' }, components: [],
     },
-    // Status endpoint: passes when a deployment exists; 400/404 expected when none configured
-    accepted_statuses: [200, 400, 404],
   },
+  // Unregistering ends the device's session, so it comes last.
+  'DELETE /api/v1/capabilities/{deviceId}': { order: 9 },
 };
+const POSTMAN_UNKNOWN_ENDPOINT_ORDER = 5;
 
-// semanticErrorBody returns a structurally valid current-schema request body for
-// `endpoint` with exactly one deliberate semantic violation (a bad enum value),
-// so a 422 test reaches the server's semantic-validation layer instead of being
-// rejected earlier as a malformed payload. Returns null for endpoints we don't
-// have a known-good body shape for (caller falls back to the Postman body).
-function semanticErrorBody(endpoint) {
-  if (endpoint.includes('/capabilities')) {
-    const b = JSON.parse(JSON.stringify(DEVICE_CAPABILITIES_BODY));
-    b.properties.supportedDeploymentTypes = ['__invalid_deployment_type__'];
-    return b;
+const ZERO_DIGEST = 'sha256:' + '0'.repeat(64);
+
+// For a request that documents several responses: how to change the request
+// so the WFM should answer with this error. Returns null when a client cannot
+// provoke it (for example 403 by WFM policy) — that example is reported NOT RUN.
+function deriveErrorRequest(code, method, endpoint) {
+  if (code === 304) {
+    if (endpoint === '/api/v1/deployments') return { headers: { 'If-None-Match': '{manifestEtag}' } };
+    if (endpoint.includes('{bundleDigest}')) return { headers: { 'If-None-Match': '"{bundleDigest}"' } };
+    if (endpoint.includes('{deploymentDigest}')) return { headers: { 'If-None-Match': '"{deploymentDigest}"' } };
+    return null;
   }
-  if (endpoint.endsWith('/status')) {
-    return {
-      apiVersion: 'deployment.margo.org/v1alpha1',
-      kind: 'DeploymentStatusManifest',
-      deploymentId: '{deploymentId}',
-      status: { state: '__invalid_state__' },
-      components: [{ name: 'component-1', state: 'installed' }],
-    };
+  if (code === 406) return { headers: { Accept: 'text/plain' } };
+  // The success response of this request has already unregistered the device.
+  if (code === 404 && method === 'DELETE' && endpoint.startsWith('/api/v1/capabilities/')) return {};
+  if (code === 404 && /\{(bundle|deployment)Digest\}/.test(endpoint)) {
+    return { endpoint: endpoint.replace(/\{(bundle|deployment)Digest\}/, ZERO_DIGEST) };
+  }
+  if (code === 422) {
+    if (endpoint.includes('/capabilities/')) {
+      return {
+        request_body: {
+          properties: {
+            id: 'ctt-postman-device', vendor: 'Conformance Test Suite', modelNumber: 'CTS-1', serialNumber: 'SN-1',
+            supportedRuntimes: ['oci'], supportedDeploymentTypes: ['__invalid_deployment_type__'],
+          },
+        },
+      };
+    }
+    if (endpoint.endsWith('/status')) {
+      return {
+        request_body: {
+          deploymentId: '{deploymentId}', adoptedManifestVersion: '{manifestVersion}',
+          status: { state: '__invalid_state__' }, components: [],
+        },
+      };
+    }
   }
   return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Error-triggering rules for each response-example sub-test
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Returns flags that tell runStep how to produce the request that should cause
-// the expected error status.
-//
-//   skip_signing        → omit Signature-Input / Signature / Content-Digest (triggers 400/401)
-//   fresh_cert          → sign with a brand-new, never-onboarded certificate (triggers 401/403)
-//   use_placeholder_body→ keep Postman's Lorem-Ipsum body rather than applying ENDPOINT_RULES
-//                         (triggers 422 for semantic-validation failures)
-//   bad_certificate     → replace onboarding body.certificate with a plaintext string (→ 400)
-//   wrong_accept        → send Accept: text/plain instead of the media type the server expects (→ 406)
-//   add_if_none_match   → add If-None-Match: * to get a potential 304 (server may still return 200)
-//   accepted_statuses   → array of HTTP codes that are all acceptable for this step
-function deriveErrorBehavior(resp) {
-  const code = resp.code ?? 0;
-  const name = (resp.name || '').toLowerCase();
-
-  if (code === 304) {
-    // "Not Modified" — send If-None-Match; the spec documents 304 as the sole valid
-    // response for a matching conditional GET. No 200/404 fallback: neither is a
-    // documented outcome here, so accepting them would hide a server that doesn't
-    // honor If-None-Match at all.
-    return { add_if_none_match: true };
-  }
-  if (code === 406) {
-    // "Not Acceptable" — request an unsupported Accept header; the spec documents only
-    // 406 for this case. A 500 means the server errored instead of correctly rejecting
-    // the request — that's a real defect, not an acceptable alternative.
-    return { wrong_accept: true };
-  }
-  if (/content.?digest/i.test(name)) {
-    // "Missing or invalid content-digest" — omit only the Content-Digest header (not the
-    // signature). Spec documents 400 for this specific case; 401 belongs to the separate
-    // signature-failure test below.
-    return { skip_content_digest: true };
-  }
-  if (/signature.*fail|signature.*verif/i.test(name) || code === 401) {
-    // "Signature verification failed" — send a fully-formed request (valid
-    // Signature-Input + Content-Digest) whose Signature bytes are wrong, so the
-    // server's verifier runs and rejects it. `skip_signing` would instead omit
-    // the headers entirely, which is "missing signature" — a different case that
-    // a strict server answers with 400, not the 401 this test documents.
-    return { tamper_signature: true };
-  }
-  if (/invalid.*cert.*format|cert.*format.*invalid|cert.*format.*struct/i.test(name)) {
-    // skip_signing: prevents 409 "already registered" when the device keyid is already onboarded.
-    // Spec documents only 400 for invalid certificate format on onboarding.
-    return { bad_certificate: true, skip_signing: true };
-  }
-  if (/not.*trusted|revoked|rejected/i.test(name) || code === 403) {
-    // "Certificate not trusted / revoked" — sign with a fresh, never-onboarded
-    // certificate so the WFM sees an identity it has no trust relationship with.
-    // A conformant WFM may answer 403 (recognised but not trusted) or 401 (could
-    // not authenticate the caller) here — the strict 403-vs-revoked distinction
-    // needs server-side revocation state this client-only test can't create — so
-    // both codes are accepted. Anything else (400, 2xx) is still a failure.
-    return { fresh_cert: true, accepted_statuses: [401, 403] };
-  }
-  if (/semantic.*error|body.*semantic|request body includes/i.test(name) || code === 422) {
-    // Spec documents 422 for a semantic body error; 400 belongs to content-digest, a different test.
-    // We send a STRUCTURALLY VALID current-schema body with exactly one semantic
-    // violation (a bad enum value) — the Portman placeholder body has an invalid
-    // apiVersion and old-schema fields, so a strict server rejects it with 400
-    // ("invalid API version …") before it ever reaches semantic validation, which
-    // is not what this test is checking.
-    return { semantic_error: true };
-  }
-  // Any other documented error (404 CONTEXT_FALLBACKS, or anything else): hold it to its
-  // own documented code — no blanket fallback (e.g. 301 isn't documented anywhere in spec).
-  return {};
-}
-
-// Build one runStep descriptor from a single response example inside a Postman item.
-// Success responses (2xx) apply the full POSTMAN_ENDPOINT_RULES; error responses
-// apply deriveErrorBehavior so the runner intentionally triggers the expected failure.
-function deriveStepFromResponse(parentItem, resp) {
-  const req = parentItem.request;
-  if (!req) return null;
-
-  const pathArr = req.url?.path || [];
-  const endpoint = postmanPathToEndpoint(pathArr);
-  const method = (req.method || 'GET').toUpperCase();
-  const ruleKey = `${method} ${endpoint}`;
-  const rules = POSTMAN_ENDPOINT_RULES[ruleKey] || {};
-
-  const expected_status = resp.code ?? 200;
-  const is_success = expected_status >= 200 && expected_status < 300;
-
-  const headers = {};
-  for (const h of req.header || []) {
-    if (!h.disabled) headers[h.key] = h.value;
-  }
-
-  const errorBehavior = is_success ? {} : deriveErrorBehavior(resp);
-
-  const skip_signing = errorBehavior.skip_signing ?? (rules.skip_signing ?? false);
-  const skip_content_digest = errorBehavior.skip_content_digest ?? false;
-  const fresh_cert   = errorBehavior.fresh_cert ?? false;
-  const tamper_signature = errorBehavior.tamper_signature ?? false;
-
-  // Derive the request body
-  let request_body = null;
-  if (req.body?.raw) {
-    try { request_body = JSON.parse(req.body.raw); } catch (_) {}
-  }
-
-  if (is_success) {
-    // Happy-path: apply ENDPOINT_RULES (real Margo API values)
-    if (rules.body) {
-      request_body = rules.body;
-    } else {
-      if (rules.bodyMerge && request_body) request_body = { ...request_body, ...rules.bodyMerge };
-      if (rules.bodyNested && request_body) request_body = applyBodyNested(request_body, rules.bodyNested);
-    }
-  } else if (errorBehavior.bad_certificate) {
-    // 400 "Invalid certificate format" — send a plaintext string as the certificate field.
-    // Unique per run: a fixed literal gets remembered as "already registered" by a real,
-    // persistent WFM (like Symphony), turning this into a false 409 on the next run instead
-    // of the intended 400.
-    request_body = {
-      ...(rules.body || {}),
-      certificate: `INVALID_NOT_A_PEM_CERTIFICATE-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    };
-  } else if (errorBehavior.semantic_error) {
-    // 422 "Semantic error" — a valid current-schema body with one bad enum value.
-    request_body = semanticErrorBody(endpoint) || request_body;
-  } else if (errorBehavior.wrong_accept) {
-    headers['Accept'] = 'text/plain';
-  } else if (errorBehavior.add_if_none_match) {
-    // 304 "Not Modified" — send a wildcard ETag; server decides whether to honour it
-    headers['If-None-Match'] = '*';
-  } else if (errorBehavior.fresh_cert) {
-    // 403 "Certificate not trusted" — body uses the same structure but signing uses a fresh cert.
-    // The cert placeholder in the body (if any) will be replaced by injectCertificate with the
-    // temporarily-substituted deviceCertificateBase64 for the fresh cert.
-    if (rules.body) {
-      request_body = rules.body;
-    } else {
-      if (rules.bodyMerge && request_body) request_body = { ...request_body, ...rules.bodyMerge };
-      if (rules.bodyNested && request_body) request_body = applyBodyNested(request_body, rules.bodyNested);
-    }
-  } else {
-    // Generic error (401 skip_signing, 404, etc.): use rules body if available
-    if (rules.body) {
-      request_body = rules.body;
-    } else {
-      if (rules.bodyMerge && request_body) request_body = { ...request_body, ...rules.bodyMerge };
-      if (rules.bodyNested && request_body) request_body = applyBodyNested(request_body, rules.bodyNested);
-    }
-  }
-
-  // Context extraction only for success steps (no point extracting from error responses)
-  const extract_context = is_success ? (rules.extract_context || {}) : {};
-  const validations    = is_success ? (rules.validations ?? derivePostmanValidations(parentItem)) : [];
-
-  // accepted_statuses: for success steps use rules (e.g. bundle 200 also accepts 404 when no data),
-  // for error steps use the error behavior derivation
-  const accepted_statuses = is_success
-    ? (rules.accepted_statuses || undefined)
-    : errorBehavior.accepted_statuses;
-
-  // Conformance-requirement IDs: a response example may narrow them (e.g. only the
-  // error example maps to a "must be rejected" CR-ID); otherwise inherit the item's.
-  const crIds = resp.crIds || resp.crids || parentItem.crIds || parentItem.crids || [];
-
-  return {
-    id: resp.id,
-    name: `${parentItem.name} — ${resp.name || resp.status}`,
-    crIds,
-    method,
-    endpoint,
-    headers,
-    ...(request_body !== null ? { request_body } : {}),
-    expected_status,
-    ...(accepted_statuses ? { accepted_statuses } : {}),
-    validations,
-    extract_context,
-    skip_signing,
-    skip_content_digest,
-    fresh_cert,
-    tamper_signature,
-  };
-}
-
-// Derive validations from Postman pm.test script content.
 function derivePostmanValidations(item) {
   const validations = [];
   const scripts = (item.event || [])
@@ -538,106 +376,163 @@ function derivePostmanValidations(item) {
   return validations;
 }
 
-function applyBodyNested(body, nestedRules) {
-  if (!body || typeof body !== 'object') return body;
-  const result = { ...body };
-  for (const [dotPath, val] of Object.entries(nestedRules)) {
-    const parts = dotPath.split('.');
-    let obj = result;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (obj && typeof obj === 'object') obj = obj[parts[i]];
-      else { obj = null; break; }
-    }
-    if (obj && typeof obj === 'object') obj[parts[parts.length - 1]] = val;
-  }
-  return result;
+function postmanTestScript(item) {
+  return (item.event || [])
+    .filter((e) => e.listen === 'test')
+    .flatMap((e) => (e.script && e.script.exec) || [])
+    .join('\n');
 }
 
+// The status a request without saved examples expects, read from the two usual
+// Postman assertions: to.have.status(N) and expect([N, M]).to.include(pm.response.code).
+function postmanStatusesFromScript(item) {
+  const script = postmanTestScript(item);
+  const one = /to\.have\.status\((\d{3})\)/.exec(script);
+  if (one) return [Number(one[1])];
+  const several = /expect\(\[([\d\s,]+)\]\)\.to\.(?:include|contain)\(pm\.response\.code\)/.exec(script);
+  if (several) return several[1].split(',').map((n) => Number(n.trim())).filter(Boolean);
+  return [];
+}
+
+// Requirement IDs of a request: its "crIds" field, otherwise every ID written in
+// its name or description — the description survives a Postman import and export.
+function postmanRequirementIds(item, resp) {
+  const explicit = resp.crIds || resp.crids || item.crIds || item.crids;
+  if (explicit) return explicit;
+  const description = item.request && item.request.description;
+  const text = [item.name, typeof description === 'object' && description ? description.content : description].join(' ');
+  return [...new Set(text.match(/MARGO-[A-Z]+-[A-Z]+-\d{3}/g) || [])];
+}
+
+function postmanHasAssertions(item) {
+  return /pm\.(expect|test)\(/.test(postmanTestScript(item));
+}
+
+// One request item becomes one step per saved example (or a single step when
+// it has none). Besides the standard Postman fields, an item — or one of its
+// examples — may carry "crIds", "validations", "extract_context",
+// "accepted_statuses" and "expected_status", written exactly as in a scenario file.
 function convertPostmanItem(item) {
   const req = item.request;
-  if (!req) return null;
-
-  const pathArr = req.url?.path || [];
-  const endpoint = postmanPathToEndpoint(pathArr);
+  const url = req.url && typeof req.url === 'object' ? req.url : {};
+  const endpoint = postmanPathToEndpoint(postmanRequestPath(req.url), url.variable);
   const method = (req.method || 'GET').toUpperCase();
-  const ruleKey = `${method} ${endpoint}`;
-  const rules = POSTMAN_ENDPOINT_RULES[ruleKey] || {};
+  const rules = POSTMAN_ENDPOINT_RULES[`${method} ${endpoint}`] || {};
+  const itemId = item.id || String(item.name || 'request').trim().toLowerCase().replace(/\s+/g, '_');
 
-  // Headers: only non-disabled entries
-  const headers = {};
+  const examples = item.response || [];
+  // Several saved responses: an API description, not a ready request (see POSTMAN_ENDPOINT_RULES).
+  const isApiDescription = examples.length > 1;
+
+  let headers = {};
   for (const h of req.header || []) {
-    if (!h.disabled) headers[h.key] = h.value;
+    if (!h.disabled) headers[h.key] = postmanVarsToPlaceholders(h.value);
+  }
+  let request_body = postmanRequestBody(req);
+  if (isApiDescription && rules.order !== undefined) {
+    headers = { ...(rules.headers || {}) };
+    request_body = rules.request_body || null;
   }
 
-  // Body: parse Postman raw JSON, then apply rules
-  let request_body = null;
-  if (req.body?.raw) {
-    try { request_body = JSON.parse(req.body.raw); } catch (_) {}
-  }
-  if (rules.body) {
-    request_body = rules.body;
-  } else {
-    if (rules.bodyMerge && request_body) request_body = { ...request_body, ...rules.bodyMerge };
-    if (rules.bodyNested && request_body) request_body = applyBodyNested(request_body, rules.bodyNested);
-  }
+  const scriptStatuses = postmanStatusesFromScript(item);
+  const variants = examples.length
+    ? examples.map((resp) => ({ resp, code: resp.expected_status ?? resp.code ?? 200 }))
+    : [{ resp: {}, code: item.expected_status ?? scriptStatuses[0] ?? 200 }];
+  const isSuccess = (code) => code >= 200 && code < 300;
+  const successCodes = variants.map((v) => v.code).filter(isSuccess);
+  // A request's success response runs before its error responses.
+  variants.sort((x, y) => Number(isSuccess(y.code)) - Number(isSuccess(x.code)));
 
-  const expected_status = item.response?.[0]?.code ?? 200;
-  const validations = rules.validations ?? derivePostmanValidations(item);
-  const extract_context = rules.extract_context || {};
-  const skip_signing = rules.skip_signing ?? false;
+  return variants.map(({ resp, code }) => {
+    const step = {
+      id: resp.id || (isApiDescription ? `${itemId}-${code}` : itemId),
+      name: isApiDescription ? `${item.name} — ${resp.name || resp.status || code}` : item.name,
+      crIds: postmanRequirementIds(item, resp),
+      method,
+      endpoint,
+      headers: { ...headers },
+      ...(request_body !== null ? { request_body } : {}),
+      expected_status: code,
+      mtls: true,
+      validations: resp.validations || item.validations || (isSuccess(code) ? derivePostmanValidations(item) : []),
+      extract_context: isSuccess(code) ? { ...(rules.extract_context || {}), ...(item.extract_context || {}) } : {},
+    };
 
-  return {
-    id: item.id,
-    name: item.name,
-    crIds: item.crIds || item.crids || [],
-    method,
-    endpoint,
-    headers,
-    ...(request_body !== null ? { request_body } : {}),
-    expected_status,
-    validations,
-    extract_context,
-    skip_signing,
-  };
+    // Other statuses that also pass: the author's field, the list in the test
+    // script, or — when the API documents several success codes — any of those.
+    let accepted = resp.accepted_statuses || item.accepted_statuses;
+    if (!accepted && !examples.length && scriptStatuses.length > 1) accepted = scriptStatuses;
+    if (!accepted && isApiDescription && isSuccess(code) && successCodes.length > 1) accepted = successCodes;
+    accepted = (accepted || []).filter((c) => c !== code);
+    if (accepted.length) step.accepted_statuses = accepted;
+
+    // A lone error example is the author's own negative request and is sent as
+    // written. Only a request that documents several responses needs deriving.
+    if (!isSuccess(code) && isApiDescription) {
+      const change = deriveErrorRequest(code, method, endpoint);
+      if (!change) {
+        step.not_run_reason =
+          `the CTT cannot make the WFM answer ${code} from this API description — it depends on the WFM's own state or policy`;
+      } else {
+        if (change.endpoint) step.endpoint = change.endpoint;
+        if (change.headers) Object.assign(step.headers, change.headers);
+        if (change.request_body) step.request_body = change.request_body;
+      }
+    }
+    return step;
+  }).map((step) => Object.assign(step, { _order: isApiDescription ? (rules.order ?? POSTMAN_UNKNOWN_ENDPOINT_ORDER) : null }));
 }
 
 function parsePostmanCollection(collection) {
-  const successSteps = [];
-  const errorSteps   = [];
-
-  for (const item of (collection.item || [])) {
-    const responses = item.response || [];
-
-    if (responses.length === 0) {
-      // No response examples: create a single step from the item itself (legacy path)
-      const step = convertPostmanItem(item);
-      if (step) successSteps.push(step);
-      continue;
+  const steps = [];
+  let itemsWithScripts = 0;
+  // Folders are walked in order; every request in them becomes steps of the one scenario.
+  (function walk(items) {
+    for (const item of items || []) {
+      if (Array.isArray(item.item)) {
+        walk(item.item);
+      } else if (item.request) {
+        if (postmanHasAssertions(item) && !item.validations) itemsWithScripts++;
+        steps.push(...convertPostmanItem(item));
+      }
     }
+  })(collection.item);
 
-    // Expand to one step per response example.
-    // Success (2xx) steps first so context (clientId, etc.) is populated
-    // before error steps try to reference it in URLs.
-    for (const resp of responses) {
-      const step = deriveStepFromResponse(item, resp);
-      if (!step) continue;
-      const is_success = step.expected_status >= 200 && step.expected_status < 300;
-      (is_success ? successSteps : errorSteps).push(step);
+  // Requests run in collection order. Only a collection of API descriptions is
+  // put in lifecycle order, because its order is the order of the OpenAPI file.
+  if (steps.length && steps.every((s) => s._order !== null)) {
+    steps.sort((x, y) => x._order - y._order);   // stable: keeps each request's own steps together
+  }
+  steps.forEach((s) => delete s._order);
+
+  // Collection variables are the starting values of {name} placeholders.
+  const initial_context = {};
+  for (const v of collection.variable || []) {
+    if (v && v.key && v.key !== 'baseUrl' && v.value !== undefined && v.value !== '' && !v.disabled) {
+      initial_context[v.key] = v.value;
     }
+  }
+
+  if (itemsWithScripts > 0) {
+    console.log(
+      ` ℹ  ${itemsWithScripts} request(s) have Postman test scripts. Postman scripts are not executed here: each ` +
+      'request is checked against the status of its saved example(s) and its "validations" field.'
+    );
   }
 
   const info = collection.info || {};
   const description =
     (typeof info.description === 'object' ? info.description.content : info.description) ||
     collection._?.description ||
-    'Auto-converted from Postman collection';
+    'Converted from a Postman collection';
 
   return [
     {
       id: info._postman_id || collection._?.postman_id || 'postman-collection',
       name: info.name || 'Postman Collection',
       description,
-      steps: [...successSteps, ...errorSteps],
+      initial_context,
+      steps,
     },
   ];
 }
@@ -669,6 +564,7 @@ function regenerateCertificate() {
 // instead of a double-slash like /deployments// which triggers redirects.
 // A well-formed fake ID ensures the WFM returns a proper 404 rather than 301.
 const CONTEXT_FALLBACKS = {
+  deviceId:        'ctt-postman-device',
   deploymentId:    'deployment-none-00000000',
   deploymentDigest:'sha256:0000000000000000000000000000000000000000000000000000000000000000',
   bundleDigest:    'sha256:0000000000000000000000000000000000000000000000000000000000000000',
@@ -1573,7 +1469,7 @@ function runValidations(responseSource, validations) {
 // printStepResult(), so failures are visible in the console output as soon
 // as they happen rather than only in a report generated at the very end.
 async function runStep(scenario, step) {
-  const blocker = svidSourceBlocker(step);
+  const blocker = step.not_run_reason || svidSourceBlocker(step);
   if (blocker) {
     const resultEntry = {
       scenario: scenario.id,
@@ -1906,7 +1802,7 @@ function writeReport() {
   for (let i = 0; i < scenarios.length; i++) {
     const scenario = scenarios[i];
     regenerateCertificate();
-    context = {};
+    context = { ...(scenario.initial_context || {}) };
 
     printScenarioHeader(scenario, i + 1, total);
 

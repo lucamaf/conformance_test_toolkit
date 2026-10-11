@@ -359,6 +359,14 @@ is only sent when you choose to: the Symphony sandbox build stopped responding
 when it received this request (its service restarts by itself after about a
 minute). Run `device-unregister` against your own WFM as a separate run.
 
+Two groups are written as Postman collections and show how to add your own
+tests from Postman: `vendor-positive-extended` (10 requests) and
+`vendor-negative-scenarios` (7 requests). They run the same way as `core`. The
+format is described in `docs/MARGO_Conformance _Approach.md`, section "Postman
+Template for Expressing sequences of API exchanges". The groups `bronze` and
+`silver` were written for an earlier version of the specification and do not
+pass against a 1.0.0-rc.3 WFM.
+
 ### Enter your WFM endpoints
 
 The runner will prompt for two URLs:

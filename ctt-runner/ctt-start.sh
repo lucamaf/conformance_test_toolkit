@@ -717,6 +717,36 @@ confirm_version_mismatch() {
     fi
 }
 
+# Copy the identity chosen in "Setup MIAF Identity" into the folder the runner
+# reads, and check it. Every WFM run needs it: all rc.3 requests go over mTLS.
+wfm_install_run_identity() {
+    local cert_dir="$1"
+    local miaf_dir="$CONFORMANCE_DIR/wfm-supplier/utils/fixtures/miaf"
+    local real_dir="$miaf_dir/real"
+    # Prefer real/ certs (Symphony SVID, signed by the real trust-bundle CA).
+    # Fall back to the test-CA certs in miaf/ when real/ is absent (mock-server runs).
+    rm -f "$cert_dir/svid-previous-cert.pem" "$cert_dir/svid-previous-key.pem"
+    if [[ -f "$real_dir/client-svid-cert.pem" && -f "$real_dir/client-svid-key.pem" ]]; then
+        cp "$real_dir/client-svid-cert.pem" "$cert_dir/svid-cert.pem"
+        cp "$real_dir/client-svid-key.pem"  "$cert_dir/svid-key.pem"
+        [[ -f "$real_dir/trust-bundle-ca.pem" ]] && cp "$real_dir/trust-bundle-ca.pem" "$cert_dir/svid-ca.pem"
+        # The SVID in use before the last rotation, kept by Setup MIAF Identity.
+        if [[ -f "$real_dir/previous-client-svid-cert.pem" && -f "$real_dir/previous-client-svid-key.pem" ]]; then
+            cp "$real_dir/previous-client-svid-cert.pem" "$cert_dir/svid-previous-cert.pem"
+            cp "$real_dir/previous-client-svid-key.pem"  "$cert_dir/svid-previous-key.pem"
+        fi
+        log "Using real SVID certs (Symphony trust bundle)"
+    elif [[ -f "$miaf_dir/client-svid-cert.pem" && -f "$miaf_dir/client-svid-key.pem" ]]; then
+        cp "$miaf_dir/client-svid-cert.pem" "$cert_dir/svid-cert.pem"
+        cp "$miaf_dir/client-svid-key.pem"  "$cert_dir/svid-key.pem"
+        log "Using test SVID certs (mock server trust bundle)"
+    else
+        error "SVID certs not found at $miaf_dir — required for mtls:true steps"
+    fi
+
+    validate_miaf_certs "$cert_dir"
+}
+
 run_wfm_scenario_group() {
     local wfm_url="$1"
     local group_path="$2"
@@ -745,30 +775,7 @@ run_wfm_scenario_group() {
     [[ -f "$cert_dir/device.key" ]] || error "Device private key not found: $cert_dir/device.key"
     [[ -f "$cert_dir/device-cert.pem" ]] || error "Device certificate not found: $cert_dir/device-cert.pem"
 
-    local miaf_dir="$CONFORMANCE_DIR/wfm-supplier/utils/fixtures/miaf"
-    local real_dir="$miaf_dir/real"
-    # Prefer real/ certs (Symphony SVID, signed by the real trust-bundle CA).
-    # Fall back to the test-CA certs in miaf/ when real/ is absent (mock-server runs).
-    rm -f "$cert_dir/svid-previous-cert.pem" "$cert_dir/svid-previous-key.pem"
-    if [[ -f "$real_dir/client-svid-cert.pem" && -f "$real_dir/client-svid-key.pem" ]]; then
-        cp "$real_dir/client-svid-cert.pem" "$cert_dir/svid-cert.pem"
-        cp "$real_dir/client-svid-key.pem"  "$cert_dir/svid-key.pem"
-        [[ -f "$real_dir/trust-bundle-ca.pem" ]] && cp "$real_dir/trust-bundle-ca.pem" "$cert_dir/svid-ca.pem"
-        # The SVID in use before the last rotation, kept by Setup MIAF Identity.
-        if [[ -f "$real_dir/previous-client-svid-cert.pem" && -f "$real_dir/previous-client-svid-key.pem" ]]; then
-            cp "$real_dir/previous-client-svid-cert.pem" "$cert_dir/svid-previous-cert.pem"
-            cp "$real_dir/previous-client-svid-key.pem"  "$cert_dir/svid-previous-key.pem"
-        fi
-        log "Using real SVID certs (Symphony trust bundle)"
-    elif [[ -f "$miaf_dir/client-svid-cert.pem" && -f "$miaf_dir/client-svid-key.pem" ]]; then
-        cp "$miaf_dir/client-svid-cert.pem" "$cert_dir/svid-cert.pem"
-        cp "$miaf_dir/client-svid-key.pem"  "$cert_dir/svid-key.pem"
-        log "Using test SVID certs (mock server trust bundle)"
-    else
-        error "SVID certs not found at $miaf_dir — required for mtls:true steps"
-    fi
-
-    validate_miaf_certs "$cert_dir"
+    wfm_install_run_identity "$cert_dir"
 
     confirm_version_mismatch "$claimed_app_version"
 
@@ -849,6 +856,63 @@ run_wfm_scenario_group() {
         success "WFM scenario tests completed for group: $group_name"
     else
         error "WFM scenario tests failed for group: $group_name"
+    fi
+}
+
+# Run a Postman collection generated from the OpenAPI file (ctt-creator →
+# "OpenAPI spec based contract tests") with the CTT runner: each documented
+# response of each endpoint becomes one check, sent over mTLS.
+run_wfm_contract_collection() {
+    local wfm_url="$1"
+    local collection_file="$2"
+    local scenario_runner="$CONFORMANCE_DIR/wfm-supplier/scripts/run_wfm_scenarios.js"
+    local cert_dir="$CONFORMANCE_DIR/wfm-supplier/utils/certs"
+
+    command -v node >/dev/null 2>&1 || error "Node.js not found. Install Node.js before running WFM tests."
+    json_file_is_postman_collection "$collection_file" || error "Not a Postman collection: $collection_file"
+
+    mkdir -p "$cert_dir"
+    openssl ecparam -name prime256v1 -genkey -noout -out "$cert_dir/device.key" >/dev/null 2>&1
+    openssl req -new -x509 -days 365 \
+        -key "$cert_dir/device.key" \
+        -out "$cert_dir/device-cert.pem" \
+        -subj "/C=IN/ST=GGN/L=Sector48/O=Margo/OU=Conformance/CN=device-$(date +%s)" >/dev/null 2>&1
+
+    wfm_install_run_identity "$cert_dir"
+
+    # Unregistering a device is left out unless asked for, as in the core group.
+    local run_collection="$collection_file"
+    local filtered_collection=""
+    if jq -e '[.. | objects | select(has("request")) | select(.request.method == "DELETE")] | length > 0' "$collection_file" >/dev/null 2>&1; then
+        echo ""
+        echo "  This collection includes DELETE /api/v1/capabilities/{deviceId} (unregister a device)."
+        echo "  The sandbox Symphony WFM stops when it receives this request — include it only for your own WFM."
+        local include_delete
+        read -p "  Include the unregister request? [y/N]: " include_delete < /dev/tty
+        if [[ "${include_delete,,}" != "y" ]]; then
+            filtered_collection=$(mktemp /tmp/margo-wfm-contract.XXXXXX.json)
+            jq 'def drop_delete: if type == "object" and (.item? | type == "array")
+                    then .item = [.item[] | select((.request?.method? // "") != "DELETE") | drop_delete] else . end;
+                drop_delete' "$collection_file" > "$filtered_collection"
+            run_collection="$filtered_collection"
+        fi
+    fi
+
+    mkdir -p "$RUNNER_WFM"
+    local report_file="$RUNNER_WFM/wfm-contract-report_$(date +%Y%m%d_%H%M%S).html"
+    log "▶️  Running contract tests against: $wfm_url"
+    log "📊 Report: $report_file"
+
+    set +e
+    node "$scenario_runner" "$wfm_url" "$run_collection" "$report_file" "$cert_dir" "contract" "$(get_ctt_margo_version)"
+    local result=$?
+    set -e
+    [[ -n "$filtered_collection" ]] && rm -f "$filtered_collection"
+
+    if [[ $result -eq 0 ]]; then
+        success "WFM contract tests completed"
+    else
+        warn "WFM contract tests finished with failures — see the report"
     fi
 }
 
@@ -997,15 +1061,15 @@ execute_wfm_tests_with_group() {
 
     log "📋 Found ${#group_collections[@]} Postman collection file(s)"
 
-    # Auto-sync: extract all UUIDs from every collection file and append any new
-    # ones to group.json testCases so the user never has to maintain IDs manually.
+    # Auto-sync: extract the UUID of every request in every collection file and append
+    # any new ones to group.json testCases so the user never has to maintain IDs manually.
     local merged_ids
     merged_ids=$(
         # Existing IDs from group.json (preserve order)
         jq -r '.testCases[]?' "$group_json" 2>/dev/null
-        # UUIDs found in each collection file (in file order, deduped per-file)
+        # Request UUIDs found in each collection file (in file order)
         for cfile in "${group_collections[@]}"; do
-            jq -r '.. | strings
+            jq -r '.. | objects | select(has("request")) | .id? // empty | strings
                 | select(test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"))
             ' "$cfile" 2>/dev/null
         done
@@ -1038,6 +1102,8 @@ execute_wfm_tests_with_group() {
         -key "$cert_dir/device.key" \
         -out "$cert_dir/device-cert.pem" \
         -subj "/C=IN/ST=GGN/L=Sector48/O=Margo/OU=Conformance/CN=$temp_device_id" >/dev/null 2>&1
+
+    wfm_install_run_identity "$cert_dir"
 
     confirm_version_mismatch "$group_version"
 
@@ -1074,7 +1140,9 @@ execute_wfm_tests_with_group() {
         sudo chown -R "${current_user}:${current_user}" "${HOME}/.docker" 2>/dev/null || true
 
         set +e
-        node "$scenario_runner" "$wfm_url" "$filtered_collection" "$report_file" "$cert_dir" "$group_name" "$group_version"
+        local miaf_flags=()
+        [[ "$miaf_url" != "$wfm_url" ]] && miaf_flags=("--miaf-url" "$miaf_url")
+        node "$scenario_runner" "$wfm_url" "$filtered_collection" "$report_file" "$cert_dir" "$group_name" "$group_version" "${miaf_flags[@]}"
         local result=$?
         set -e
 
@@ -1799,7 +1867,13 @@ run_wfm_flow() {
 
             3)
                 echo ""
-                read -p "Enter Postman Collection Path: " collection_path
+                local default_collection
+                default_collection=$(realpath "$CONFORMANCE_DIR/../ctt-creator/wfm-supplier/utils/postman_collection.json" 2>/dev/null)
+                echo "  The collection generated from the OpenAPI file (ctt-creator → WFM Supplier →"
+                echo "  OpenAPI spec based contract tests). Press Enter for the one shipped with the CTT."
+                read -p "Enter Postman Collection Path [$default_collection]: " collection_path < /dev/tty
+                collection_path="${collection_path:-$default_collection}"
+                collection_path="${collection_path/#\~/$HOME}"
 
                 if [[ ! -f "$collection_path" ]]; then
                     error "Collection file not found: $collection_path"
@@ -1812,7 +1886,7 @@ run_wfm_flow() {
                 read -p "Enter WFM SBI URL: " wfm_url < /dev/tty
                 [[ -z "$wfm_url" ]] && error "WFM SBI URL is required"
 
-                run_wfm_newman "$wfm_url" "$collection_path"
+                run_wfm_contract_collection "$wfm_url" "$collection_path"
                 ;;
 
             b)
