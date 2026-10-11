@@ -12,6 +12,8 @@
     "wfm-core-capabilities",
     "wfm-core-desired-state",
     "wfm-core-ds-1",
-    "wfm-core-ds-3"
+    "wfm-core-ds-3",
+    "wfm-core-ds-bundle-field",
+    "wfm-core-ds-not-immutable"
   ]
 }

@@ -211,6 +211,11 @@ described below.
   accepts a **Postman collection** in the same folder.
 - **CR-ID tagging** — a scenario or step lists the spec requirement IDs it is
   evidence for (`crIds`), so the report can show them next to each result.
+  A step carries only the IDs that its own checks judge: if the step can fail
+  for a reason that has nothing to do with one of its IDs, that check belongs
+  in a separate step. The report marks a requirement FAIL when any step that
+  carries it fails, so a step with unrelated IDs would fail all of them at once.
+  A scenario may list many IDs; a step normally has one to three.
 
 The format of both is described in
 [`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md).

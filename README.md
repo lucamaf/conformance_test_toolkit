@@ -70,7 +70,7 @@ conformance_test_toolkit/
 ```
 
 The full set of each persona is the `core` group:
-`test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 45
+`test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 52
 steps) and `test-suites/device-supplier/core/test-cases/device-supplier.json`
 (13 scenarios, 61 steps). The device `core` judges a real device: it checks the
 requests the device sends to the mock WFM. The device group `self-check` runs

@@ -288,15 +288,12 @@
     "steps": [
       {
         "id": "wfm-core-ds-1",
-        "name": "Retrieve Desired State With Explicit Accept Header",
+        "name": "Retrieve Desired State With Explicit Accept Header — Content-Type And ETag Format",
         "crIds": [
           "MARGO-WFM-MANAGEMENTINTERFACE-004",
           "MARGO-WFM-MANAGEMENTINTERFACE-006",
-          "MARGO-WFM-MANAGEMENTINTERFACE-009",
           "MARGO-WFM-MANAGEMENTINTERFACE-027",
-          "MARGO-WFM-MANAGEMENTINTERFACE-033",
-          "MARGO-WFM-MANAGEMENTINTERFACE-034",
-          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -319,14 +316,6 @@
             "field": "_headers.etag",
             "operation": "matches_regex",
             "value": "^\"sha256:[0-9a-f]{64}\"$"
-          },
-          {
-            "field": "_headers.cache-control",
-            "operation": "not_contains",
-            "value": "immutable"
-          },
-          {
-            "operation": "bundle_null_iff_no_deployments"
           }
         ],
         "extract_context": {
@@ -335,6 +324,49 @@
           "deploymentId": "deployments.0.deploymentId",
           "deploymentDigest": "deployments.0.digest"
         }
+      },
+      {
+        "id": "wfm-core-ds-bundle-field",
+        "name": "Desired State: bundle Is null Exactly When There Are No Deployments",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-009",
+          "MARGO-WFM-MANAGEMENTINTERFACE-033"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "bundle_null_iff_no_deployments"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-ds-not-immutable",
+        "name": "Desired State Manifest Is Not Marked immutable",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
       },
       {
         "id": "wfm-core-ds-2",
@@ -534,11 +566,10 @@
       },
       {
         "id": "step-wfm-hi-1.3",
-        "name": "Manifest ETag Is The sha256 Digest Of The Exact Response Body, And Unchanged On A Second Read",
+        "name": "Manifest ETag Is The sha256 Digest Of The Exact Response Body",
         "crIds": [
           "MARGO-WFM-MANAGEMENTINTERFACE-015",
-          "MARGO-WFM-MANAGEMENTINTERFACE-036",
-          "MARGO-WFM-MANAGEMENTINTERFACE-039"
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -550,7 +581,24 @@
         "validations": [
           {
             "operation": "etag_is_body_digest"
-          },
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "step-wfm-hi-1.4",
+        "name": "Manifest ETag Is Unchanged On A Second Read",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-039"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
           {
             "field": "_headers.etag",
             "operation": "equals",
@@ -666,11 +714,6 @@
             "field": "_headers.etag",
             "operation": "matches_regex",
             "value": "^\"sha256:[0-9a-f]{64}\"$"
-          },
-          {
-            "field": "_headers.cache-control",
-            "operation": "not_contains",
-            "value": "immutable"
           }
         ],
         "extract_context": {
@@ -681,9 +724,30 @@
         },
         "crIds": [
           "MARGO-WFM-MANAGEMENTINTERFACE-031",
-          "MARGO-WFM-MANAGEMENTINTERFACE-034",
-          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
         ]
+      },
+      {
+        "id": "wfm-mc-manifest-not-immutable",
+        "name": "Manifest With Deployments Is Not Marked immutable",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
       },
       {
         "id": "wfm-mc-manifest-urls",
@@ -709,7 +773,7 @@
       },
       {
         "id": "e2e5bf11-3015-40cd-8e58-96aceb20bc5e",
-        "name": "Fetch The Multi-Component ApplicationDeployment YAML (content-addressed)",
+        "name": "Fetch The Multi-Component ApplicationDeployment YAML (content-addressed) — Content-Type, ETag And Digest",
         "method": "GET",
         "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
         "mtls": true,
@@ -720,16 +784,6 @@
             "field": "_headers.content-type",
             "operation": "contains",
             "value": "yaml"
-          },
-          {
-            "field": "_body",
-            "operation": "contains",
-            "value": "wait: true"
-          },
-          {
-            "field": "_body",
-            "operation": "contains",
-            "value": "wait: false"
           },
           {
             "field": "_headers.etag",
@@ -750,10 +804,34 @@
           "MARGO-WFM-MANAGEMENTINTERFACE-014",
           "MARGO-WFM-MANAGEMENTINTERFACE-025",
           "MARGO-WFM-MANAGEMENTINTERFACE-034",
-          "MARGO-WFM-MANAGEMENTINTERFACE-036",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ]
+      },
+      {
+        "id": "wfm-mc-deployment-yaml-content",
+        "name": "ApplicationDeployment YAML Carries Both Components (wait: true and wait: false)",
+        "crIds": [
           "MARGO-WFM-APPLICATIONDESCRIPTION-001",
           "MARGO-WFM-APPLICATIONDESCRIPTION-002"
-        ]
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: true"
+          },
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: false"
+          }
+        ],
+        "extract_context": {}
       },
       {
         "id": "wfm-mc-deployment-wrong-digest",
@@ -782,14 +860,12 @@
       },
       {
         "id": "wfm-mc-bundle-fetch",
-        "name": "Download The Deployment Bundle — Digest, Cache Headers, And Exactly The Listed Deployment Files",
+        "name": "Download The Deployment Bundle — Content-Type, ETag And Digest",
         "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-024",
           "MARGO-WFM-MANAGEMENTINTERFACE-025",
           "MARGO-WFM-MANAGEMENTINTERFACE-027",
           "MARGO-WFM-MANAGEMENTINTERFACE-031",
-          "MARGO-WFM-MANAGEMENTINTERFACE-036",
-          "MARGO-WFM-MANAGEMENTINTERFACE-038"
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
         ],
         "method": "GET",
         "endpoint": "/api/v1/bundles/{bundleDigest}",
@@ -808,6 +884,45 @@
             "value": "\"{bundleDigest}\""
           },
           {
+            "field": "bundleDigest",
+            "operation": "body_sha256_equals",
+            "value": "{bundleDigest}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-contents",
+        "name": "Deployment Bundle Contains Exactly The Listed Deployment Files",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-024"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "bundle_contains_exactly_deployments",
+            "value": "{manifestDeployments}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-cache",
+        "name": "Deployment Bundle Cache Headers (private, max-age=31536000, immutable)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-038"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
             "field": "_headers.cache-control",
             "operation": "contains",
             "value": "private"
@@ -821,15 +936,6 @@
             "field": "_headers.cache-control",
             "operation": "contains",
             "value": "immutable"
-          },
-          {
-            "field": "bundleDigest",
-            "operation": "body_sha256_equals",
-            "value": "{bundleDigest}"
-          },
-          {
-            "operation": "bundle_contains_exactly_deployments",
-            "value": "{manifestDeployments}"
           }
         ],
         "extract_context": {}

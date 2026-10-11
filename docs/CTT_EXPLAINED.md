@@ -233,7 +233,7 @@ Results are from the full run of 11 October 2026 on a freshly built sandbox.
 | 1 | Identities come from one MIS | `mis.sh generate-svid` | folders `x509svid-…` in `~/mis-deployment` |
 | 2 | WFM: identity setup | WFM Supplier → 1 | "Identity setup complete" |
 | 3 | WFM: quick check | WFM Supplier → 2 → `quick-check` | 4 of 4 |
-| 4 | WFM: full run on Symphony | → `core` | 45 steps: 32 passed, 11 failed, 2 not run (about 1 minute) |
+| 4 | WFM: full run on Symphony | → `core` | 52 steps: 39 passed, 11 failed, 2 not run (about 1 minute) |
 | 5 | Device: identity, mock WFM, self-check | Device Supplier → 1, 2, 3 → `self-check` | 90 of 90 |
 | 6 | Device: the sandbox device connects | `device-agent.sh docker start-docker`, `tail -f /tmp/wfm-server.log` | capabilities 201, deployments 200, status 200 |
 | 7 | Device: full run on the sandbox device | → `core`, restart the device when asked | 53 passed, 3 failed, 5 not run (about 12 minutes) |

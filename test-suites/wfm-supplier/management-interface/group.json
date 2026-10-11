@@ -10,6 +10,7 @@
     "step-wfm-hi-1.1",
     "step-wfm-hi-1.2",
     "step-wfm-hi-1.3",
+    "step-wfm-hi-1.4",
     "wfm-core-cap-1",
     "wfm-core-cap-2",
     "wfm-core-cap-3",
@@ -22,6 +23,8 @@
     "wfm-core-ds-1",
     "wfm-core-ds-2",
     "wfm-core-ds-3",
+    "wfm-core-ds-bundle-field",
+    "wfm-core-ds-not-immutable",
     "wfm-core-status",
     "wfm-core-status-1",
     "wfm-header-integrity-manifest"

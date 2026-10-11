@@ -409,7 +409,7 @@ can run one area at a time and the report states which set was run:
 
 | Group | What it checks | When to run it |
 |---|---|---|
-| `quick-check` | Identity accepted over mTLS, a device registered, manifest served, conditional request answered (4 steps) | First, to confirm the URL and the identity setup |
+| `quick-check` | Identity accepted over mTLS, a device registered, manifest served, conditional request answered (6 steps) | First, to confirm the URL and the identity setup |
 | `management-interface` | The Management Interface API: capabilities, desired state, content negotiation, status, ETag and cache headers | While working on the API |
 | `deployment-delivery` | A multi-component deployment: manifest URLs, deployment YAML, bundle archive and their digests | While working on deployment delivery |
 | `identity` | mTLS handshake, trust bundle, refused clients, SVID rotation | While working on MIAF |
@@ -593,20 +593,23 @@ evidence of conformance.
 ### What to expect on the sandbox Symphony
 
 A `core` run takes about one minute. Against the sandbox Symphony build tested
-with this guide (October 2026) it ends with **45 steps: 32 passed, 11 failed,
-2 not run**. The failures are places where that Symphony build differs from
+with this guide (October 2026) it ends with **52 steps: 39 passed, 11 failed,
+2 not run**, and **28 of 36 requirements passing, 7 failing, 1 not run**. The failures are places where that Symphony build differs from
 Margo 1.0.0-rc.3; they are not a problem of your setup:
 
-| Failing step | What Symphony does |
-|---|---|
-| `wfm-core-cap-3`, `wfm-core-cap-4`, `wfm-core-cap-5` | accepts capabilities with an invalid deployment type, an invalid runtime, or without `vendor` (201 instead of 422) |
-| `wfm-core-cn-1` | answers an unsupported `Accept` with 400 instead of 406 |
-| `wfm-core-ds-2` | answers a request without `Accept` with 400 instead of the manifest |
-| `wfm-core-ds-1`, the poll step of the multi-component scenario | marks the manifest `Cache-Control: ... immutable` |
-| `wfm-core-status-1` | answers a status report for an unknown deployment with 500 |
-| `step-wfm-hi-1.3` | the manifest `ETag` is not the digest of the response body |
-| `wfm-mc-manifest-urls` | manifest URLs have the form `/api/v1/clients/<spiffe-id>/...` |
-| `wfm-mc-bundle-fetch` | the bundle's `Cache-Control` is `public` instead of `private` |
+| Failing step | What Symphony does | Requirement shown as FAIL |
+|---|---|---|
+| `wfm-core-cap-3`, `wfm-core-cap-4`, `wfm-core-cap-5` | accepts capabilities with an invalid deployment type, an invalid runtime, or without `vendor` (201 instead of 422) | MANAGEMENTINTERFACE-023 |
+| `wfm-core-cn-1` | answers an unsupported `Accept` with 400 instead of 406 | MANAGEMENTINTERFACE-008 |
+| `wfm-core-ds-2` | answers a request without `Accept` with 400 instead of the manifest | MANAGEMENTINTERFACE-007 |
+| `wfm-core-ds-not-immutable`, `wfm-mc-manifest-not-immutable` | marks the manifest `Cache-Control: ... immutable` | MANAGEMENTINTERFACE-035 |
+| `wfm-core-status-1` | answers a status report for an unknown deployment with 500 | MANAGEMENTINTERFACE-023 |
+| `step-wfm-hi-1.3` | the manifest `ETag` is not the digest of the response body | MANAGEMENTINTERFACE-015, -036 |
+| `wfm-mc-manifest-urls` | manifest URLs have the form `/api/v1/clients/<spiffe-id>/...` | MANAGEMENTINTERFACE-023 |
+| `wfm-mc-bundle-cache` | the bundle's `Cache-Control` is `public` instead of `private` | MANAGEMENTINTERFACE-038 |
+
+Each step carries only the requirement IDs that its own checks judge, so one
+difference turns only its own requirement to FAIL.
 
 The 2 steps not run are the SVID Rotation scenario; they run and pass after the
 steps in the next section.
@@ -734,5 +737,5 @@ Phase 2 — Run (repeat for each test run)
   □ Wait for run to complete (under a minute once the deployment is assigned; up to ~5 min while polling)
   □ Open report: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>.html
   □ Signed PDF:  ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>_signed.pdf (+ ca_cert.pem)
-      (sandbox Symphony: 32 passed, 11 failed, 2 not run — see "What to expect on the sandbox Symphony")
+      (sandbox Symphony: 39 passed, 11 failed, 2 not run — see "What to expect on the sandbox Symphony")
 ```
