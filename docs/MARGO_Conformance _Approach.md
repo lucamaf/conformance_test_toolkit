@@ -54,6 +54,8 @@ This report may be used as evidence of conformance to Margo specifications.
 
 - A Test-Suite can have test-cases corresponding to only a single persona.
 
+- In the Conformance Test Toolkit a Test-Suite is called a **group**. A group is a named list of test IDs with a specification version: its `group.json` holds the name, version, description, the folder where the test files live, and the IDs of the scenarios, steps or Postman requests to run. The Specification Author puts the test-case files in a folder and creates the group with `ctt-creator`; the Vendor selects the group by name in `ctt-runner`, and the Conformance Report carries the group name and version. The groups shipped with the toolkit and the reasons for grouping are described in `docs/ARCHITECTURE.md`, section "The Test Data Model".
+
 ```mermaid
 flowchart LR
     Author[SUP Creator / Specification Author]
@@ -187,7 +189,7 @@ flowchart LR
 
 - Additionally, the Supplier can have a “Server” or a “Client” component as defined in the Margo System Design. This needs to be accommodated in the Conformance Framework, which needs to serve as the peer element and allow the Margo Community to create test-cases for each perspective. This is explained in the following sections.
 
-- The Framework shall attempt to re-use existing open-source frameworks like Portman and Newman for generating and running API Contract Tests. These tools are selected from a range of available tools for writing “Client-Side” tests for API contracts with a high degree of automation. There is a table of alternative tools also discussed in the Appendix section.
+- The Framework shall attempt to re-use existing open-source frameworks like Portman for generating API Contract Tests. The generated tests are executed by the runner of the Conformance Test Toolkit, which sends them over mutual TLS. These tools are selected from a range of available tools for writing “Client-Side” tests for API contracts with a high degree of automation. There is a table of alternative tools also discussed in the Appendix section.
 
 - The Framework shall provide a format / schema for manually writing “Server-Side” test-cases (where the Margo Supplier is providing the “Client-Side” component, for example the Device) as there is a lack of available tooling for verifying Client API conformance. The format / schema is discussed in the following sections.
 
@@ -250,7 +252,7 @@ flowchart LR
 
 - _For the __WFM__ __Supplier persona_, the Margo conformance test-cases will mostly consist of test-cases written from the ‘Client’ perspective with the WFM as the system under test, as specified from the Margo OpenAPI based specification.
 
-- The Margo Conformance Framework shall allow import of API Contract tests, generated using tools like Portman. The Margo Conformance Framework will execute these tests using a utility like Newman.
+- The Margo Conformance Framework shall allow import of API Contract tests, generated using tools like Portman. The Conformance Test Toolkit executes them with its own runner (`ctt-runner` → WFM Supplier → OpenAPI spec based contract tests), because every request has to be sent over mutual TLS with the X.509-SVID of the toolkit.
 
 - This will allow the addition of specific, tailored, hand-written test-cases written using Postman, to be added the Conformance Suite.
 
@@ -282,7 +284,7 @@ Further details are described below in the section [Margo schema for server-side
 
 - Or, a matching rule is applied between fields of an API sequence. For example – the encoding of the API Header is as per the rules defined in the Margo API specification
 
-- Or, a matching value is used in a subsequent API call. For example – The Device uses the same client-id as issued during Device Client onboarding
+- Or, a matching value is used in a subsequent API call. For example – The Device reports the status of a deployment with the `deploymentId` and the `manifestVersion` it received in the desired-state manifest
 
 - Or, other cases as defined below.
 
@@ -1161,26 +1163,27 @@ HTTP response header (prefix with `\_headers.`)
 
 - Being static in nature, these set of tests are tied to a specific version of the Margo specification.
 
-- They will be represented in a single file, with the following generic structure :
+- They will be represented in a single file (`ctt-runner/device-supplier/utils/manifests/assertions.json`), with the following generic structure :
 
 ```json
 {
-  "rejected_certificates": [ ... ],
   "endpoints": 
   {
-    "POST_onboarding":    { ... },
     "POST_capabilities":  { ... },
-    "PUT_capabilities":   { ... },
-    "POST_status":        { ... },
-    "GET_onboarding_certificate": { ... }
+    "POST_status":        { ... }
   },
   "error_responses": 
   {
     "badRequest":    { "status_code": 400, "format": "error_string" },
+    "notFound":      { "status_code": 404, "format": "error_string" },
     "unprocessable": { "status_code": 422, "format": "validation_errors" }
   }
 }
 ```
+
+- The entry names are fixed names used by the mock WFM: `POST_capabilities` holds the rules for `PUT /api/v1/capabilities/{deviceId}` and `POST_status` the rules for `POST /api/v1/deployments/{deploymentId}/status`.
+
+- The file also contains `rejected_certificates` and the entries `POST_onboarding` and `GET_onboarding_certificate`. They belong to the onboarding API of earlier specification versions and are not used for Margo 1.0.0-rc.3.
 
 <table>
 <tr>
@@ -1190,14 +1193,6 @@ HTTP response header (prefix with `\_headers.`)
 <th>
 **Purpose**
 </th>
-</tr>
-<tr>
-<td>
-`rejected\_certificates`
-</td>
-<td>
-Array of cert values that get a 403 response during onboarding
-</td>
 </tr>
 <tr>
 <td>
@@ -1222,18 +1217,18 @@ Defines what error format each type of failure uses
 - An element of  ‘endponts’ has the following structure – 
 
 ```json
-"POST_onboarding": 
+"POST_capabilities": 
 {
-  "path": "/api/v1/onboarding",
-  "method": "POST",
+  "path": "/api/v1/capabilities/{deviceId}",
+  "method": "PUT",
   "status_code": 201,
-  "validation_error_key": "badRequest",
+  "validation_error_key": "unprocessable",
   "validations": [ ... ],
   "response_structure": 
   {
     "matches": 
     [
-      { "description": "Response must contain clientId", "json": "clientId", "type": "string" }
+      { "description": "Response must indicate success", "json": "status", "value": "capabilities_received" }
     ]
   }
 }
@@ -1294,7 +1289,7 @@ Expected HTTP status on success
 Only for write endpoints
 </td>
 <td>
-Which `error\_responses` entry to use when validation fails (`"badRequest"` or `"unprocessable"`)
+Which `error\_responses` entry to use when validation fails (`"badRequest"` or `"unprocessable"`). The response is sent as RFC 9457 problem details (`application/problem+json`) with that status code
 </td>
 </tr>
 <tr>
@@ -1329,13 +1324,14 @@ Documents expected response fields (informational)
 
 ```json
 {
-  "rule_id": "capabilities-008",
-  "field": "properties.roles",
+  "rule_id": "capabilities-019",
+  "field": "properties.supportedDeploymentTypes",
   "type": "array",
-  "required": true,
+  "required": false,
+  "minItems": 1,
   "itemsType": "string",
-  "itemsEnum": ["Standalone Cluster", "Cluster Leader", "Standalone Device"],
-  "description": "properties.roles must contain valid Margo device roles"
+  "itemsEnum": ["helm", "compose", "custom"],
+  "description": "properties.supportedDeploymentTypes is required and must contain at least one supported deployment type"
 }
 ```
 
@@ -1393,7 +1389,7 @@ string
 Yes
 </td>
 <td>
-One of: `"string"`, `"number"`, `"object"`, `"array"`
+One of: `"string"`, `"number"`, `"boolean"`, `"object"`, `"array"`
 </td>
 </tr>
 <tr>
@@ -1408,6 +1404,20 @@ Yes
 </td>
 <td>
 If `true`, server rejects request if field is absent
+</td>
+</tr>
+<tr>
+<td>
+`requiredIf`
+</td>
+<td>
+string
+</td>
+<td>
+No
+</td>
+<td>
+Path of another field. The rule is applied only when that field is present, for example `"properties.cpus"` for a rule on `properties.cpus.\*.cores`
 </td>
 </tr>
 <tr>
@@ -1730,23 +1740,22 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 
 ### Examples of Assertions used in API Contract test
 
-**Pattern 1: Required exact-value string**  
-_(e.g., __apiVersion__ — spec mandates a fixed value)_
+**Pattern 1: Required object**  
+_(e.g., __properties__ — the body must contain it)_
 
 ```json
 {
-  "rule\_id": "onboarding-001",
-  "field": "apiVersion",
-  "type": "string",
+  "rule\_id": "capabilities-003",
+  "field": "properties",
+  "type": "object",
   "required": true,
-  "value": "onboarding.margo.org/v1alpha1",
-  "description": "apiVersion must be exactly 'onboarding.margo.org/v1alpha1'"
+  "description": "properties field is required"
 }
 
 ```
 
 **Pattern 2: Required non-empty string**  
-_(e.g., certificate, __serialNumber__ — must be present, no fixed value)_
+_(e.g., __serialNumber__ — must be present, no fixed value)_
 
 ```json
 
@@ -1767,12 +1776,13 @@ _(e.g., CPU architecture — optional but must be a known value if present)_
 ```json
 
 {
-  "rule\_id": "capabilities-012",
-  "field": "properties.resources.cpu.architecture",
+  "rule\_id": "capabilities-010",
+  "field": "properties.cpus.\*.architecture",
   "type": "string",
   "required": false,
-  "enum": \["amd64", "x86\_64", "arm64", "arm"],
-  "description": "cpu.architecture must use a supported value when present"
+  "requiredIf": "properties.cpus",
+  "enum": \["amd64", "arm64", "arm"],
+  "description": "properties.cpus\[].architecture must use a supported architecture value when present"
 }
 
 ```
@@ -1791,18 +1801,19 @@ _(e.g., deployment state — required, only allowed values)_
 }
 ```
 
-**Pattern 5: Required array with ****enum**** items**  
-_(e.g., device roles — array, each item must be a known role)_
+**Pattern 5: Array with ****enum**** items**  
+_(e.g., supported runtimes — array, each item must be a known runtime)_
 
 ```json
 {
-  "rule\_id": "capabilities-008",
-  "field": "properties.roles",
+  "rule\_id": "capabilities-018",
+  "field": "properties.supportedRuntimes",
   "type": "array",
-  "required": true,
+  "required": false,
+  "minItems": 1,
   "itemsType": "string",
-  "itemsEnum": \["Standalone Cluster", "Cluster Leader", "Standalone Device"],
-  "description": "properties.roles must contain valid Margo device roles"
+  "itemsEnum": \["oci", "custom"],
+  "description": "properties.supportedRuntimes is required and must contain at least one supported runtime"
 }
 ```
 
@@ -1811,10 +1822,11 @@ _(e.g., every interface must have a recognized type)_
 
 ```json
 {
-  "rule\_id": "capabilities-016",
-  "field": "properties.resources.interfaces.\*.type",
+  "rule\_id": "capabilities-014",
+  "field": "properties.interfaces.\*.type",
   "type": "string",
-  "required": true,
+  "required": false,
+  "requiredIf": "properties.interfaces",
   "enum": \["ethernet", "wifi", "cellular", "bluetooth", "usb", "canbus", "rs232"],
   "description": "Each interface must declare a supported type"
 }

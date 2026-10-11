@@ -50,17 +50,17 @@ which parts of the Margo spec it does and does not conform to.**
 
 ```
                          ┌─────────────────────────────┐
-                         │        conformance.sh        │   Prepare
-                         │  (pick persona, build/select  │
-                         │   a test group, generate      │
-                         │   group.json + certs)         │
+                         │   ctt-creator/ctt-start.sh    │   Author
+                         │  (pick persona, point at a    │
+                         │   folder of test cases,       │
+                         │   create the group.json)      │
                          └───────────────┬───────────────┘
-                                         │
+                                         │  test-suites/<persona>/<group>/
                                          ▼
                          ┌─────────────────────────────┐
-                         │         run-tests.sh          │   Execute
-                         │  (dispatches to the runner    │
-                         │   for the chosen persona)      │
+                         │    ctt-runner/ctt-start.sh    │   Execute
+                         │  (set up identity, pick a     │
+                         │   group, run its tests)       │
                          └──┬──────────┬──────────┬──────┘
                             │          │          │
               ┌─────────────┘          │          └─────────────┐
@@ -78,7 +78,7 @@ which parts of the Margo spec it does and does not conform to.**
               └────────────────────────┴──────────────────────────┘
                                         ▼
                          ┌─────────────────────────────┐
-                         │    Runner/<persona>/*.html    │   HTML report,
+                         │ ctt-runner/reports/<persona>/ │   HTML report,
                          │   pass/fail, per CR-ID          │   one per run
                          └─────────────────────────────┘
 ```
@@ -87,8 +87,8 @@ Two CLIs drive the whole system:
 
 | CLI | Role |
 |---|---|
-| `conformance.sh` | **Prepare** — pick a persona, author or select a test group, decide which test IDs it contains |
-| `run-tests.sh` | **Execute** — run the chosen group's tests against a real system under test and generate the HTML report |
+| `ctt-creator/ctt-start.sh` | **Author** — pick a persona, point at a folder of test cases, and create or update a test group from them |
+| `ctt-runner/ctt-start.sh` | **Execute** — set up the identity, run a group's tests against a real system under test, and generate the HTML report |
 
 ---
 
@@ -114,10 +114,11 @@ bodies.
 
 ### Device Supplier
 
-The toolkit plays the role of a conformant WFM and waits for the vendor's
-real device agent to connect, checking that the device calls the right
-endpoints, authenticates correctly, and handles the manifests it is served
-correctly.
+The toolkit plays the role of a conformant WFM (the mock WFM, mTLS on port
+3003). It can be used in two ways: the toolkit's own device client runs the
+group's scenarios against the mock WFM, or the vendor's real device agent
+connects to it and the mock WFM's log shows each request with the status it
+was answered with and, for a rejection, the reason.
 
 ### Application Supplier
 
@@ -130,21 +131,28 @@ Application Description spec.
 
 ## 4. Identity & Transport Model
 
-As of spec baseline `1.0.0-rc.3`, WFM ↔ device traffic is authenticated via
+In spec baseline `1.0.0-rc.3`, WFM ↔ device traffic is authenticated via
 **MIAF** (the Margo Identity and Authorization Framework): each side holds an
-**X.509-SVID** — a SPIFFE-based identity certificate, provisioned out of band
-by an operator or a Margo Identity Service (MIS) — and every Management
-Interface call runs over **mutual TLS**. This replaced the earlier scheme,
-where each request carried its own HTTP Message Signature (RFC 9421).
+**X.509-SVID** — a SPIFFE-based identity certificate issued by a Margo
+Identity Service (MIS) — and every Management Interface call runs over
+**mutual TLS**. The earlier scheme (an onboarding API call, then an HTTP
+Message Signature on each request) no longer exists in the spec, and the
+suite does not test it.
 
-The toolkit supports **both transports side by side**: existing signed
-scenarios keep working unchanged, and newer scenarios opt into mTLS per-step.
-This lets the WFM Supplier and Device Supplier runners test a vendor
-implementation regardless of which transport generation it has migrated to.
+| Side | SPIFFE ID |
+|---|---|
+| WFM | `spiffe://<trust-domain>/margo/wfm/<wfm-id>` |
+| WFM Client (device) | `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>` |
 
-The full identity model — SPIFFE IDs, trust bundles, SVID issuance and
-rotation, and exactly what changed between the two transports — is
-out of scope for an architecture document and is covered in depth in
+The toolkit does not issue identities. The SVIDs come from the MIS of the
+trust domain (for the sandbox: `mis.sh generate-svid`) and are given to the
+runner once, as a folder, in *Setup MIAF Identity* (WFM Supplier) or *Setup
+Identity* (Device Supplier). On every request the toolkit presents its SVID,
+verifies the other side's certificate against the MIS CA, and checks that the
+other side's SPIFFE ID is the one that belongs to its own.
+
+The full identity model — trust bundles, SVID issuance and rotation, and
+exactly what changed from the earlier scheme — is covered in
 [`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md).
 
 ---
@@ -153,72 +161,124 @@ out of scope for an architecture document and is covered in depth in
 
 ```
 conformance_test_toolkit/
-├── conformance.sh                   # CLI #1: prepare test data/groups
-├── run-tests.sh                     # CLI #2: execute tests, generate reports
+├── ctt-creator/                     # CLI #1: author test groups
+│   ├── ctt-start.sh                 #   entry point
+│   └── <persona>/dev-guide/         #   developer guide per persona
 │
-├── wfm-supplier/                    # WFM Supplier persona
-│   ├── run_wfm_scenarios.js         #   declarative scenario runner (mTLS + RFC 9421)
-│   ├── postman_collection.json      #   legacy Postman/Newman collection
-│   └── fixtures/                    #   MIAF SVID + trust-bundle fixtures, sample app packages
+├── ctt-runner/                      # CLI #2: execute tests, generate reports
+│   ├── ctt-start.sh                 #   entry point
+│   ├── wfm-supplier/                #   WFM Supplier persona
+│   │   ├── scripts/run_wfm_scenarios.js   # runs scenario files and Postman collections over mTLS
+│   │   └── utils/                   #   identity (fixtures/miaf/real), sample app package
+│   ├── device-supplier/             #   Device Supplier persona (Go)
+│   │   ├── scripts/run_tests.go     #   the toolkit's device client (scenario runner)
+│   │   ├── scripts/cmd/device-supplier/   # the mock WFM server
+│   │   └── utils/                   #   assertions.json, deployment templates, sample apps
+│   ├── app-supplier/scripts/        #   Application Package structural validator (Go)
+│   └── reports/<persona>/           #   generated HTML reports
 │
-├── device-supplier/                 # Device Supplier persona (Go)
-│   ├── run_tests.go                 #   scenario runner driving the mock WFM
-│   └── cmd/device-supplier/         #   the mock WFM server itself
+├── test-suites/                     # Test cases and groups
+│   ├── wfm-supplier/<group>/        #   group.json + test-cases/*.json
+│   ├── device-supplier/<group>/     #   group.json + test-cases/*.json
+│   └── app-supplier/<package>/      #   Application Packages (margo.yaml + resources)
 │
-├── Application-Supplier-Service/    # Application Package structural validator (Go)
-├── Application-Supplier/            # Sample/reference Application Package
-│
-├── testcases/                       # Declarative scenario JSON, one folder per test group
-├── Data-Generator/                  # conformance.sh's working area: group + test-ID authoring
-├── Runner/                          # Generated HTML reports land here, one subfolder per persona
-├── scripts/                         # One-off setup helpers (e.g. MIS identity provisioning)
-│
-├── docs/                            # This document, the MIAF migration guide, the client brief
-└── manual-test-cases/               # Test cases not yet automated into the runners above
+├── docs/                            # Setup guides, this document, flows, test-case templates
+└── _archive/                        # Deprecated files from the earlier layout
 ```
 
 Each persona's runner is independent of the other two — there is no shared
-runtime dependency between `wfm-supplier/`, `device-supplier/`, and
-`Application-Supplier-Service/` beyond the common test-data conventions
+runtime dependency between them beyond the common test-data conventions
 described below.
 
 ---
 
 ## 6. The Test Data Model
 
-Regardless of persona, a **test group** is the core organizational unit: a
-named collection of test IDs a vendor runs together (e.g. a "core" group for
-baseline conformance, a larger group for full coverage).
+### Test cases
 
-- **`group.json`** — declares a group's name, version, persona, and the list
-  of test/scenario/step IDs it includes.
-- **Scenario files** (`testcases/<group>/*.json`) — declare the actual
-  requests, expected responses, and validations. A scenario is a named
-  sequence of steps; a step can be included in a group individually, or a
-  whole scenario can be included at once.
-- **CR-ID tagging** — every validation is tagged with the spec requirement
-  ID it checks, so the final report can show, per requirement, whether it
-  was covered and whether it passed.
+- **Scenario files** (`test-suites/<persona>/<group>/test-cases/*.json`)
+  declare the actual requests, expected responses, and validations. A
+  scenario is a named sequence of steps. The WFM Supplier persona also
+  accepts a **Postman collection** in the same folder.
+- **CR-ID tagging** — a scenario or step lists the spec requirement IDs it is
+  evidence for (`crIds`), so the report can show them next to each result.
 
-This model is intentionally the same shape across all three personas, so a
-vendor who has learned how groups work for one persona already understands
-it for the others.
+The format of both is described in
+[`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md).
+
+### Test groups
+
+A **group** is a named list of test IDs with a spec version: `group.json`
+holds the name, version, description, the folder where the test files live,
+and the IDs of the scenarios, steps or Postman requests to run. The tests
+themselves stay in the test files; the group only selects from them.
+
+```json
+{
+  "name": "quick-check",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "A first check of the URL and the identity setup, a few seconds: ...",
+  "FolderPath": ["../test-suites/wfm-supplier/quick-check/test-cases"],
+  "testCases": ["wfm-core-capabilities", "wfm-core-cap-1", "wfm-core-cap-2", "..."]
+}
+```
+
+How it helps:
+
+- **Spec authors / Margo:** they can add or regroup tests without touching
+  the runner. They put the test files in a folder and run `ctt-creator`,
+  which asks for the group's name, version and description and writes the
+  `group.json` with every test ID it finds in that folder.
+- **Vendors:** they pick one name instead of choosing tests. They can start
+  with a small group while developing (`quick-check`, or the group for the
+  area they are working on) and run `core` when ready.
+- **Reviewers / plugfest:** the report carries the group name and version, so
+  "passed `core` 1.0.0-rc.3" means the same thing on every machine, and two
+  vendors' results are comparable.
+- **Risky or setup-dependent tests:** these stay out of the default run.
+  `device-unregister` is the example: it is kept separate because it stops
+  the sandbox Symphony WFM.
+
+The groups shipped with the toolkit:
+
+| Group | Persona | What it checks |
+|---|---|---|
+| `quick-check` | both | A first check of the URL and the identity setup, a few seconds |
+| `management-interface` | both | The Management Interface API, accepted and rejected requests |
+| `identity` | both | mTLS handshake, trust, SVID rotation |
+| `observability` | both | OpenTelemetry |
+| `deployment-delivery` | WFM | A multi-component deployment: URLs, deployment YAML, bundle, digests |
+| `application-registry` | WFM | The OCI Application Registry |
+| `device-unregister` | WFM | `DELETE /api/v1/capabilities/{deviceId}` |
+| `postman-lifecycle`, `postman-error-handling` | WFM | The same kind of tests written as Postman collections |
+| `manifest-integrity` | Device | Manifests a device must reject, and one it must accept |
+| `random-order` | Device | The lifecycle scenarios in a different random order on every run |
+| `core` | both | The full set (WFM: everything except `device-unregister`) — the conformance result |
+
+`core` holds the complete test-case file of a persona. Each other group has
+its own `test-cases` folder with the scenarios it runs, so a scenario that is
+changed in `core` has to be changed in the group that also carries it.
 
 ---
 
 ## 7. The Two-CLI Workflow
 
-1. **`conformance.sh`** — interactive: pick a persona, then either select an
-   existing test group or build a new one by choosing which scenarios/steps
-   to include. Writes into `Data-Generator/`.
-2. **`run-tests.sh`** — pick a persona and a group (or, for Application
-   Supplier, a package to check), point it at the real system under test,
-   and it runs the appropriate persona's runner and writes the HTML report
-   into `Runner/`.
+1. **`ctt-creator/ctt-start.sh`** — interactive: pick a persona, enter a
+   group name (new or existing), the spec version and a description, then
+   the folder that holds the test-case files. It writes
+   `test-suites/<persona>/<group>/group.json`.
+2. **`ctt-runner/ctt-start.sh`** — pick a persona, set up the identity once,
+   pick a group (or, for Application Supplier, a package to check), enter the
+   URL of the system under test, and it runs that persona's runner and writes
+   the HTML report into `ctt-runner/reports/<persona>/`.
 
-Exact commands and flags are covered in the top-level
-[`README.md`](../README.md); this document only describes the roles the two
-CLIs play in the overall system.
+The two steps can be done by different people: a spec author creates and
+commits a group; any vendor who clones the repository can run it.
+
+Exact commands are in the top-level [`README.md`](../README.md) and the two
+setup guides; this document only describes the roles the two CLIs play in
+the overall system.
 
 ---
 
@@ -231,12 +291,11 @@ that was tested. A report always shows, for every check that ran:
 - the expected outcome vs. the actual outcome, and
 - the spec requirement ID (CR-ID) that check is evidence for.
 
-A requirement is shown as "covered" once at least one check tagged with its
-CR-ID has run; whether it is shown as passing depends on whether that check
-(or any of that requirement's checks) succeeded. This is what lets a vendor,
-or a spec reviewer, go from a single failing row straight to the specific
-clause of the spec it violates — rather than a suite that only reports an
-aggregate pass/fail.
+This is what lets a vendor, or a spec reviewer, go from a single failing row
+straight to the specific clause of the spec it violates — rather than a suite
+that only reports an aggregate pass/fail. A check that could not be run
+(for example an SVID rotation test when no SVID was rotated) is reported as
+NOT RUN or SKIP with the reason, not as a pass.
 
 ---
 
@@ -244,6 +303,9 @@ aggregate pass/fail.
 
 | Document | What it's for |
 |---|---|
-| [`README.md`](../README.md) | Prerequisites and exact commands to run each persona |
-| [`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Full protocol detail: every conformance flow end to end, terminology glossary, and the RFC 9421 → MIAF migration analysis |
+| [`README.md`](../README.md) | Prerequisites and the commands of the two CLIs |
+| [`wfm-supplier-setup-guide.md`](wfm-supplier-setup-guide.md) | Step-by-step for testing a WFM |
+| [`device-supplier-setup-guide.md`](device-supplier-setup-guide.md) | Step-by-step for testing a device |
+| [`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md) | The conformance approach and the test-case templates (Postman, Margo scenario schema) |
+| [`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Full protocol detail: every conformance flow end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF |
 | [`client-demo-brief.md`](client-demo-brief.md) | One-page summary for explaining the suite to a vendor or stakeholder |

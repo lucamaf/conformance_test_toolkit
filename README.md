@@ -18,20 +18,16 @@ actual test code.
 
 ## Current spec baseline
 
-This suite targets **Margo spec `1.0.0-rc.3`**, which introduced **MIAF**
-(the Margo Identity and Authorization Framework): identity is now an
-X.509-SVID (a SPIFFE-based certificate) provisioned out of band by an
-operator, and every WFM Management Interface call is authenticated via
-**mutual TLS**, not the earlier per-request HTTP Message Signatures (RFC 9421)
-scheme. If you're new to this change, **start with
-[`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md)**
-— it explains the full flow, every term (SPIFFE ID, Trust Bundle, SVID, digest,
-manifest, ...), and exactly what changed and why, in plain language.
+This suite targets **Margo spec `1.0.0-rc.3`**, which uses **MIAF** (the Margo
+Identity and Authorization Framework): identity is an X.509-SVID (a
+SPIFFE-based certificate) issued by a Margo Identity Service (MIS), and every
+WFM Management Interface call is authenticated via **mutual TLS**. The
+onboarding API and the per-request HTTP Message Signatures (RFC 9421) of
+earlier spec versions are gone, and the suite no longer tests them.
 
-The suite supports **both** transports side by side while real-world WFMs
-migrate: existing RFC 9421-signed scenario files keep working unchanged, and
-newer scenario files opt into mTLS per-step (`"mtls": true`). Nothing needs
-migrating all at once.
+[`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md)
+explains the full flow, every term (SPIFFE ID, Trust Bundle, SVID, digest,
+manifest, ...), and what changed from the earlier versions.
 
 ---
 
@@ -44,8 +40,8 @@ migrating all at once.
 | **Application Supplier** | An Application Package (`margo.yaml` + resources) | A validator that checks its structure against the Application Description spec |
 
 Every test is a real request/response pair, checked against the spec — both
-the "happy path" and deliberately-broken cases (bad signature, wrong content
-type, invalid enum value, missing required field, etc.), so a report row
+the "happy path" and deliberately-broken cases (identity that must be refused,
+wrong content type, invalid enum value, wrong digest, etc.), so a report row
 always reads as *expected vs. actual*, not just pass/fail.
 
 ---
@@ -55,24 +51,28 @@ always reads as *expected vs. actual*, not just pass/fail.
 ```
 conformance_test_toolkit/
 ├── ctt-creator/               # Test-case authoring and group management
-│   ├── ctt-start.sh           #   entry point: create/edit test groups
-│   ├── common/scripts/        #   shared helpers
-│   ├── wfm-supplier/          #   WFM group authoring scripts + utils/groups/
-│   ├── device-supplier/       #   Device group authoring scripts + utils/groups/
-│   └── app-supplier/          #   App Package group authoring
+│   ├── ctt-start.sh           #   entry point: create or update a test group
+│   ├── wfm-supplier/          #   OpenAPI → Postman collection generation, dev guide
+│   ├── device-supplier/       #   dev guide
+│   └── app-supplier/          #   dev guide
 ├── ctt-runner/                # Test execution and report generation
-│   ├── ctt-start.sh           #   entry point: run tests against a real system
-│   ├── reports/               #   generated HTML reports, organized by persona + group
+│   ├── ctt-start.sh           #   entry point: run a group against a real system
+│   ├── reports/               #   generated HTML reports, one folder per persona
 │   ├── wfm-supplier/          #   run_wfm_scenarios.js + utils/fixtures/ + utils/certs/
-│   ├── device-supplier/       #   Go runner (run_tests.go, mock WFM server) + utils/
+│   ├── device-supplier/       #   Go runner (run_tests.go) + mock WFM server + utils/
 │   └── app-supplier/          #   Application Package structural validator (Go)
-├── test-suites/               # Declarative test cases, one folder per persona + group
-│   ├── wfm-supplier/core/test-cases/wfm-supplier.json   # 8 scenarios, 29 steps
-│   ├── device-supplier/core/test-cases/device-supplier.json  # 23 scenarios, 104 steps
-│   └── app-supplier/
-├── docs/                      # Architecture, MIAF migration guide, client-facing brief
+├── test-suites/               # Test cases, one folder per persona and group
+│   ├── wfm-supplier/<group>/     # group.json + test-cases/
+│   ├── device-supplier/<group>/  # group.json + test-cases/
+│   └── app-supplier/             # Application Packages to validate
+├── docs/                      # Setup guides, architecture, flows, test-case templates
 └── _archive/                  # Deprecated files preserved for reference (see _archive/README.md)
 ```
+
+The full set of each persona is the `core` group:
+`test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 37
+steps) and `test-suites/device-supplier/core/test-cases/device-supplier.json`
+(24 scenarios, 112 steps).
 
 ---
 
@@ -82,42 +82,61 @@ conformance_test_toolkit/
 |---|---|
 | **Node.js** (any recent LTS) | `run_wfm_scenarios.js` — no `npm install` required, uses only Node built-ins |
 | **Go 1.24+** | `ctt-runner/device-supplier/` and `ctt-runner/app-supplier/` |
-| **`npm install -g newman`** | Only if running the legacy Postman collection path (archived) |
+| **`jq`** | Reading `group.json` in both CLIs |
 | **`oras` CLI** | Application Registry (OCI) conformance checks |
-| **OpenSSL** | Certificate/SVID generation used throughout test setup |
+| **OpenSSL** | Checking the SVIDs during identity setup |
+| **npm** | Only for `ctt-creator`'s "OpenAPI spec based contract tests", which uses Portman to generate a Postman collection |
 
 ---
 
 ## Quick start
 
-The suite is driven by two top-level CLIs:
+The suite is driven by two CLIs. Both are menu-driven; start with the setup
+guide of your persona (see [Key documents](#key-documents)).
 
 ```bash
-# 1) Prepare test data — pick a persona, select/create a test group
-./ctt-creator/ctt-start.sh
+# 1) Author: put test cases in a folder and create a test group from them
+bash ctt-creator/ctt-start.sh
 
-# 2) Execute tests against a real system under test, generate the HTML report
-./ctt-runner/ctt-start.sh wfm <group> <WFM_URL>          # WFM Supplier
-./ctt-runner/ctt-start.sh device <group-or-scenarios>    # Device Supplier
-./ctt-runner/ctt-start.sh application                    # Application Supplier
-./ctt-runner/ctt-start.sh help                           # full usage, all options
+# 2) Run: set up the identity once, pick a group, get the HTML report
+bash ctt-runner/ctt-start.sh                           # interactive menu
+bash ctt-runner/ctt-start.sh wfm <group> <WFM_URL>     # WFM Supplier
+bash ctt-runner/ctt-start.sh device <group>            # Device Supplier
+bash ctt-runner/ctt-start.sh application               # Application Supplier
+bash ctt-runner/ctt-start.sh help
 ```
 
-Reports land in `ctt-runner/reports/<persona>/`, organized by test group.
+Reports land in `ctt-runner/reports/<persona>/`.
 
-For an MIAF (mTLS) scenario group specifically, `ctt-runner/ctt-start.sh` detects the
-declarative JSON format automatically and drives it through
-`run_wfm_scenarios.js` directly (no Newman involved) — see
-`run_wfm_scenario_group()` in `run-tests.sh` if you need to see exactly how.
+**Identity:** every run needs an X.509-SVID. Issue it with your MIS (for the
+sandbox: `mis.sh generate-svid`) and give the folder to the runner once:
+WFM Supplier → *Setup MIAF Identity*, Device Supplier → *Setup Identity*. The
+setup guides show the exact answers for each prompt.
 
-**Provisioning an identity for MIAF testing:** `ctt-runner/ctt-mis.sh`
-generates a local CA and X.509-SVIDs (one WFM identity, one device/WFM-client
-identity) using OpenSSL — no external SPIFFE server required.  Run it once
-from the `ctt-start.sh` menu (WFM Supplier → Setup MIAF Identity) or directly;
-it automatically installs the CTT fixtures under
-`ctt-runner/wfm-supplier/utils/fixtures/miaf/real/`.
-For vendor WFMs with their own SPIFFE infrastructure, copy the externally
-issued cert + key + CA into `miaf/real/` manually instead.
+---
+
+## Test groups
+
+A **group** is a named list of test IDs with a spec version. Its `group.json`
+holds the name, version, description, the folder where the test files live,
+and the IDs of the scenarios, steps or Postman requests to run. The runner
+lists the groups with their descriptions and runs the one you pick; the report
+carries the group name and version.
+
+| Group | Persona | What it is for |
+|---|---|---|
+| `quick-check` | both | A first check of the URL and the identity setup |
+| `management-interface` | both | The Management Interface API |
+| `identity` | both | mTLS, trust, SVID rotation |
+| `observability` | both | OpenTelemetry |
+| `deployment-delivery`, `application-registry` | WFM | Delivering a deployment; the OCI registry |
+| `device-unregister` | WFM | `DELETE` capabilities, kept out of `core` |
+| `postman-lifecycle`, `postman-error-handling` | WFM | Tests written in Postman |
+| `manifest-integrity`, `random-order` | Device | Manifests a device must reject; scenarios in random order |
+| `core` | both | The full set — run this for a conformance result |
+
+Why groups exist and how they are created is described in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#6-the-test-data-model).
 
 ---
 
@@ -125,20 +144,18 @@ issued cert + key + CA into `miaf/real/` manually instead.
 
 | Document | What it's for |
 |---|---|
-| [`docs/wfm-supplier-setup-guide.md`](docs/wfm-supplier-setup-guide.md) | **WFM Supplier start here.** Step-by-step: identity setup (MIAF / SPIFFE), running the core group, reading the report, troubleshooting. |
-| [`docs/device-supplier-setup-guide.md`](docs/device-supplier-setup-guide.md) | **Device Supplier start here.** Step-by-step: cert generation, starting the mock WFM, running the test suite, and optionally connecting a real device-agent. |
-| [`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Every conformance flow explained end to end, full terminology glossary, and the complete old-flow → MIAF migration analysis with CR-ID mapping. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture: what the toolkit is, how the three personas and two CLIs fit together, the test data model, and how reports trace back to spec requirements. |
+| [`docs/wfm-supplier-setup-guide.md`](docs/wfm-supplier-setup-guide.md) | **WFM Supplier start here.** Step-by-step: identity setup, running a group, reading the report, troubleshooting. |
+| [`docs/device-supplier-setup-guide.md`](docs/device-supplier-setup-guide.md) | **Device Supplier start here.** Step-by-step: identity setup, starting the mock WFM, running a group, connecting a real device-agent. |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | What the toolkit is, how the three personas and two CLIs fit together, test groups, and how reports trace back to spec requirements. |
+| [`docs/MARGO_Conformance _Approach.md`](docs/MARGO_Conformance%20_Approach.md) | The conformance approach and the **test-case templates**: Postman collections for the WFM persona, the Margo scenario schema for the device persona. Read this before writing tests. |
+| [`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Every conformance flow explained end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF. |
 | [`docs/client-demo-brief.md`](docs/client-demo-brief.md) | One-page summary for explaining the suite to a vendor or stakeholder. |
 
 ---
 
 ## Status
 
-This suite is under active development alongside the Margo spec itself. Some
-scenario groups still use the pre-MIAF RFC 9421 transport pending real-world
-WFM/device migrations; new work should default to the mTLS transport
-(`"mtls": true` on a step) per `docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`.
+This suite is under active development alongside the Margo spec itself.
 
 ## License
 

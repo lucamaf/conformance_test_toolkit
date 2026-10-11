@@ -1,9 +1,9 @@
 #!/bin/bash
 
 ################################################################################
-# Conformance Test Case Generator CLI
-# Purpose: Create and prepare test cases for Margo Personas
-# Usage: ./conformance.sh
+# Margo Conformance Test Creator (CLI #1)
+# Purpose: Create and update test groups for Margo Personas
+# Usage: bash ctt-creator/ctt-start.sh
 ################################################################################
 
 set -euo pipefail
@@ -154,7 +154,7 @@ PYEOF
     fi
     
     log "✅ Test cases generated successfully"
-    log "📋 Copying postman_collection.json to Data-Generator..."
+    log "📋 Copying postman_collection.json to ctt-creator/wfm-supplier/utils/..."
     
     # Copy to Data-Generator
     cp postman_collection.json "$DATA_GEN_DIR/wfm-supplier/utils/"
@@ -555,101 +555,67 @@ show_help() {
     cat << 'EOF'
 
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║            Conformance Test Case Generator - Help                          ║
+║            Conformance Test Creator - Help                                 ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
 DESCRIPTION:
-  This CLI generates test cases for Margo conformance testing.
-  It prepares test data for both WFM Supplier and Device Supplier personas.
-  
-  When you select WFM Supplier, you can prepare either OpenAPI-based tests or a functional Postman collection.
-  
-  When you select Device Supplier, you manage group-based device scenarios.
+  Creates and updates test groups for the WFM Supplier and Device Supplier
+  personas. A group is a named list of test IDs with a spec version; the
+  runner (ctt-runner/ctt-start.sh) runs a group by its name.
 
 USAGE:
-  ./conformance.sh                         # Interactive menu
-  ./conformance.sh wfm openapi [SPEC_PATH] # Generate WFM OpenAPI tests
-  ./conformance.sh wfm functional [PATH]   # Prepare WFM Postman collection
-  ./conformance.sh device                  # Create/select Device groups
-  ./conformance.sh device [SCENARIOS]      # Prepare Device scenarios
+  bash ctt-creator/ctt-start.sh                          # Interactive menu
+  bash ctt-creator/ctt-start.sh wfm openapi [SPEC_PATH]  # Generate the WFM contract collection
 
-PERSONA OPTIONS:
-  
-  WFM Supplier:
-    • Generates Postman collection from OpenAPI spec
-    • Tests API contracts via Newman
-    • Option 1: OpenAPI spec based (asks for spec path: URL or local file)
-    • Option 2: MARGO template (not yet implemented)
-  
-  Device Supplier:
-    • Interactive mode opens group management
-    • Command mode can prepare a scenario file or template data
-    • Template file: device-supplier/device-scenarios/TEMPLATE_custom_test_scenario.json
-    • See device-supplier/Final-Summary.md for complete schema documentation
-    
 INTERACTIVE MENU:
-  1       - Select WFM Supplier
-  2       - Select Device Supplier group management
+  1       - WFM Supplier
+              1. OpenAPI spec based contract tests
+                 Generates a Postman collection from the Margo OpenAPI file
+                 (path or URL) with Portman.
+                 Output: ctt-creator/wfm-supplier/utils/postman_collection.json
+              2. Functional tests (group management)
+  2       - Device Supplier (group management)
   H/help  - Show this help message
   Q/quit  - Exit the program
 
-EXAMPLES:
+CREATING OR UPDATING A GROUP:
 
-  1. Interactive mode (menu-driven):
-     ./conformance.sh
+  1. Put the test-case files in a folder, normally
+       test-suites/<persona>/<group>/test-cases/
+     WFM Supplier:    Margo scenario files (JSON) or a Postman collection (v2.1)
+     Device Supplier: Margo scenario files (JSON)
+     Every scenario, step and Postman request needs a unique "id".
 
-  2. Generate WFM tests with OpenAPI spec URL:
-     ./conformance.sh wfm https://raw.githubusercontent.com/margo/specification/.../openapi.yaml
+  2. In the group menu enter 0 for a new group, or the number of an
+     existing group, then answer the prompts:
+       group name, Margo specification version, short description,
+       folder path containing the JSON files
 
-  3. Generate WFM tests with local OpenAPI spec file:
-     ./conformance.sh wfm /path/to/local/openapi.yaml
+  3. The CLI writes test-suites/<persona>/<group>/group.json with the name,
+     version, description, the folder, and every test ID found in the folder.
 
-  4. Generate Device tests with existing test-scenarios.json:
-     ./conformance.sh device "/home/margo/nitin/sandbox/conformance/device-supplier/device-scenarios/test-scenarios.json"
+  A group contains every test of its folder. For a group with fewer tests,
+  put only those test cases in the group's own test-cases folder.
 
-  5. Generate Device tests with custom test scenarios:
-     ./conformance.sh device "/path/to/your/custom_test_scenarios.json"
+TEST-CASE FORMATS:
 
-  6. View custom test scenario template:
-     cat device-supplier/device-scenarios/TEMPLATE_custom_test_scenario.json
-
-WHAT GETS GENERATED:
-
-  WFM Supplier:
-    • postman_collection.json (92KB) - 8 API test cases
-    • newman-data/ - Test environment and certificates
-    • Location: Data-Generator/wfm-supplier/
-
-  Device Supplier (Option 1 - Existing):
-    • test-scenarios.json (34KB) - 7 pre-built conformance test scenarios
-    • assertions.json - Validation rules and assertions
-    • deployment-template.yaml - Supporting manifest files
-    • Location: Data-Generator/device-supplier/
-
-  Device Supplier (Option 2 - Custom):
-    • test-scenarios.json - Your custom test scenarios file
-    • assertions.json - Your custom assertions (if provided)
-    • Location: Data-Generator/device-supplier/
-    • Template: device-supplier/device-scenarios/TEMPLATE_custom_test_scenario.json
+  docs/MARGO_Conformance _Approach.md
+    - "Postman Template for Expressing sequences of API exchanges"  (WFM)
+    - "Margo schema for server-side test-cases"                     (Device, WFM)
+  Working examples: the core, postman-lifecycle and postman-error-handling
+  groups under test-suites/.
 
 NEXT STEPS:
 
-  After generating tests, use the execution CLI to run them:
-    "$SCRIPT_DIR/../ctt-runner/ctt-start.sh"
-    "$SCRIPT_DIR/../ctt-runner/ctt-start.sh" wfm <group-name> <wfm-url>
-    "$SCRIPT_DIR/../ctt-runner/ctt-start.sh" device <group-name>
+  Run the group:
+    bash ctt-runner/ctt-start.sh
+    bash ctt-runner/ctt-start.sh wfm <group-name> <wfm-url>
+    bash ctt-runner/ctt-start.sh device <group-name>
 
 REQUIREMENTS:
 
-  WFM:
-    • npm (for Portman)
-    • curl (to download OpenAPI spec from URL)
-    • OpenAPI specification file (URL or local path)
-
-  Device:
-    • npm (for Portman) - if using OpenAPI contract tests
-    • jq (to parse test scenarios) - if using MARGO template
-    • Margo API endpoint or device-supplier/device-scenarios/test-scenarios.json
+  jq                          group management
+  npm, curl                   only for the OpenAPI spec based contract tests
 
 EOF
 }
@@ -1075,7 +1041,7 @@ EOF
                     ;;
                 *)
                     error "Unknown WFM test type: $wfm_type
-Usage: ./conformance.sh wfm [openapi|functional] [path]"
+Usage: bash ctt-creator/ctt-start.sh wfm [openapi|functional] [path]"
                     ;;
             esac
             ;;
@@ -1107,7 +1073,7 @@ Usage: ./conformance.sh wfm [openapi|functional] [path]"
                         generate_device_tests "$expanded_path"
                     else
                         error "Unknown device option: $device_type
-Usage: ./conformance.sh device [/path/to/scenarios.json|openapi|margo]"
+Usage: bash ctt-creator/ctt-start.sh device [/path/to/scenarios.json|openapi|margo]"
                     fi
                     ;;
             esac
@@ -1118,9 +1084,9 @@ Usage: ./conformance.sh device [/path/to/scenarios.json|openapi|margo]"
         *)
             error "Unknown command: $command
 
-Usage: ./conformance.sh [wfm|device|help]
+Usage: bash ctt-creator/ctt-start.sh [wfm|device|help]
 
-Run './conformance.sh help' for detailed instructions."
+Run 'bash ctt-creator/ctt-start.sh help' for detailed instructions."
             ;;
     esac
 }

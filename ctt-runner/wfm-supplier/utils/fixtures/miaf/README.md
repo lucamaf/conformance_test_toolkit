@@ -1,49 +1,38 @@
 # MIAF (mTLS) test identity — placeholder fixtures
 
 These are **throwaway, self-signed** SPIFFE-shaped certificates, generated
-locally with `openssl` (no real MIS involved), so the runner's new
-`mtls: true` step path (see `run_wfm_scenarios.js`) has something to load and
-can be exercised/verified without a real Margo Identity Service reachable.
+locally with `openssl` (no MIS involved). The runner falls back to them only
+when no identity has been installed in `real/`.
 
-They are **not** conformance-meaningful on their own — a real conformance run
-against a real MIAF-speaking WFM needs a properly minted X.509-SVID from that
-WFM's actual trust domain (see `CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md` §5.7
-and §8 open question 8 — where our real SVID gets minted from is still an
-open decision).
+They are **not** conformance-meaningful: no real WFM trusts their CA. A
+conformance run needs an X.509-SVID issued by the MIS of the WFM's trust
+domain, installed with `ctt-runner/ctt-start.sh` → WFM Supplier → *Setup MIAF
+Identity* (see `docs/wfm-supplier-setup-guide.md`). That step writes into
+`real/`.
 
 ## Files
 
 - `ca.pem` / `ca-key.pem` — a throwaway test CA (stands in for a trust domain's MIS).
-- `wfm-svid-cert.pem` / `wfm-svid-key.pem` — a test "WFM" identity
-  (`spiffe://margo-ctt.test/margo/wfm/margo-ctt-test-wfm`), useful if we ever
-  need to *play* the WFM side (e.g. a future device-supplier mock).
-- `client-svid-cert.pem` / `client-svid-key.pem` — a test "WFM Client / device"
-  identity (`spiffe://margo-ctt.test/margo/wfm/margo-ctt-test-wfm/client/margo-ctt-test-device`).
+- `wfm-svid-cert.pem` / `wfm-svid-key.pem` — a test WFM identity
+  (`spiffe://margo-ctt.test/margo/wfm/margo-ctt-test-wfm`).
+- `client-svid-cert.pem` / `client-svid-key.pem` — a test WFM Client identity
+  (`spiffe://margo-ctt.test/margo/wfm/margo-ctt-test-wfm/client/margo-ctt-test-device`).
+- `real/` — the identity installed by *Setup MIAF Identity* (see `real/README.md`).
 
-## How to use with `run_wfm_scenarios.js`
+## How the runner uses an identity
 
-Copy (or symlink) the client identity into whatever `<cert-dir>` you pass on
-the command line, using these exact names:
+At the start of every WFM run, `ctt-start.sh` copies the identity into
+`ctt-runner/wfm-supplier/utils/certs/` under the names the runner reads:
 
 ```
-cp client-svid-cert.pem <cert-dir>/svid-cert.pem
-cp client-svid-key.pem  <cert-dir>/svid-key.pem
-cp ca.pem               <cert-dir>/svid-ca.pem
+svid-cert.pem   svid-key.pem   svid-ca.pem
 ```
 
-The runner loads `svid-cert.pem` / `svid-key.pem` / `svid-ca.pem` from the
-cert dir **only if present** — everything else (the existing RFC 9421
-identity files, every scenario that doesn't set `mtls: true`) is completely
-unaffected. Any step with `"mtls": true` in its scenario JSON will then
-present this SVID instead of RFC-9421-signing the request.
+It takes `real/` when that folder holds a client SVID, otherwise the
+placeholder files above, and checks that the certificate and key match and
+that the certificate chains to the CA.
 
-## Swapping in a real, operator-minted SVID later
-
-Once a real MIS is reachable and someone mints us a proper SVID, just
-overwrite `svid-cert.pem` / `svid-key.pem` / `svid-ca.pem` in the cert dir
-(or replace these fixture files and re-copy) — **no code change required**.
-
-## Regenerating these test fixtures
+## Regenerating these placeholder fixtures
 
 ```bash
 openssl ecparam -name prime256v1 -genkey -noout -out ca-key.pem

@@ -1,10 +1,10 @@
 # Margo Conformance — End‑to‑End Flows, Terminology, and the MIAF Migration
 
-**Last updated:** 2026‑09‑22
+**Last updated:** 2026‑10‑11
 **Author:** conformance team (nitparihar)
-**Spec baseline:** `1.0.0-rc.2`→`rc.3` (SBI spec bumped, see Part 5.8) / `pre-draft` branch of `github.com/margo/specification`
+**Spec baseline:** `1.0.0-rc.3` / `pre-draft` branch of `github.com/margo/specification`
 **Reference implementation cross‑checked:** `feature/miaf` branch of `github.com/margo/sandbox` (the project's own code‑first sandbox — see Parts 5.7 and 5.8)
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (system architecture overview)
+**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (system architecture overview), the two setup guides (how to run the suite)
 
 ---
 
@@ -17,13 +17,13 @@ This document has three jobs:
    implementations. This is Parts 3–4.
 2. **Give you a plain‑language glossary** — one line + one example per term
    (digest, blob, bundle, manifest, byte, metadata, SVID, Trust Bundle, …). Part 2.
-3. **Analyse the spec change** — the latest spec (`rc.2`) **replaces the onboarding
+3. **Record the spec change** — since `rc.2` the spec **replaces the onboarding
    flow completely** with the **Margo Identity and Authorization Framework (MIAF)**.
-   The current suite is built for the *old* flow. Parts 5–7 explain the new flow in
-   detail and lay out exactly what has to change in the conformance suite.
+   The suite was first built for the *old* flow and has been migrated. Parts 5–7
+   explain the new flow in detail and what changed in the conformance suite.
 
-If you only read one thing: **Part 5 (the new onboarding flow) and Part 6 (the
-old → new change matrix).**
+If you only read one thing: **Part 5 (the flow the suite tests today) and Part 6
+(the old → new change matrix).**
 
 ---
 
@@ -47,11 +47,14 @@ disappears from every URL (`/api/v1/capabilities/{deviceId}`,
 headers. A new component, the **Margo Identity Service (MIS)**, publishes the Trust
 Bundle and an optional discovery document.
 
-**Impact on the suite:** the request‑signing engine (`run_wfm_scenarios.js`
-RFC 9421 code, the Go `signRequest`), the onboarding scenarios, and every
-`/clients/{clientId}/…` path are obsolete for `rc.2`. We need an mTLS client, a
-small **MIS mock** (or fixture SVIDs + Trust Bundle), and rewritten scenario files.
-See Part 7 for the migration plan.
+**What it meant for the suite:** the onboarding scenarios and every
+`/clients/{clientId}/…` path are gone. Both runners now use an mTLS client that
+presents an X.509‑SVID issued by the MIS and checks the SPIFFE ID of the other
+side; every Management Interface step of the test-case files is sent that way
+(`"mtls": true`). The
+suite does not run a MIS of its own: the SVIDs and the MIS CA are given to the
+runner once, as a folder, in its identity setup step. Part 7 lists what was
+changed and what is still open.
 
 ---
 
@@ -125,9 +128,9 @@ See Part 7 for the migration plan.
 | Question it answers | "Is my **WFM** spec‑conformant?" | "Is my **device agent / WFM Client** spec‑conformant?" |
 | Under test (real) | The WFM (e.g. Symphony) | The device agent binary |
 | Played by the suite (mock) | A conformant device client | A conformant WFM |
-| Runner | `wfm-supplier/run_wfm_scenarios.js` (Node) — drives HTTP at the real WFM | `device-supplier/…` Go: `cmd/device-supplier/main.go` (mock WFM) + `run_tests.go` (a simulated device, for our own regression) |
-| Scenario format | Postman collection **and** custom declarative JSON | custom declarative JSON |
-| Consolidated file | `testcases/wfm-core/postman_collection.json` | `testcases/device-conformance/test-scenarios.json` |
+| Runner | `ctt-runner/wfm-supplier/scripts/run_wfm_scenarios.js` (Node) — drives HTTP at the real WFM | `ctt-runner/device-supplier/scripts/` Go: `cmd/device-supplier/` (mock WFM) + `run_tests.go` (the suite's own device client) |
+| Scenario format | custom declarative JSON **and** Postman collection (converted by the runner) | custom declarative JSON |
+| Full set (`core` group) | `test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` | `test-suites/device-supplier/core/test-cases/device-supplier.json` |
 | Verdict logic | in the runner (Go / JS), never in scenario JSON | same |
 
 Both personas exercise the **same protocol** from opposite sides, so a spec change
@@ -135,10 +138,12 @@ hits both runners.
 
 ---
 
-## 4. CURRENT conformance flows
+## 4. EARLIER conformance flows (before MIAF — for reference only)
 
-> This is the `pre-draft` state the suite was built against — RFC 9421 signing,
-> `POST /onboarding`, `clientId` in the path. Kept here as the "before" picture.
+> This is the flow the suite was first built against — RFC 9421 signing,
+> `POST /onboarding`, `clientId` in the path. It is kept here only as the
+> "before" picture. **The suite does not run any of it today**; Part 5 is the
+> flow that is tested.
 
 ### 4.1 WFM‑supplier Flow
 
@@ -166,26 +171,10 @@ call except step 1. Signed components: `@method @target-uri @authority` (+ `cont
 for bodies). `keyid = hex(SHA-256(PKIX-DER public key))`. ECDSA sig must be **IEEE
 P1363 (64 bytes for P‑256)**, not DER. `Content-Digest: sha-256=:<b64>:`.
 
-**Negative‑path scenarios the suite runs (WFM):**
-missing/tampered signature → 401 (GET) / 400 (POST‑PUT); missing `Content-Digest` →
-400; untrusted / fresh cert → 401/403; invalid enum in capabilities → 422; semantic
-body error → 422; wrong `Accept` → 406; no `Accept` → default manifest media type;
-unknown client → 404; conditional GET → 304; ETag digest grammar `^"sha256:[0-9a-f]{64}"$`
-(MI‑034); manifest not `immutable` (MI‑035); ETag == sha256(body) (MI‑015);
-`bundle: null` when zero deployments (MI‑009); `bundle.mediaType` (MI‑031).
-
-**Known real‑WFM (Symphony) gaps** (tracked internally): no body
-validation (bad input → 201), wrong status codes (400 instead of 401/403/422),
-content negotiation → 500 instead of 406, no `304`, manifest marked `immutable`.
-
-**Blocked scenarios** (need a pre‑provisioned deployment the suite can't create):
-MI‑005, MI‑014, MI‑024, MI‑025, MI‑031(non‑null), MI‑033, MI‑038 — parked in the
-separate `wfm-multi-component` group (poll + operator assignment).
-
 ### 4.2 device‑supplier Flow
 
-The mock WFM (`cmd/device-supplier/main.go`) implements the same endpoints and
-expects the **real device agent** to:
+The mock WFM implemented the same endpoints and expected the **real device
+agent** to:
 
 ```
 real device agent                                     suite (mock WFM)
@@ -198,31 +187,9 @@ real device agent                                     suite (mock WFM)
 6. POST …/deployments/{id}/status                  →   200                  (mock checks the status manifest shape)
 ```
 
-**Named negative fixtures** the mock injects (`cmd/device-supplier/negative_fixtures.go`)
-— the device MUST reject each:
-`FixtureUnsupportedDigestAlgorithm` (MI‑008), `FixtureBundleDigestMismatch`
-(MI‑006/009), `FixtureDeploymentDigestMismatch` (MI‑019), `FixtureNonIncreasingManifestVersion`
-(MI‑010), `FixtureWrongSizeBytes` (MI‑025/026 — digest still valid, so must NOT
-reject). Plus `cert_validation.go` (`certRFC5280Violation`, MI‑004) and TLS‑trust
-(MI‑018), and signature‑algorithm acceptance (MI‑012/013/014).
-
-**Flexible‑order group:** the mock exposes test‑control endpoints (reset desired
-state, assign/unassign a deployment) so the reconciliation lifecycle and multi‑app
-scenarios can run without a human — these live in
-`testcases/device-conformance/test-scenarios.json` (scenarios `flex-*`).
-
-### 4.3 Current CR‑ID coverage (as of 2026‑09‑10)
-
-- **WFM:** `testcases/wfm-core/postman_collection.json` — 11 items, `crIds` on each,
-  ~15 MI‑ requirements covered/partially; report shows a "requirements exercised"
-  count. Separate declarative groups: `wfm-multi-component` (AD‑001 + blocked MIs),
-  `wfm-header-integrity` (MI‑026 ordering).
-- **device:** `testcases/device-conformance/test-scenarios.json` — 27 scenarios,
-  `crIds` at scenario + step level, ~30 MARGO‑DEV‑* requirements.
-
 ---
 
-## 5. NEW conformance flow (rc.2 + MIAF)
+## 5. The conformance flow today (rc.3 + MIAF)
 
 ### 5.1 The mental model
 
@@ -448,44 +415,41 @@ bundle from MIS, then opens an mTLS connection to the WFM and does the
 capabilities/deployments/status polling loop as a client. **Practical impact
 for us:** device‑supplier testing can no longer "call the device to check
 something" — it has to stand up a fake WFM, let the real device connect to
-it, and observe what the device does. That's the same mock‑WFM pattern our
-`device-supplier` runner already uses today; it just now needs to speak mTLS
-instead of RFC 9421.
+it, and observe what the device does. That is the mock‑WFM pattern of our
+`device-supplier` runner, which now speaks mTLS.
 
 **The 6 endpoints match §5.4 almost exactly.** Same 5 paths under
 `/api/v1`, same manifest/status body shapes, same ETag/digest/immutable
 rules — the only thing that changed is *how the caller proves who it is*
-(mTLS + SPIFFE ID instead of a signed request). This is good news: our
-existing declarative scenario JSON (payloads, expected statuses, digest/ETag
-checks) mostly carries over unchanged; only the transport layer underneath
-`request()` in `run_wfm_scenarios.js` needs to change.
+(mTLS + SPIFFE ID instead of a signed request). This is why the
+declarative scenario JSON (payloads, expected statuses, digest/ETag checks)
+mostly carried over; what changed is the transport layer underneath.
 
 **One real content change: the Application Package format moved on.**
 `margo.yaml`'s `apiVersion` changed from `margo.org/v1-alpha1` to plain `v1`,
 and the `kind: ApplicationDescription` field was dropped entirely — it's no
 longer part of the schema. Our Application Registry fixture package
-(`wfm-supplier/fixtures/margo-ctt-package/margo.yaml`, pushed to Harbor as
-`margo-ctt-hello-world:1.0.0`) still uses the old `apiVersion` — needs a
-one‑line fix + re‑push before we lean on it for MIAF‑era testing.
+(`ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/margo.yaml`, pushed
+to Harbor as `margo-ctt-hello-world:1.0.0`) uses the new form.
 
-**The manager's decision on MIS, and why it doesn't block us.** We do not
-need to build or operate a real MIS for conformance testing:
+**How the suite gets its trust material.** The suite does not build or
+operate a MIS:
+- The operator issues the SVIDs with the MIS of the trust domain (for the
+  sandbox: `mis.sh generate-svid`) and points the runner's identity setup step
+  at the folder. The step copies the SVID, its key and the MIS CA, verifies the
+  chain and checks the SPIFFE ID form.
 - **WFM‑supplier persona** (we act as the device talking to a real WFM): the
-  WFM supplier tells us their trust domain / MIS URL, and **once at the start
-  of a test run** we fetch `GET /.well-known/margo` then `GET
-  <trustBundleUri>` from it and cache the result for every scenario in that
-  run. We do not re‑fetch per test case.
-- **Device‑supplier persona** (we act as the WFM a real device talks to): our
-  own harness needs to serve only those same **2 endpoints**, once, so the
-  device‑under‑test can bootstrap trust in us at its startup — this is a tiny
-  static stub, not a real MIS, and it also only needs to run once per suite
-  run, not per test case.
-- Either way we still need **one** valid X.509‑SVID of our own to present in
-  the mTLS handshake (minted manually, out of band, same one‑time‑setup
-  posture as today's cert fixtures) — that doesn't change with this
-  decision, it's a separate, smaller thing.
+  suite holds one client SVID of that WFM,
+  `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`.
+- **Device‑supplier persona** (we act as the WFM a real device talks to): the
+  mock WFM holds a WFM SVID, and the suite's own device client a client SVID
+  of that WFM. The mock WFM does not serve the two MIS endpoints; a real
+  device under test gets the Trust Bundle from the MIS itself.
+- `run_wfm_scenarios.js --fetch-trust-bundle <mis-url> <output.pem>` can fetch
+  the trust anchors from a MIS through the discovery document, for setups
+  where the CA file is not at hand.
 
-### 5.8 What's new since the last review (`feature/miaf`, as of 2026‑09‑22)
+### 5.8 Notes from the reference‑implementation review of 2026‑09‑22 (`feature/miaf`)
 
 Re‑checked the reference implementation after ~29 new commits landed since
 Part 5.7 was written. Everything in 5.7 still holds — same 2 MIS endpoints,
@@ -505,20 +469,19 @@ this true:
   now opens a brand‑new TLS connection, so the allowlist check re‑runs on
   every single call, not just once per long‑lived connection.
 
-  **What this means for us:** we can now write a real conformance scenario
-  — "remove a WFM's SPIFFE ID from the allowlist mid‑run, confirm the very
-  next request from that WFM is rejected" — and expect it to actually pass
-  against a conformant device, where a few weeks ago it would have required
-  a restart to take effect.
+  **What this means for us:** a conformance scenario — "remove a WFM's
+  SPIFFE ID from the allowlist mid‑run, confirm the very next request from
+  that WFM is rejected" — is possible against a conformant device. It is not
+  in the suite yet (Part 7.1‑H).
 
 **2. Error responses are now properly parsed as RFC 9457
 `application/problem+json`, not just logged as flat strings.** The JSON
 shape itself (`type`, `title`, `status`, `retryable`, `backoffStrategy`,
 `errors[]`) was always defined in the spec — what's new is the device agent
 actually reads those fields now and reacts differently based on them (e.g. a
-specific "your relationship was retired" code path on a `403`). This
-confirms the `problem_type_is` / `is_retryable` checks we planned to add
-(Part 7.1‑F) are exactly the right shape to build.
+specific "your relationship was retired" code path on a `403`). The
+suite checks these bodies with its ordinary validations on `Content-Type`
+and `type` (Part 7.1‑F).
 
 **3. Status reports must now include `adoptedManifestVersion`.** Not a new
 endpoint — a new *required field* on the existing status‑report call,
@@ -545,23 +508,23 @@ status‑report test case needs to check this field now, including on removal.
 
 ## 6. OLD → NEW change matrix
 
-| Concern | OLD (suite implements this) | NEW (`rc.2` + MIAF) | Suite impact |
+| Concern | OLD (before `rc.2`) | NEW (MIAF, `rc.3`) | In the suite today |
 |---|---|---|---|
-| **Get an identity** | `POST /onboarding` with self‑signed cert → `clientId` | Operator provisions an X.509‑SVID out of band (CSR preferred). No API call. | Delete onboarding scenarios; add SVID fixtures / a minting helper. |
-| **Get the WFM's CA** | `GET /onboarding/certificate` | `GET` MIS discovery + `GET` Trust Bundle (JWK Set), bootstrapped by pin/anchor | New MIS mock + discovery/bundle scenarios; Trust‑Bundle refresh/replace/fail‑closed tests. |
-| **Per‑request auth** | RFC 9421: `Signature`, `Signature-Input`, `Content-Digest`; `keyid`; IEEE‑P1363 ECDSA | **mTLS** — client cert in the TLS handshake; nothing per‑request | Rip out `signRequest` / RFC 9421 engine; build an mTLS HTTP client that presents the SVID. |
-| **Transport** | server‑side TLS only | **mutual** TLS 1.3, both validate against Trust Bundle | Runner must present a client cert AND validate the server SVID's SPIFFE ID shape. |
-| **Who am I in a request** | `clientId` in every URL path + `properties.id` must equal it | SPIFFE ID in the client cert; **no `clientId` anywhere** | Every endpoint path changes; drop the `properties.id == clientId` rule. |
-| **Capabilities endpoint** | `POST` then `PUT` `/clients/{clientId}/capabilities[/{deviceId}]`; k8s‑style `{apiVersion,kind,properties}` | `PUT` (+ `DELETE`) `/capabilities/{deviceId}`; LinkML body (no `apiVersion`/`kind` envelope); hierarchical `{deviceId}` | Rewrite capability scenarios + bodies + the mock. |
-| **Desired state** | `GET /clients/{clientId}/deployments` | `GET /deployments` | Path only; body shape essentially same (`manifestVersion`, `bundle`, `deployments`). |
-| **Bundle / YAML** | `GET /clients/{clientId}/bundles/{digest}`, `…/deployments/{id}/{digest}` | `GET /bundles/{digest}`, `GET /deployments/{id}/{digest}` | Path only; digest/ETag/immutable rules unchanged. |
-| **Status** | `POST /clients/{clientId}/deployments/{id}/status`; `{apiVersion,kind,deploymentId,status,components}`; states `installed/installing/uninstalling/failed` | `POST /deployments/{id}/status`; add `adoptedManifestVersion`, optional `deviceId`; states add `removing/removed` | Rewrite status scenarios + the mock's checks. |
-| **Auth failure** | `401` "signature verification failed" / `403` untrusted cert | **TLS handshake failure** (connection refused/reset) or `403` `not-authorized` / `wfm-client-relationship-retired` for policy | Negative auth scenarios become "connection fails" assertions + a `403` policy test; the `401` cases are deleted. |
-| **Error body** | ad‑hoc `{"Error": "..."}` | RFC 9457 `application/problem+json` (+ `retryable`, `backoffStrategy`, `errors[]`) | Every validation that checks `Error` must check `type`/`title`/`status`; new `retryable` assertions. |
-| **Digest / ETag / 304 / immutable** | Present | **Unchanged** (MI‑004/006/007/009/015/025/027/030/031/034/035 all still apply) | Keep these checks; just move to the new paths. |
-| **HTTP/1.1, port 443** | Required | **Unchanged** | Keep. |
-| **`wait` (AD‑001)** | `properties.wait`, default true; `packageLocation` | `properties.wait`, default true, + `timeout`; component uses `repository` (`oci://…`) + `revision` (semver) | Update the multi‑component fixture (`packageLocation` → `repository`+`revision`). |
-| **Application Description envelope** | `apiVersion: margo.org/v1-alpha1`, `kind: ApplicationDescription` required | `apiVersion: v1`; **`kind` removed from the schema entirely** (confirmed against `feature/miaf`'s package validator, which no longer checks it) | Fix `margo.yaml` in our Application Registry fixture (`wfm-supplier/fixtures/margo-ctt-package/`) and re‑push to Harbor. |
+| **Get an identity** | `POST /onboarding` with self‑signed cert → `clientId` | Operator provisions an X.509‑SVID out of band (CSR preferred). No API call. | No onboarding scenarios. SVIDs come from the MIS and are installed with the runner's identity setup step. |
+| **Get the WFM's CA** | `GET /onboarding/certificate` | `GET` MIS discovery + `GET` Trust Bundle (JWK Set), bootstrapped by pin/anchor | The MIS CA is installed together with the SVIDs. No discovery or Trust‑Bundle refresh scenarios yet. |
+| **Per‑request auth** | RFC 9421: `Signature`, `Signature-Input`, `Content-Digest`; `keyid`; IEEE‑P1363 ECDSA | **mTLS** — client cert in the TLS handshake; nothing per‑request | Both runners use an mTLS client that presents the SVID; every Management Interface step has `"mtls": true`. |
+| **Transport** | server‑side TLS only | **mutual** TLS 1.3, both validate against Trust Bundle | Both runners verify the peer certificate against the MIS CA and check that its SPIFFE ID belongs to their own. |
+| **Who am I in a request** | `clientId` in every URL path + `properties.id` must equal it | SPIFFE ID in the client cert; **no `clientId` anywhere** | All steps use the `rc.3` paths. |
+| **Capabilities endpoint** | `POST` then `PUT` `/clients/{clientId}/capabilities[/{deviceId}]`; k8s‑style `{apiVersion,kind,properties}` | `PUT` (+ `DELETE`) `/capabilities/{deviceId}`; LinkML body (no `apiVersion`/`kind` envelope); hierarchical `{deviceId}` | `PUT` scenarios in both personas; `DELETE` in the WFM group `device-unregister`; the mock WFM implements both. |
+| **Desired state** | `GET /clients/{clientId}/deployments` | `GET /deployments` | New path; same body checks (`manifestVersion`, `bundle`, `deployments`). |
+| **Bundle / YAML** | `GET /clients/{clientId}/bundles/{digest}`, `…/deployments/{id}/{digest}` | `GET /bundles/{digest}`, `GET /deployments/{id}/{digest}` | New paths; digest and ETag checks kept; wrong‑digest `404` checks added. |
+| **Status** | `POST /clients/{clientId}/deployments/{id}/status`; `{apiVersion,kind,deploymentId,status,components}`; states `installed/installing/uninstalling/failed` | `POST /deployments/{id}/status`; add `adoptedManifestVersion`, optional `deviceId`; states add `removing/removed` | New path and body; `adoptedManifestVersion` is sent; the mock WFM accepts the new states. |
+| **Auth failure** | `401` "signature verification failed" / `403` untrusted cert | **TLS handshake failure** (connection refused/reset) or `403` `not-authorized` / `wfm-client-relationship-retired` for policy | "Connection must be refused" checks in the identity scenarios (`expect_transport_error`). No `403` policy scenario yet. |
+| **Error body** | ad‑hoc `{"Error": "..."}` | RFC 9457 `application/problem+json` (+ `retryable`, `backoffStrategy`, `errors[]`) | Checked with validations on `Content-Type` and `type`; the mock WFM answers with the registered problem types. |
+| **Digest / ETag / 304 / immutable** | Present | **Unchanged** (MI‑004/006/007/009/015/025/027/030/031/034/035 all still apply) | Kept, on the new paths. |
+| **HTTP/1.1, port 443** | Required | **Unchanged** | No change. |
+| **`wait` (AD‑001)** | `properties.wait`, default true; `packageLocation` | `properties.wait`, default true, + `timeout`; component uses `repository` (`oci://…`) + `revision` (semver) | The deployment templates and the multi‑component scenario use `repository` + `revision`. |
+| **Application Description envelope** | `apiVersion: margo.org/v1-alpha1`, `kind: ApplicationDescription` required | `apiVersion: v1`; **`kind` removed from the schema entirely** (confirmed against `feature/miaf`'s package validator, which no longer checks it) | The Application Registry fixture package uses `apiVersion: v1`. |
 
 **CR‑ID fate (WFM Management Interface):**
 
@@ -573,7 +536,10 @@ status‑report test case needs to check this field now, including on removal.
   replay), MI‑013 (`created` validity window), MI‑041 (`401` on signature
   failure). These are replaced by **mTLS/SVID** requirements from the identity
   spec (new CR‑IDs will be `MARGO-…-IDENTITY-*` / `MARGO-…-TLS-*` — the identity
-  pages don't carry CR‑IDs yet).
+  pages don't carry CR‑IDs yet). No step of the suite is tagged with the
+  obsolete IDs; the identity steps carry the suite's own interim IDs
+  `MARGO-…-MANAGEMENTINTERFACE-MIAF-001..003` until the published list has
+  identity requirements.
 - **Changed shape:** MI‑011 (look up client cert) → now "validate SVID + apply
   accepted‑client policy"; MI‑020 (WFM creates URL‑safe client ID) → gone (no
   server‑assigned ID); MI‑002 (client ID is UUIDv4…) → replaced by `wfm-client-id`
@@ -584,82 +550,73 @@ status‑report test case needs to check this field now, including on removal.
 
 ---
 
-## 7. Conformance‑suite migration plan
+## 7. What was changed in the suite
 
-### 7.1 New capabilities the suite needs
+### 7.1 Capabilities the migration called for, and their state
 
-| # | Capability | Where | Notes |
-|---|---|---|---|
-| A | **mTLS HTTP client** presenting an X.509‑SVID, validating the server SVID's SPIFFE ID | `run_wfm_scenarios.js` (Node `https` `cert`/`key`/`ca` + a SAN‑URI check), device‑supplier Go mock's `tls.Config` | Replaces the whole RFC 9421 block. Biggest single change, but it's a transport swap, not new architecture. |
-| B | **One‑time trust‑bundle fetch at suite startup (WFM‑supplier persona)** — `GET /.well-known/margo` then `GET <trustBundleUri>` against the *real* WFM supplier's declared MIS, cached in memory for the whole run | `run_wfm_scenarios.js`, a small pre‑flight step before any scenario runs | **Not** built/owned by us — we are a client of *their* MIS. No mocking. |
-| C | **A 2‑endpoint discovery stub at suite startup (device‑supplier persona)** — our harness serves `/.well-known/margo` + `/.well-known/spiffe/bundle.json` once, so the real device‑under‑test can bootstrap trust in us | extend the existing `cmd/device-supplier` mock with two static routes | This is a static file responder, not a real MIS — no minting, no dynamic state. |
-| D | **Our own SVID** (cert + key) to present in every mTLS handshake, on both personas | manually minted once (out‑of‑band, e.g. via whatever MIS instance is reachable for provisioning), stored as a fixture like today's `certs/` dir | One‑time manual setup, same posture as existing cert fixtures — not suite‑automated. |
-| E | **Negative SVID/TLS fixtures** — expired SVID, wrong trust‑domain, `cA=true` leaf, 2 URI SANs, chains to a non‑bundle anchor | fixtures + mock knobs | Mirrors the existing `negative_fixtures.go` pattern (named modes, verdict in Go). Keep this list short initially — expand only if real implementations need it. |
-| F | **`application/problem+json` assertions** — operator on `type`/`status`/`retryable` | `run_wfm_scenarios.js` `validate()` (new `problem_type_is`, `is_retryable` ops) | Replaces `{"Error"}` checks. |
-| G | **Accepted‑client‑policy test** — a valid SVID that is *not* on the allow‑list → `403` `not-authorized`; and `wfm-client-relationship-retired` | scenario + mock policy config | New, but small — one positive + one negative scenario. |
-| H | **Live allow‑list revocation test** (device‑supplier persona) — start accepted, remove the WFM's SPIFFE ID from the device's `authorized.json` mid‑run, confirm the *very next* request is rejected with no agent restart | scenario for `cmd/device-supplier`‑style testing once that mock exists | Confirmed real/testable behavior per Part 5.8 (hot‑reload + keep‑alives‑disabled) — not previously buildable. |
+| # | Capability | State in the suite |
+|---|---|---|
+| A | **mTLS HTTP client** presenting an X.509‑SVID, validating the server SVID's SPIFFE ID | **Done** in both runners (`run_wfm_scenarios.js`; the Go device client and the mock WFM's `tls.Config`). |
+| B | **Trust‑bundle fetch from the MIS** (WFM‑supplier persona) — `GET /.well-known/margo` then `GET <trustBundleUri>` | **Available as a command** (`run_wfm_scenarios.js --fetch-trust-bundle`). The normal setup takes the MIS CA from the identity folder. |
+| C | **A 2‑endpoint discovery stub** in the mock WFM (device‑supplier persona) | **Not built.** A device under test gets the Trust Bundle from the MIS itself. |
+| D | **Our own SVID** (cert + key) to present in every mTLS handshake, on both personas | **Done.** Issued by the MIS, installed by the identity setup step of the runner. |
+| E | **Negative SVID/TLS cases** | **Partly.** Covered: no client certificate, a WFM certificate from a CA that is not trusted. Not yet: expired SVID, wrong trust domain, `cA=true` leaf, two URI SANs. |
+| F | **`application/problem+json` assertions** | **Done** with the ordinary validations (`Content-Type` contains `application/problem+json`, `type` present) — no dedicated operators. |
+| G | **Accepted‑client‑policy test** — a valid SVID that is *not* accepted → `403` `not-authorized`; and `wfm-client-relationship-retired` | **Not yet a scenario.** The mock WFM does answer `403` `not-authorized` to a client whose SPIFFE ID is not one of its own clients. |
+| H | **Live allow‑list revocation test** (device‑supplier persona) | **Not built.** |
 
-**Explicitly out of scope for now** (deliberately not building, to avoid
-over‑engineering a suite that's about to change again):
-- **No MIS server of our own** — confirmed by the manager; both personas only
-  ever *consume* trust‑bundle material, never issue it.
-  See Part 5.7 for why this doesn't block anything above.
-- **No mint automation** — it's a manual, offline, Unix‑socket‑only CLI step
-  in the reference implementation; treat it as a setup script, not a feature.
+**Deliberately not built:**
+- **No MIS server of our own** — both personas only ever *consume* trust
+  material, never issue it (Part 5.7).
+- **No mint automation** — issuing an SVID is an operator step with the MIS;
+  the setup guides give the tested commands for the sandbox MIS.
 - **No trust‑bundle rotation/refresh testing** — the reference MIS itself
-  hardcodes its bundle's sequence number today (no rotation to test against
-  yet); revisit once that's real (see Part 8, open question 6).
-- **Device‑supplier "call the device" style tests** — the device has no
-  inbound API in the new flow (Part 5.7); this whole persona's test design
-  needs its own decision once the dev team's device‑side MIAF work lands
-  (see Part 8, open question 5) — not something to build reflexively now.
+  hardcodes its bundle's sequence number (Part 5.8), so there is no rotation
+  to test against yet.
+- **No "call the device" tests** — the device has no inbound API in this flow
+  (Part 5.7). The device persona is tested by letting the device, or the
+  suite's own device client, connect to the mock WFM.
 
-### 7.2 Scenario file rewrites
+### 7.2 Test-case files after the migration
 
-- **`testcases/wfm-core/postman_collection.json`** — Postman **cannot do mTLS
-  cert presentation or a TLS‑handshake‑failure assertion**. Options:
-  1. keep Postman for the request/response‑shape checks (paths, bodies, ETag,
-     `problem+json`, status codes) and configure the client cert at the Newman/
-     collection level (`--ssl-client-cert`), **or**
-  2. move the WFM persona fully onto the declarative `run_wfm_scenarios.js` runner
-     (which we control) and retire Newman for this persona.
-  Given mTLS + SPIFFE‑ID validation + Trust‑Bundle refresh logic, **option 2 is
-  cleaner** — but that's a call to make with the manager (it changes the "author
-  in Postman" story).
-- **New declarative groups:**
-  - `wfm-identity` — discovery doc, Trust Bundle fetch/refresh/replace/fail‑closed,
-    server‑SVID validation, mTLS version, connection‑lifetime.
-  - `wfm-core-v2` — the 6 management endpoints on the new paths, `problem+json`,
-    caching, `adoptedManifestVersion`.
-  - `wfm-policy` — accepted‑client‑policy + relationship‑retired.
-- **`testcases/device-conformance/test-scenarios.json`** — the device persona
-  keeps its declarative format; rewrite: drop `flex-onboarding` cert‑upload steps,
-  add "device fetches + refreshes Trust Bundle", "device presents its SVID",
-  "device validates the WFM SVID's SPIFFE ID", "device rejects an empty‑anchor
-  bundle"; move all endpoints to the new paths; add `adoptedManifestVersion` and
-  `removing`/`removed` to status steps; update the multi‑component fixture
-  (`repository`+`revision`).
+- **WFM persona:** one scenario file,
+  `test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios:
+  capabilities, desired state, content negotiation, status, header integrity,
+  multi‑component deployment, application registry, trust bundle / mTLS
+  handshake, SVID rotation, observability). Unregistering a device is in its
+  own group, `device-unregister`.
+- **Postman is still supported for the WFM persona**, but not through Newman:
+  `run_wfm_scenarios.js` converts a Postman v2.1 collection into steps and
+  sends them over mTLS (groups `postman-lifecycle`, `postman-error-handling`;
+  the rules are in `MARGO_Conformance _Approach.md`).
+- **Device persona:** one scenario file,
+  `test-suites/device-supplier/core/test-cases/device-supplier.json`
+  (24 scenarios): capabilities and deployments with their error cases, the
+  manifest cases a device must reject (unsupported digest algorithm, bundle or
+  deployment digest mismatch, non‑increasing `manifestVersion`) and one it
+  must accept (wrong `sizeBytes`, valid digest), identity (mTLS, certificate
+  conformance, trust in the WFM, SVID rotation), the reconciliation lifecycle
+  and multi‑app scenarios (`flex-*`, which use the mock WFM's test‑control
+  endpoints to assign and unassign deployments), and observability.
+- **Groups:** besides `core`, each persona has smaller named groups
+  (`quick-check`, `management-interface`, `identity`, ...), each with its own
+  `test-cases` folder. See [ARCHITECTURE.md](ARCHITECTURE.md), Part 6.
 
-### 7.3 Runner code changes (minimise, reuse — same discipline as before)
+### 7.3 Runner code after the migration
 
-- `run_wfm_scenarios.js`: **remove** `signRequest`, `prepareContentDigest`,
-  `computeKeyId`, `tamper_signature`, `skip_signing`, the `keyid` plumbing.
-  **Add** `tls: { cert, key, ca }` from a cert dir, a `serverSvidSpiffeId` check
-  hook, `problem_type_is` / `is_retryable` operators, and a **one‑time**
-  pre‑flight step (run once before the scenario loop starts, not per test)
-  that fetches the trust bundle from the WFM supplier's declared MIS and
-  caches it for the run. Net: likely **fewer** lines than today — no MIS mock
-  to write here, since we're only ever a client.
-- `cmd/device-supplier/main.go`: swap `http.Server` for one with
-  `TLSConfig{ ClientAuth: RequireAndVerifyClientCert, ClientCAs: <bundle> }` and a
-  `VerifyPeerCertificate` that enforces the SPIFFE‑ID shape + accepted‑client
-  policy; drop the RFC 9421 verifier; keep `negative_fixtures.go` /
-  `manifest_rules.go` (digest logic is unchanged) and add `svid_fixtures.go` in
-  the same named‑mode style. **Add** the 2 discovery‑stub routes
-  (`/.well-known/margo`, `/.well-known/spiffe/bundle.json`) as plain static
-  handlers, served once at mock startup — not a real MIS implementation.
-- `run_tests.go` (our simulated device): present a client SVID; validate the mock
-  WFM's SVID; drop signing.
+- `run_wfm_scenarios.js`: an mTLS client (`cert`/`key`/`ca` from the cert
+  dir) with a check of the WFM's SPIFFE ID; a NOT RUN result for a check that
+  cannot be run (for example SVID rotation when no SVID was rotated); the
+  Postman conversion. The RFC 9421 signing code is still in the file, but no
+  `rc.3` step uses it.
+- Mock WFM (`cmd/device-supplier/`): the Management Interface is served on
+  port 3003 with `RequireAndVerifyClientCert`, the client's SPIFFE ID is
+  checked on every route, errors are RFC 9457 problem details, and the log
+  shows each request with the status it was answered with. Port 3001 serves
+  only the health check and telemetry status. `negative_fixtures.go` and
+  `manifest_rules.go` (digest logic) were kept.
+- `run_tests.go` (the suite's own device client): presents a client SVID and
+  validates the mock WFM's SVID; no signing.
 
 ---
 
@@ -680,7 +637,7 @@ over‑engineering a suite that's about to change again):
 | API Requirements & Security | `.../margo-management-interface/api-requirements-and-security.md` |
 | Device Capabilities API | `.../margo-management-interface/device-capabilities.md` |
 | Deployment Status API | `.../margo-management-interface/deployment-status.md` |
-| Workload Management API (OpenAPI) | `.../margo-management-interface/workload-management-api-1.0.0-rc.2.yaml` |
+| Workload Management API (OpenAPI) | `.../margo-management-interface/workload-management-api-1.0.0-rc.3.yaml` |
 | Desired‑state schema (LinkML) | `specification/pre-draft/src/specification/margo-management-interface/desired-state.linkml.yaml` |
 | Problem Types registry | `.../specification/problem-types.md` |
 | Device Requirements | `.../specification/margo-devices/device-requirements.md` |

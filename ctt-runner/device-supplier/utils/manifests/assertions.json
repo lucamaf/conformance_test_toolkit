@@ -61,8 +61,8 @@
       }
     },
     "POST_capabilities": {
-      "path": "/api/v1/clients/{clientId}/capabilities",
-      "method": "POST",
+      "path": "/api/v1/capabilities/{deviceId}",
+      "method": "PUT",
       "status_code": 201,
       "validation_error_key": "unprocessable",
       "validations": [
@@ -244,7 +244,7 @@
       }
     },
     "POST_status": {
-      "path": "/api/v1/clients/{clientId}/deployments/{deploymentId}/status",
+      "path": "/api/v1/deployments/{deploymentId}/status",
       "method": "POST",
       "status_code": 200,
       "validation_error_key": "unprocessable",

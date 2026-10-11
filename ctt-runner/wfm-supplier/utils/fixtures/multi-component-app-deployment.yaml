@@ -33,23 +33,23 @@
 # `immutable` indicates the response never changes, but the manifest changes
 # whenever deployments are assigned or removed (MARGO-WFM-MANAGEMENTINTERFACE-030).
 
-apiVersion: margo.org/v1alpha1
-kind: ApplicationDeployment
+id: cts-multi-component-app
 metadata:
   name: cts-multi-component-app
-  annotations:
-    id: cts-multi-component-app
+  namespace: <namespace>
+  deviceId: multi-component-test-device
 spec:
-  appPackageRef:
-    id: cts-multi-component-app
+  applicationId: cts-multi-component-app
   deploymentProfile:
     type: compose
     components:
       - name: wait-true-component
         properties:
-          packageLocation: oci://<your-registry>/<your-repo>:<tag>
+          repository: oci://<your-registry>/<your-repo>
+          revision: <tag>
           wait: true
       - name: wait-false-component
         properties:
-          packageLocation: oci://<your-registry>/<your-repo>:<tag>
+          repository: oci://<your-registry>/<your-repo>
+          revision: <tag>
           wait: false

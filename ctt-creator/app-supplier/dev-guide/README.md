@@ -2,19 +2,19 @@
 
 ## Overview
 
-The **Application Supplier** persona verifies that a Margo-compliant application package conforms to the Margo Application Description specification. The CTT Creator for this persona manages the sample application packages and group configurations used for conformance validation.
+The **Application Supplier** persona verifies that a Margo application package conforms to the Margo Application Description specification. There is no network exchange: the CTT Runner reads a package folder and checks its `margo.yaml` and the resources it refers to.
 
 ## Directory Layout
 
 ```
-app-supplier/
-├── scripts/     # Shell scripts for package preparation and group management
-├── utils/       # Sample application packages and supporting utilities
-│   └── sample-package/      # A minimal valid Margo application package for testing
-│       ├── margo.yaml       # Application description file (the main artifact under test)
-│       └── resources/       # Supporting resources referenced by margo.yaml
-└── dev-guide/
-    └── README.md            # This file
+test-suites/app-supplier/
+├── sample-package/          # A package folder: one entry in the runner's list
+│   ├── margo.yaml           # Application description file (the artifact under test)
+│   └── resources/           # Resources referenced by margo.yaml
+└── app-package/
+
+ctt-runner/app-supplier/scripts/   # The validator (Go)
+ctt-runner/reports/application-supplier/   # Generated HTML reports
 ```
 
 ## Key Concepts
@@ -22,56 +22,41 @@ app-supplier/
 | Term | Meaning |
 |---|---|
 | **margo.yaml** | The application description file. This is the primary artifact the Application Supplier persona validates. |
-| **Application Package** | An OCI-compliant bundle containing `margo.yaml` and referenced resources, pushed to an OCI registry. |
-| **CTT Runner (App Supplier)** | A Go binary (`ctt-runner/app-supplier/scripts/`) that pulls a package from the registry and validates `margo.yaml` against the spec. |
+| **Application Package** | A folder containing `margo.yaml` and the resources it refers to. |
+| **CTT Runner (App Supplier)** | A Go program (`ctt-runner/app-supplier/scripts/`) that reads a package folder and validates `margo.yaml` against the spec. |
 | **MARGO-APP-APPLICATIONDESCRIPTION-\*** | Requirement IDs for the Application Description spec. |
 
-## Sample Package
+## Adding a Package
 
-The sample package at `utils/sample-package/` is a minimal valid Margo application that can be used to verify a passing conformance run. Push it to your OCI registry before running the CTT Runner.
+Copy the package folder into `test-suites/app-supplier/`:
 
 ```
-sample-package/
+test-suites/app-supplier/<your-package>/
 ├── margo.yaml
 └── resources/
     ├── description.md
     ├── license.txt
     ├── release-notes.md
-    └── opentelemtry-logo.png
+    └── <icon>.png
 ```
 
-## How to Prepare and Push the Sample Package
-
-```bash
-# Build and push to your OCI registry (example using ORAS)
-oras push <registry>/<repo>:<tag> \
-  --config /dev/null:application/vnd.margo.app-description.v1+json \
-  utils/sample-package/margo.yaml:application/vnd.margo.app-description.v1+yaml \
-  utils/sample-package/resources/
-```
-
-## How to Add or Update a Test Group
-
-1. Edit or create `utils/groups/<group-name>/group.json` (create this folder if it doesn't exist yet).
-2. Add or update the corresponding test-case file under `test-suites/app-supplier/<group>/test-cases/`.
-3. Run `../../ctt-start.sh` → select **Application Supplier** to register the group.
+This persona has no test groups and is not in the CTT Creator menu: every folder under `test-suites/app-supplier/` is listed by the runner.
 
 ## Running Tests
 
-Tests are executed by the **CTT Runner**:
-
 ```bash
-cd ../../ctt-runner
-./ctt-start.sh
-# Select: Application Supplier → enter the OCI image reference
+bash ctt-runner/ctt-start.sh
+# 3 (Application Supplier) → select the package
 ```
 
 Or directly:
 
 ```bash
-cd ../../ctt-runner/app-supplier
-go run ./scripts/... --image <registry>/<repo>:<tag>
+cd ctt-runner/app-supplier/scripts
+go run . ../../../test-suites/app-supplier/<your-package>
 ```
+
+The report is written to `ctt-runner/reports/application-supplier/`.
 
 ## Key Requirement IDs
 

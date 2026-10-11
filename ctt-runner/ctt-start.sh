@@ -3,22 +3,17 @@
 ################################################################################
 # Margo Conformance Test Runner (CLI #2)
 #
-# Purpose: Execute test cases prepared by conformance.sh (CLI #1)
-#          - WFM Supplier: Runs Newman with Postman collections
-#          - Device Supplier: Runs mock server tests with test scenarios
-#          - Generates signed conformance reports
+# Purpose: Execute the test groups created with ctt-creator/ctt-start.sh (CLI #1)
+#          - WFM Supplier: sends the group's requests to a real WFM over mTLS
+#          - Device Supplier: runs the mock WFM and the group's scenarios
+#          - Application Supplier: validates an Application Package
+#          - Generates the HTML conformance report
 #
 # Story: #278 - "As a Margo adopter, I would like to have a tool to allow me
 #        to select the suitable persona and run a set of conformance test-cases
 #        to get a signed report of conformance"
 #
-# VENDOR QUICKSTART:
-#   1. Customize environment: wfm-supplier/newman-data/device-agent.env.json
-#      - Update deviceId, clientId with your actual device identifiers
-#      - Update vendor, modelNumber, serialNumber in JSON payloads
-#   2. Customize collection: Data-Generator/wfm-supplier/postman_collection.json
-#      - Or use group-based collections for curated test subsets
-#   3. Run tests: ../ctt-runner/ctt-start.sh and select persona, group, and WFM URL
+# QUICKSTART: docs/wfm-supplier-setup-guide.md, docs/device-supplier-setup-guide.md
 #
 ################################################################################
 
@@ -29,7 +24,7 @@ set -euo pipefail
 ################################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFORMANCE_DIR="$SCRIPT_DIR"  # run-tests.sh is already IN the conformance directory
+CONFORMANCE_DIR="$SCRIPT_DIR"  # this script is already in the ctt-runner directory
 DATA_GEN_DIR="$SCRIPT_DIR/../ctt-creator"
 RUNNER_DIR="$CONFORMANCE_DIR/reports"  # Output directory for test results
 WFM_GROUP_DIR="$SCRIPT_DIR/../test-suites/wfm-supplier"
@@ -250,7 +245,7 @@ select_wfm_group() {
     done
     
     if [[ ${#groups[@]} -eq 0 ]]; then
-        echo "❌ No test groups found. Please run conformance.sh to create groups." >&2
+        echo "❌ No test groups found. Create one with: bash ctt-creator/ctt-start.sh" >&2
         return 1
     fi
     
@@ -319,7 +314,7 @@ select_device_group() {
     done
     
     if [[ ${#groups[@]} -eq 0 ]]; then
-        echo "❌ No device test groups found. Please run conformance.sh to create groups." >&2
+        echo "❌ No device test groups found. Create one with: bash ctt-creator/ctt-start.sh" >&2
         return 1
     fi
     
@@ -1431,143 +1426,70 @@ show_help() {
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
 DESCRIPTION:
-  This CLI executes conformance tests prepared by conformance.sh (CLI #1).
-  - WFM Supplier: Uses Newman to run Postman collections
-  - Device Supplier: Uses mock server to run test scenarios
-  - Generates signed conformance reports
+  Runs a test group against a real system under test and writes an HTML
+  report. Spec baseline: Margo 1.0.0-rc.3 — every Management Interface
+  request is sent over mutual TLS with an X.509-SVID (MIAF).
 
 USAGE:
-  ../ctt-runner/ctt-start.sh                         # Interactive menu
-  ../ctt-runner/ctt-start.sh wfm [GROUP] [WFM_URL]    # Run WFM tests
-  ../ctt-runner/ctt-start.sh device [GROUP|SCENARIOS] # Run Device tests
-  ../ctt-runner/ctt-start.sh help                    # Show this help
+  bash ctt-runner/ctt-start.sh                           # Interactive menu
+  bash ctt-runner/ctt-start.sh wfm <GROUP> <WFM_URL>     # Run a WFM group
+  bash ctt-runner/ctt-start.sh device <GROUP>            # Run a Device group
+  bash ctt-runner/ctt-start.sh application               # Validate an Application Package
+  bash ctt-runner/ctt-start.sh help                      # Show this help
 
 PERSONAS:
 
-  WFM Supplier:
-    • Tests Workload Fleet Manager compliance
-    • Runs API contract tests from Postman collection
-    • Supports test grouping for targeted testing
-    • Uses Newman test executor
-    • Generates HTML report with test results (group-specific if group is selected)
+  WFM Supplier        (you bring a WFM; the CTT acts as its device client)
+    1. Setup MIAF Identity   — once: give the folder with the CTT's client SVID
+    2. Functional tests      — pick a group, enter the WFM URL
+    3. OpenAPI spec based contract tests — run the collection generated from
+                               the OpenAPI file
+    Guide: docs/wfm-supplier-setup-guide.md
 
-  Device Supplier:
-    • Tests device conformance with Margo API
-    • Runs functional test scenarios
-    • Uses mock WFM server for validation
-    • Generates conformance report with assertion results
-  Application Supplier:
-    • Validates application package structure
-    • Runs Application Supplier Service
-    • Executes application conformance checks
+  Device Supplier     (you bring a device; the CTT acts as its WFM)
+    1. Setup Identity        — once: give the folder with the two SVIDs
+    2. Start Mock WFM Server — Management Interface, mTLS on port 3003
+    3. Run Tests             — pick a group; the CTT's device client runs it
+    4. Stop Mock WFM Server
+    A real device-agent is tested by pointing it at the mock WFM.
+    Guide: docs/device-supplier-setup-guide.md
 
-WORKFLOW:
+  Application Supplier
+    Validates an Application Package folder under test-suites/app-supplier/.
 
-  1. Run conformance.sh (CLI #1) to prepare test cases
-     ./conformance.sh
-     → Select persona and test type
-     → Select or create test groups
-     → Test cases prepared and grouped in Data-Generator/
+TEST GROUPS:
 
-  2. Run run-tests.sh (CLI #2) to execute tests
-     ../ctt-runner/ctt-start.sh
-     → Select persona
-     → WFM Supplier: Select test group and provide WFM URL
-     → Device Supplier: Select group-based scenarios
-     → Reports generated in Runner/ (grouped by test group)
+  A group is a named list of test IDs with a spec version. The group list
+  shows each group with its description. Start with quick-check to confirm
+  the setup; run core for the conformance result.
 
-  3. Review conformance report
-     • WFM report: Runner/wfm-supplier/ (organized by group)
-     • Device report: Runner/device-supplier/
+    test-suites/<persona>/<group>/
+    ├── group.json      name, version, description, test folder, test IDs
+    └── test-cases/     scenario files (JSON) or a Postman collection (WFM)
+
+  Groups are created with the other CLI: bash ctt-creator/ctt-start.sh
+
+REPORTS:
+
+  ctt-runner/reports/wfm-supplier/           WFM Supplier
+  ctt-runner/reports/device-supplier/        Device Supplier
+  ctt-runner/reports/application-supplier/   Application Supplier
+
+  Each row shows the request, the expected and the actual result, and the
+  requirement IDs the check is evidence for. A check that could not be run
+  is reported as NOT RUN or SKIP with the reason.
 
 REQUIREMENTS:
 
-  WFM Supplier:
-    • npm (for Newman)
-    • Install: npm install -g newman
-    • Test data: Data-Generator/wfm-supplier/postman_collection_functional.json
-    • Test groups: Data-Generator/wfm-supplier/groups/*/group.json
-
-  Device Supplier:
-    • Go 1.13+ (for test runner)
-    • Test data: Data-Generator/device-supplier/test-scenarios.json
-    • Mock server: device-supplier/run_tests.go
-
-TEST GROUPS (WFM Supplier):
-
-  Groups allow you to organize and run targeted test suites:
-  
-  • Create groups in CLI #1 (conformance.sh):
-    - Select WFM Supplier → Functional Tests
-    - Select/Create group with specific test cases
-    - Tests are extracted from JSON files and stored in group.json
-  
-  • Run specific group in CLI #2 (run-tests.sh):
-    - Select WFM Supplier
-    - Choose which group to execute
-    - Only tests in that group's group.json will run
-    - Report will include group name and metadata
-  
-  Group Structure:
-    groups/
-    ├── core/
-    │   ├── group.json (metadata + test case IDs)
-    │   └── test-cases/ (the test-case file of the suite)
-    ├── quick-check/
-    └── identity/
-  
-  Example group.json:
-    {
-      "name": "quick-check",
-      "version": "1.0.0-rc.3",
-      "persona": "wfm-supplier",
-      "description": "A first check of the URL and the identity setup",
-      "testCases": ["id1", "id2", ...]
-    }
-
-EXAMPLE WORKFLOW:
-
-  # Step 1: Generate tests with CLI #1
-  cd conformance
-  ./conformance.sh
-  → Select: 1 (WFM Supplier)
-  → Select: 1 (OpenAPI spec)
-  → Enter: /path/to/openapi.yaml
-  → Tests generated in Data-Generator/wfm-supplier/
-
-  # Step 2: Run tests with CLI #2
-  cd conformance
-  ../ctt-runner/ctt-start.sh
-  → Select: 1 (WFM Supplier)
-  → Enter WFM URL
-  → Tests execute
-  → Report in Runner/wfm-supplier/
-
-  # Step 3: Review results
-  open Runner/wfm-supplier/wfm-test-report-*.html
-
-REPORT CONTENTS:
-
-  • Test execution summary (passed/failed/skipped)
-  • Detailed test results for each scenario
-  • Assertion validation results
-  • Telemetry (execution time, etc.)
-  • Digital signature (for conformance claim)
+  jq, openssl                 both personas
+  Node.js                     WFM Supplier
+  Go 1.24+                    Device Supplier, Application Supplier
+  oras                        WFM Supplier: Application Registry checks
 
 TROUBLESHOOTING:
 
-  Error: "Postman collection not found"
-  → Run conformance.sh first to generate test cases
-
-  Error: "Newman not found"
-  → Install: npm install -g newman
-
-  Error: "Go not found"
-  → Install from https://golang.org/doc/install
-
-  Error: "Test execution failed"
-  → Check test-execution.log in Runner/ directory
-  → Verify component is running and accessible
+  See the Troubleshooting section of the setup guide of your persona.
+  Mock WFM log (Device Supplier): /tmp/wfm-server.log
 
 EOF
 }

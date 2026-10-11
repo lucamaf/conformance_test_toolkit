@@ -1,45 +1,26 @@
-# Real MIAF identity + trust bundle (2026-09-23)
+# The CTT's WFM-Client identity
 
-Unlike `../` (the throwaway self-signed placeholder), everything in this
-folder is **real**, obtained from the actual MIS deployed for this
-environment (`mis.margo.org:9443`, trust domain `margo.org`):
+This folder holds the identity the CTT presents to the WFM under test. It is
+written by `ctt-runner/ctt-start.sh` → WFM Supplier → *1. Setup MIAF
+Identity*; do not edit the files by hand. The steps are in
+`docs/wfm-supplier-setup-guide.md`.
 
-- `client-svid-cert.pem` / `client-svid-key.pem` — a real X.509-SVID minted by
-  that MIS via `scripts/lib/mis/svid-gen.sh --automated --principal wfm-client
-  --spiffe-id spiffe://margo.org/margo/wfm/symphony-1/client/margo-ctt-device`
-  (expires 2027-01-06, minted 2026-09-23). This is our conformance suite's identity
-  when acting as a WFM Client under Symphony's WFM (`symphony-1`).
-- `trust-bundle-ca.pem` — the trust domain's real root CA, extracted from
-  `GET https://mis.margo.org:9443/.well-known/spiffe/bundle.json` via
-  `node run_wfm_scenarios.js --fetch-trust-bundle <mis-url> <output.pem>`
-  (see that command's implementation for the one-time-fetch flow).
+| File | What it is |
+|---|---|
+| `client-svid-cert.pem`, `client-svid-key.pem` | The CTT's client X.509-SVID and its private key, issued by the MIS: `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>` |
+| `trust-bundle-ca.pem` | The MIS CA certificate. The CTT verifies the WFM's certificate against it. |
+| `previous-client-svid-cert.pem`, `previous-client-svid-key.pem` | The SVID that was in use before the last *Setup MIAF Identity*, kept when the new SVID has the same SPIFFE ID. Used by the SVID Rotation scenario. |
 
-Verified: `openssl verify -CAfile trust-bundle-ca.pem client-svid-cert.pem`
-→ `OK` — the minted SVID genuinely chains to the published trust bundle.
+To see which identity is installed:
 
-## Using these with `run_wfm_scenarios.js`
-
-Copy into a cert dir under the same fixed names the runner looks for:
-
-```
-cp client-svid-cert.pem <cert-dir>/svid-cert.pem
-cp client-svid-key.pem  <cert-dir>/svid-key.pem
-cp trust-bundle-ca.pem  <cert-dir>/svid-ca.pem
+```bash
+openssl x509 -in client-svid-cert.pem -noout -ext subjectAltName -enddate
+openssl verify -CAfile trust-bundle-ca.pem client-svid-cert.pem
 ```
 
-## Known environment limitation (not a code issue)
+At the start of every WFM run the files are copied to
+`ctt-runner/wfm-supplier/utils/certs/` as `svid-cert.pem`, `svid-key.pem`
+and `svid-ca.pem`.
 
-`--fetch-trust-bundle` needs to be pointed at `https://127.0.0.1:9443` (not
-`https://mis.margo.org:9443`) when run **from this same VM**: the discovery
-document correctly returns the absolute `https://mis.margo.org:9443/...`
-trustBundleUri per spec, but this VM's public IP doesn't hairpin back to
-itself on port 9443 (works fine on 8082/8443, likely a security-group rule
-scoped to just those ports). From any *other* machine, the real hostname
-works normally. Worth asking the team to open 9443 if this ever needs to run
-from off-box.
-
-## Regenerating
-
-Re-run the mint command above (new SVID, up to a new 90-day TTL) and/or
-re-run `--fetch-trust-bundle` — both are safe to redo any time; nothing here
-is order-dependent on the other.
+When the SVID expires, or the WFM under test changes, issue a new client SVID
+with the MIS and run *Setup MIAF Identity* again.
