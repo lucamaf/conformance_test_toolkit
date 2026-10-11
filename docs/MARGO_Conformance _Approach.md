@@ -298,7 +298,7 @@ Note : Further details are described below in the section [Margo schema for serv
 
 - Write the requests in Postman, export the collection (v2.1), place the file in a folder and create a group from it with `ctt-creator`. `ctt-runner` then runs that group against the Workload Fleet Manager. Every request is sent over mutual TLS with the X.509-SVID set up in the CTT (Margo 1.0.0-rc.3).
 
-- A working example is `test-suites/wfm-supplier/vendor-positive-extended/postman_collection.json` (positive cases) and `test-suites/wfm-supplier/vendor-negative-scenarios/postman_collection.json` (negative cases).
+- A working example is `test-suites/wfm-supplier/postman-lifecycle/test-cases/postman_collection.json` (positive cases) and `test-suites/wfm-supplier/postman-error-handling/test-cases/postman_collection.json` (negative cases).
 
 - How the Conformance Framework reads a collection:
 

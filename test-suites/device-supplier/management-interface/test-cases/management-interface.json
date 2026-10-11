@@ -1,0 +1,1050 @@
+[
+  {
+    "id": "scenario-capabilities",
+    "name": "Capabilities Reporting",
+    "description": "POST and PUT capability manifests that match the spec-aligned schema.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+    ],
+    "steps": [
+      {
+        "id": "step-2.1",
+        "name": "Report Capabilities with POST",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-001",
+        "request_body": {
+          "properties": {
+            "id": "device-001",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [
+              {
+                "type": "camera"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [
+          {
+            "field": "status",
+            "operation": "equals",
+            "value": "capabilities_received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true,
+        "accepted_statuses": [
+          200
+        ]
+      },
+      {
+        "id": "step-2.2",
+        "name": "Report Capabilities with PUT",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-001",
+        "request_body": {
+          "properties": {
+            "id": "device-001",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 8,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "32Gi",
+            "storage": "512Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              },
+              {
+                "type": "wifi"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "status",
+            "operation": "equals",
+            "value": "capabilities_received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "scenario-deployments",
+    "name": "Deployment Retrieval And Status",
+    "description": "Deployment state retrieval, cache validation, immutable artifact downloads, and status updates.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019",
+      "MARGO-DEV-MANAGEMENTINTERFACE-031"
+    ],
+    "steps": [
+      {
+        "id": "step-3.1",
+        "name": "Get Current Deployments",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-031"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "field": "bundle.mediaType",
+            "operation": "equals",
+            "value": "application/vnd.margo.bundle.v1+tar+gzip"
+          },
+          {
+            "field": "bundle.digest",
+            "operation": "not_empty"
+          },
+          {
+            "field": "deployments",
+            "operation": "is_array"
+          },
+          {
+            "field": "deployments.0.deploymentId",
+            "operation": "is_string"
+          },
+          {
+            "field": "bundle.url",
+            "operation": "not_empty"
+          },
+          {
+            "field": "deployments.0.url",
+            "operation": "not_empty"
+          },
+          {
+            "field": "_headers.ETag",
+            "operation": "exists"
+          }
+        ],
+        "extract_context": {
+          "manifestEtag": "_headers.ETag",
+          "bundleDigest": "bundle.digest",
+          "deploymentId": "deployments.0.deploymentId",
+          "deploymentDigest": "deployments.0.digest"
+        },
+        "mtls": true
+      },
+      {
+        "id": "step-3.2",
+        "name": "Get Deployments With Matching ETag",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json",
+          "If-None-Match": "{manifestEtag}"
+        },
+        "expected_status": 304,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.3",
+        "name": "Download Deployment Bundle",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-031",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/vnd.margo.bundle.v1+tar+gzip"
+          },
+          {
+            "field": "_headers.Cache-Control",
+            "operation": "contains",
+            "value": "immutable"
+          },
+          {
+            "field": "_headers.ETag",
+            "operation": "exists"
+          }
+        ],
+        "extract_context": {
+          "bundleEtag": "_headers.ETag"
+        },
+        "mtls": true
+      },
+      {
+        "id": "step-3.4",
+        "name": "Download Bundle With Matching ETag",
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "headers": {
+          "If-None-Match": "{bundleEtag}"
+        },
+        "expected_status": 304,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.5",
+        "name": "Download Individual Deployment Manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/yaml"
+          },
+          {
+            "field": "_headers.Cache-Control",
+            "operation": "contains",
+            "value": "immutable"
+          },
+          {
+            "field": "_headers.Vary",
+            "operation": "contains",
+            "value": "Accept-Encoding"
+          },
+          {
+            "field": "_headers.ETag",
+            "operation": "contains",
+            "value": "{deploymentDigest}"
+          }
+        ],
+        "extract_context": {
+          "deploymentEtag": "_headers.ETag"
+        },
+        "mtls": true
+      },
+      {
+        "id": "step-3.6",
+        "name": "Download Individual Deployment Manifest With Matching ETag",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "headers": {
+          "If-None-Match": "{deploymentEtag}"
+        },
+        "expected_status": 304,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-3.7",
+        "name": "Report Deployment Status",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "installed"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "acknowledgement",
+            "operation": "equals",
+            "value": "received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "scenario-capabilities-errors",
+    "name": "Capabilities Error Handling",
+    "description": "Negative tests for digest, schema, role, interface, and client validation.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-DEPLOYMENT-002"
+    ],
+    "steps": [
+      {
+        "id": "step-5.1",
+        "name": "Reject Capabilities With Missing Properties",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-caps-errors",
+        "request_body": {},
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-5.2",
+        "name": "Reject Capabilities With Invalid Peripheral Type",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-caps-errors",
+        "request_body": {
+          "properties": {
+            "id": "device-002",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [
+              {
+                "type": "not-a-real-type"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-5.3",
+        "name": "Reject Capabilities With Invalid Interface Type",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-caps-errors",
+        "request_body": {
+          "properties": {
+            "id": "device-003",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "serial"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-5.4",
+        "name": "Reject Capabilities With Invalid Cpu Architecture",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-caps-errors",
+        "request_body": {
+          "properties": {
+            "id": "device-004",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-XYZ",
+            "serialNumber": "SN-12345",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "sparc"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "scenario-status-and-retrieval-errors",
+    "name": "Status And Retrieval Errors",
+    "description": "Negative coverage for deployment content negotiation, immutable resource lookup, and status schema validation.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
+    ],
+    "steps": [
+      {
+        "id": "step-6.1",
+        "name": "Get Current Deployments (Setup)",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "deployments.0.deploymentId",
+            "operation": "exists"
+          }
+        ],
+        "extract_context": {
+          "manifestEtag": "_headers.ETag",
+          "bundleDigest": "bundle.digest",
+          "deploymentId": "deployments.0.deploymentId",
+          "deploymentDigest": "deployments.0.digest"
+        },
+        "mtls": true
+      },
+      {
+        "id": "step-6.2",
+        "name": "Reject Deployments Request With Unsupported Accept Header",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "expected_status": 406,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-6.3",
+        "name": "Reject Bundle Download With Wrong Digest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/not-the-right-digest",
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "error",
+            "operation": "contains",
+            "value": "Bundle not found"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-6.4",
+        "name": "Reject Deployment Manifest Download With Wrong Digest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/not-the-right-digest",
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "error",
+            "operation": "contains",
+            "value": "Deployment not found for digest"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-6.5",
+        "name": "Reject Status With Invalid State",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "done"
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "installed"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-6.6",
+        "name": "Reject Status With Missing Component Name",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "state": "installed"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-6.7",
+        "name": "Reject Status With Path Deployment Mismatch",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "request_body": {
+          "deploymentId": "another-deployment",
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "name": "app-component-1",
+              "state": "installed"
+            }
+          ],
+          "adoptedManifestVersion": 1
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-core-capability-roles",
+    "name": "Capability Reporting \u2014 Device Role Variants",
+    "description": "Per docs.margo.org/specification/margo-management-interface/device-capabilities and the Device Supplier conformance requirements, a device fills either the Standalone Cluster role (Kubernetes + Helm) or the Standalone Device role (Compose) \u2014 supportedDeploymentTypes is how a device declares which. This scenario covers both role variants as positive cases, plus negative coverage for invalid enum values and a malformed cpus[] entry not exercised by other groups.",
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-DEPLOYMENT-006",
+      "MARGO-DEV-DEPLOYMENT-007",
+      "MARGO-DEV-DEPLOYMENT-008",
+      "MARGO-DEV-DEPLOYMENT-009",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+    ],
+    "steps": [
+      {
+        "id": "step-core-1.1",
+        "name": "Report Capabilities \u2014 Standalone Device Role (compose only)",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-008",
+          "MARGO-DEV-DEPLOYMENT-009",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-core-roles",
+        "request_body": {
+          "properties": {
+            "id": "device-core-roles",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-COMPOSE-1",
+            "serialNumber": "SN-CORE-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [
+          {
+            "field": "status",
+            "operation": "equals",
+            "value": "capabilities_received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true,
+        "accepted_statuses": [
+          200
+        ]
+      },
+      {
+        "id": "step-core-1.2",
+        "name": "Report Capabilities \u2014 Standalone Cluster Role (helm only)",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-006",
+          "MARGO-DEV-DEPLOYMENT-007",
+          "MARGO-DEV-DEPLOYMENT-004",
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-core-roles",
+        "request_body": {
+          "properties": {
+            "id": "device-core-roles",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-HELM-1",
+            "serialNumber": "SN-CORE-002",
+            "cpus": [
+              {
+                "cores": 8,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "32Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              },
+              {
+                "type": "wifi"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "status",
+            "operation": "equals",
+            "value": "capabilities_received"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-1.3",
+        "name": "Reject Capabilities \u2014 Invalid supportedDeploymentTypes Value",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-core-roles",
+        "request_body": {
+          "properties": {
+            "id": "device-core-roles",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-INVALID-1",
+            "serialNumber": "SN-CORE-003",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "docker-swarm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-1.4",
+        "name": "Reject Capabilities \u2014 Invalid supportedRuntimes Value",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-004"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-core-roles",
+        "request_body": {
+          "properties": {
+            "id": "device-core-roles",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-INVALID-2",
+            "serialNumber": "SN-CORE-004",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "containerd-direct"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-1.5",
+        "name": "Reject Capabilities \u2014 cpus[] Entry Missing Required cores",
+        "crIds": [
+          "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/device-core-roles",
+        "request_body": {
+          "properties": {
+            "id": "device-core-roles",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-INVALID-3",
+            "serialNumber": "SN-CORE-005",
+            "cpus": [
+              {
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "errors",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-core-manifest-semantics",
+    "name": "Desired State \u2014 Default Negotiation and Zero-Deployment Manifest",
+    "description": "Per docs.margo.org/specification/margo-management-interface/desired-state: (1) the WFM (here, our mock server) MUST default to application/vnd.margo.manifest.v1+json when the Accept header is omitted entirely, not just when it's the exact expected value; (2) when a client has zero deployments assigned, the manifest's deployments field MUST still be a valid (empty) array. Both are edge cases the other device-supplier groups don't exercise directly. Note: the spec also requires the manifest's bundle field to be explicit null (not omitted) when deployments is empty \u2014 not independently verified here, because this suite's validation engine can't distinguish a field that's present-but-null from one that's absent (both read as Go/JS nil); confirmed instead by reading the mock server's response-construction code directly.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-016"
+    ],
+    "steps": [
+      {
+        "id": "step-core-2.1",
+        "name": "Get Deployments With No Accept Header \u2014 Defaults To Manifest Format",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "field": "_headers.Content-Type",
+            "operation": "contains",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-2.2",
+        "name": "Reset Desired State To Empty (test-control)",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": []
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-2.3",
+        "name": "Get Deployments \u2014 Zero Deployments Still Returns A Valid (Empty) Manifest",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "field": "deployments",
+            "operation": "is_array"
+          }
+        ],
+        "extract_context": {},
+        "mtls": true
+      },
+      {
+        "id": "step-core-2-cleanup",
+        "name": "Cleanup: Restore Default Deployment",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  }
+]

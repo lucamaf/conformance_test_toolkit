@@ -1,0 +1,342 @@
+[
+  {
+    "id": "device-mi008-unsupported-digest-algorithm",
+    "name": "MI-008 \u2014 Manifest With Unsupported Digest Algorithm Must Be Rejected",
+    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-008 ('If a manifest references an unsupported digest algorithm, the client MUST treat the manifest as invalid and abort processing'). The mock is armed with the 'unsupported_digest_algorithm' negative fixture so GET /deployments returns a manifest whose digests use sha512 instead of sha256. The suite then asserts (a) the fixture is actually present in the response and (b) its own manifest-conformance check (expect_manifest_rejected) flags the manifest for rejection. This proves the suite would correctly fail a real device that acted on such a manifest.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-008",
+      "MARGO-DEV-MANAGEMENTINTERFACE-027"
+    ],
+    "steps": [
+      {
+        "id": "step-mi008-1.1",
+        "name": "Arm The unsupported_digest_algorithm Negative Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "mi008-app"
+          ],
+          "negativeFixture": "unsupported_digest_algorithm"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "negativeFixture",
+            "operation": "equals",
+            "value": "unsupported_digest_algorithm"
+          }
+        ],
+        "mtls": true
+      },
+      {
+        "id": "step-mi008-1.2",
+        "name": "GET Deployments \u2014 Manifest Uses An Unsupported Digest Algorithm And Must Be Rejected",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-008",
+          "MARGO-DEV-MANAGEMENTINTERFACE-027"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "bundle.digest",
+            "operation": "contains",
+            "value": "sha512:"
+          },
+          {
+            "field": "deployments.0.digest",
+            "operation": "contains",
+            "value": "sha512:"
+          }
+        ],
+        "expect_manifest_rejected": true,
+        "mtls": true
+      },
+      {
+        "id": "step-mi008-cleanup",
+        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-mi006-bundle-digest-mismatch",
+    "name": "MI-006/009 \u2014 Bundle Digest That Doesn't Match Content Must Be Rejected",
+    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-006 / -009: the client MUST verify computed digests match manifest values and abort on any mismatch. The 'bundle_digest_mismatch' fixture corrupts bundle.digest while leaving bundle.url pointing at the real archive; evaluateManifest downloads it, hashes it, and must flag the mismatch.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-009"
+    ],
+    "steps": [
+      {
+        "id": "step-mi006-1.1",
+        "name": "Arm bundle_digest_mismatch Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": "bundle_digest_mismatch"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "negativeFixture",
+            "operation": "equals",
+            "value": "bundle_digest_mismatch"
+          }
+        ],
+        "mtls": true
+      },
+      {
+        "id": "step-mi006-1.2",
+        "name": "GET Deployments \u2014 Bundle Digest Mismatch Must Be Rejected",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
+          "MARGO-DEV-MANAGEMENTINTERFACE-009"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "expect_manifest_rejected": true,
+        "mtls": true
+      },
+      {
+        "id": "step-mi006-cleanup",
+        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-mi019-deployment-digest-mismatch",
+    "name": "MI-019 \u2014 Any Fetched Artifact With A Wrong Digest Must Be Rejected",
+    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-019: the client MUST verify the digest of every fetched artifact. The 'deployment_digest_mismatch' fixture corrupts the first deployments[].digest only (the bundle digest stays correct), so the violation is caught on a per-deployment artifact, not the bundle.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-019",
+      "MARGO-DEV-MANAGEMENTINTERFACE-006"
+    ],
+    "steps": [
+      {
+        "id": "step-mi019-1.1",
+        "name": "Arm deployment_digest_mismatch Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": "deployment_digest_mismatch"
+        },
+        "expected_status": 200,
+        "mtls": true
+      },
+      {
+        "id": "step-mi019-1.2",
+        "name": "GET Deployments \u2014 Deployment Digest Mismatch Must Be Rejected",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "expect_manifest_rejected": true,
+        "mtls": true
+      },
+      {
+        "id": "step-mi019-cleanup",
+        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-mi010-non-increasing-manifest-version",
+    "name": "MI-010 \u2014 A manifestVersion Not Strictly Greater Than The Last Must Be Rejected",
+    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-010. The scenario first reads a manifest at version >= 2 (so the runner records it), then the 'non_increasing_manifest_version' fixture serves a manifest back at version 1; evaluateManifest must reject it as a rollback.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-010"
+    ],
+    "steps": [
+      {
+        "id": "step-mi010-1.1",
+        "name": "Assign A Deployment (manifestVersion climbs to 2)",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ]
+        },
+        "expected_status": 200,
+        "mtls": true
+      },
+      {
+        "id": "step-mi010-1.2",
+        "name": "GET Deployments \u2014 Establish The Current Version",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "mtls": true
+      },
+      {
+        "id": "step-mi010-1.3",
+        "name": "Arm non_increasing_manifest_version Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": "non_increasing_manifest_version"
+        },
+        "expected_status": 200,
+        "mtls": true
+      },
+      {
+        "id": "step-mi010-1.4",
+        "name": "GET Deployments \u2014 Version Went Backwards, Must Be Rejected",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-010"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "expect_manifest_rejected": true,
+        "mtls": true
+      },
+      {
+        "id": "step-mi010-cleanup",
+        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  },
+  {
+    "id": "device-mi025-026-sizebytes-not-integrity",
+    "name": "MI-025/026 \u2014 A Wrong sizeBytes (Digest Still Valid) Must NOT Cause Rejection",
+    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-025 / -026: sizeBytes MUST NOT be used for integrity verification. The 'wrong_size_bytes' fixture sets every sizeBytes to 1 but leaves digests correct; a conformant client verifies by digest and MUST still proceed, so the suite asserts expect_manifest_accepted.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-025",
+      "MARGO-DEV-MANAGEMENTINTERFACE-026"
+    ],
+    "steps": [
+      {
+        "id": "step-mi025-1.1",
+        "name": "Arm wrong_size_bytes Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": "wrong_size_bytes"
+        },
+        "expected_status": 200,
+        "mtls": true
+      },
+      {
+        "id": "step-mi025-1.2",
+        "name": "GET Deployments \u2014 sizeBytes Is Bogus But The Manifest Is Still Acceptable",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-025",
+          "MARGO-DEV-MANAGEMENTINTERFACE-026"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "bundle.sizeBytes",
+            "operation": "equals",
+            "value": 1
+          }
+        ],
+        "expect_manifest_accepted": true,
+        "mtls": true
+      },
+      {
+        "id": "step-mi025-cleanup",
+        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments",
+        "request_body": {
+          "deploymentIds": [
+            "self-test-app"
+          ],
+          "negativeFixture": ""
+        },
+        "expected_status": 200,
+        "validations": [],
+        "mtls": true
+      }
+    ]
+  }
+]

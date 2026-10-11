@@ -1,0 +1,99 @@
+[
+  {
+    "id": "wfm-otel-observability",
+    "name": "OTEL Observability — WFM Accepts Device with otelCollector Capability",
+    "description": "Verifies the vendor's WFM correctly accepts a device capabilities manifest that declares otelCollector:true, indicating the device has an OTEL collector that will push telemetry to the WFM's observability stack (Jaeger OTLP port 30417, Prometheus Remote Write port 30909). This is the SBI-side conformance check: the WFM must store and acknowledge the otelCollector flag without error. Full telemetry pipeline (device OTEL collector → WFM Jaeger/Prometheus) is validated in the device-supplier persona's scenario-otel-observability.",
+    "crIds": [],
+    "steps": [
+      {
+        "id": "wfm-otel-cap-1",
+        "name": "Report Capabilities with otelCollector: true — WFM Must Accept",
+        "crIds": [],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          200,
+          201
+        ],
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-otel-cap-2",
+        "name": "Update Capabilities — WFM Preserves otelCollector: true on Second PUT",
+        "crIds": [],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose",
+              "helm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          200,
+          201
+        ],
+        "validations": [],
+        "extract_context": {}
+      }
+    ]
+  }
+]

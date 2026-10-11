@@ -1,0 +1,17 @@
+{
+  "name": "quick-check",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "A first check of the URL and the identity setup, a few seconds: a device is registered, the manifest is served, a conditional request is answered.",
+  "FolderPath": [
+    "../test-suites/wfm-supplier/quick-check/test-cases"
+  ],
+  "testCases": [
+    "wfm-core-cap-1",
+    "wfm-core-cap-2",
+    "wfm-core-capabilities",
+    "wfm-core-desired-state",
+    "wfm-core-ds-1",
+    "wfm-core-ds-3"
+  ]
+}

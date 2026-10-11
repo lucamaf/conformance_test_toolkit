@@ -208,6 +208,13 @@ check_prerequisites() {
 # WFM Group Selection Functions
 ################################################################################
 
+# What a group is for, under its name in the group list.
+print_group_description() {
+    local desc="$1"
+    [[ -z "$desc" || "$desc" == "No description" ]] && return 0
+    echo "$desc" | fold -s -w 72 | sed 's/^/        /'
+}
+
 select_wfm_group() {
     local group_dir="$WFM_GROUP_DIR"
     
@@ -252,7 +259,8 @@ select_wfm_group() {
         for i in "${!groups[@]}"; do
             local metadata="${group_metadata[$i]}"
             IFS='|' read -r name version desc count <<< "$metadata"
-            printf "  %d) %-15s (v%s) - %d tests\n" "$((i+1))" "$name" "$version" "$count"
+            printf "  %2d) %-24s (%s)\n" "$((i+1))" "$name" "v${version#v}"
+            print_group_description "$desc"
         done
         echo ""
     } >&2
@@ -320,9 +328,8 @@ select_device_group() {
         for i in "${!groups[@]}"; do
             local metadata="${group_metadata[$i]}"
             IFS='|' read -r name version desc count <<< "$metadata"
-            local tests_label="$count selected scenarios"
-            [[ "$count" -eq 0 ]] && tests_label="all scenarios"
-            printf "  %d) %-22s (%s) - %s\n" "$((i+1))" "$name" "v${version#v}" "$tests_label"
+            printf "  %2d) %-24s (%s)\n" "$((i+1))" "$name" "v${version#v}"
+            print_group_description "$desc"
         done
         echo ""
     } >&2
@@ -1503,19 +1510,18 @@ TEST GROUPS (WFM Supplier):
   
   Group Structure:
     groups/
-    ├── diamond/
+    ├── core/
     │   ├── group.json (metadata + test case IDs)
-    │   ├── postman_collection.json (group collection)
-    │   └── ... (supporting files)
-    ├── silver/
-    └── rishabh/
+    │   └── test-cases/ (the test-case file of the suite)
+    ├── quick-check/
+    └── identity/
   
   Example group.json:
     {
-      "name": "diamond",
-      "version": "1.0.4",
+      "name": "quick-check",
+      "version": "1.0.0-rc.3",
       "persona": "wfm-supplier",
-      "description": "Diamond tier conformance tests",
+      "description": "A first check of the URL and the identity setup",
       "testCases": ["id1", "id2", ...]
     }
 

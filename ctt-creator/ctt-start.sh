@@ -796,7 +796,7 @@ create_test_group() {
         OLD_TESTS=$(jq '.testCases // []' "$GROUP_PATH/group.json")
         OLD_PATHS=$(jq '.FolderPath // []' "$GROUP_PATH/group.json")
         # Preserve flexibleOrder from the existing group.json — groups that opt
-        # into it (e.g. flex-order) rely on an empty testCases (= "run every
+        # into it (e.g. random-order) rely on an empty testCases (= "run every
         # scenario") plus this flag to run the fixed_first scenario first, then
         # the rest in random order. Regenerating must not silently turn that off.
         OLD_FLEXIBLE=$(jq -r '.flexibleOrder // false' "$GROUP_PATH/group.json" 2>/dev/null || echo false)

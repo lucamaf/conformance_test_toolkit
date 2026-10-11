@@ -303,16 +303,29 @@ The server is left running afterwards; stop it with option 4 when you are done.
 
 ```
 📋 Available Device Test Groups:
-  1) bronze                 (v1.0.0) - 5 selected scenarios
-  2) core                   (v1.0.0-rc.3) - all scenarios
-  3) device-conformance     (v1.0.0-rc.3) - 13 selected scenarios
+   1) core                     (v1.0.0-rc.3)
+        The full Device Supplier conformance set for Margo 1.0.0-rc.3. Run this
+        group for a conformance result.
+   2) identity                 (v1.0.0-rc.3)
+        Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, ...
   ...
 ```
 
-Select `core` (enter its number from the list — `2` above). It runs the full
+Select `core` (enter its number from the list — `1` above). It runs the full
 set of rc.3 device-supplier scenarios; the other groups are subsets of it.
-Groups whose version is not `1.0.0-rc.3` show a version-mismatch question
-before they run.
+
+A group is a named set of scenarios from the suite, so you can run one area at
+a time and the report states which set was run:
+
+| Group | What it checks | When to run it |
+|---|---|---|
+| `quick-check` | Capabilities reported, manifest, deployment and bundle fetched, status reported (9 steps) | First, to confirm the URLs and the identity setup |
+| `management-interface` | The Management Interface API as a device uses it, with the errors for each call | While working on the API client |
+| `manifest-integrity` | Manifests a device MUST reject (wrong digest, unsupported algorithm, version not increasing) and one it MUST accept | While working on manifest validation |
+| `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation | While working on MIAF |
+| `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (SKIP otherwise) |
+| `random-order` | The lifecycle scenarios in a different random order on every run | To show that no scenario depends on another |
+| `core` | Every scenario of the suite | For the conformance result |
 
 ### URLs to enter
 

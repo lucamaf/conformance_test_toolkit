@@ -22,7 +22,7 @@ device-supplier/
 
 | Term | Meaning |
 |---|---|
-| **Test Group** | A named collection of test cases (e.g. `core`, `silver`, `gold`). Each group has a `group.json` that lists the test-case files to run. |
+| **Test Group** | A named collection of test cases (e.g. `core`, `quick-check`, `manifest-integrity`). Each group has a `group.json` that lists the test-case files to run. |
 | **group.json** | Describes a test group: its name, the persona, and the path to the consolidated test-case JSON file under `test-suites/`. |
 | **Test Case JSON** | Declarative scenario file (`test-suites/device-supplier/<group>/test-cases/*.json`) read by the CTT Runner. |
 | **MIAF / SVID** | The mTLS identity mechanism. The device presents an X.509-SVID (`spiffe://margo.org/device/<id>`) to authenticate to the WFM mock server. |
@@ -33,12 +33,13 @@ device-supplier/
 
 | Group | Purpose |
 |---|---|
-| `core` | Baseline conformance — capabilities, deployments, desired-state, status |
-| `flex-order` | Same scenarios as core but executed in random order (`-flexible-order` flag) |
-| `silver` | Extended set covering header integrity, negative fixtures, manifest semantics |
-| `gold` | Multi-component deployments, bundle digest checks |
-| `bronze` | Additional vendor-specific scenarios |
-| `diamond` | Full suite including ORAS registry tests |
+| `core` | Every scenario of the suite — the conformance result |
+| `quick-check` | Capabilities, manifest, deployment, bundle, status — first check of the setup |
+| `management-interface` | The Management Interface API as a device uses it, with the errors for each call |
+| `manifest-integrity` | Manifests a device MUST reject and one it MUST accept (negative fixtures) |
+| `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation |
+| `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT |
+| `random-order` | The lifecycle scenarios executed in random order (`"flexibleOrder": true` in `group.json`) |
 
 ## How to Add or Update a Test Group
 

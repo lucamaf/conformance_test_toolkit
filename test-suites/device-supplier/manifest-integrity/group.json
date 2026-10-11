@@ -1,0 +1,33 @@
+{
+  "name": "manifest-integrity",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "Manifests a device MUST reject (unsupported digest algorithm, digest mismatch, manifestVersion not increasing) and one it MUST accept (wrong sizeBytes, valid digest).",
+  "FolderPath": [
+    "../test-suites/device-supplier/manifest-integrity/test-cases"
+  ],
+  "testCases": [
+    "device-mi006-bundle-digest-mismatch",
+    "device-mi008-unsupported-digest-algorithm",
+    "device-mi010-non-increasing-manifest-version",
+    "device-mi019-deployment-digest-mismatch",
+    "device-mi025-026-sizebytes-not-integrity",
+    "step-mi006-1.1",
+    "step-mi006-1.2",
+    "step-mi006-cleanup",
+    "step-mi008-1.1",
+    "step-mi008-1.2",
+    "step-mi008-cleanup",
+    "step-mi010-1.1",
+    "step-mi010-1.2",
+    "step-mi010-1.3",
+    "step-mi010-1.4",
+    "step-mi010-cleanup",
+    "step-mi019-1.1",
+    "step-mi019-1.2",
+    "step-mi019-cleanup",
+    "step-mi025-1.1",
+    "step-mi025-1.2",
+    "step-mi025-cleanup"
+  ]
+}

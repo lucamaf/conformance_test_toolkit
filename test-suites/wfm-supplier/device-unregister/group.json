@@ -2,12 +2,14 @@
   "name": "device-unregister",
   "version": "1.0.0-rc.3",
   "persona": "wfm-supplier",
-  "description": "DELETE /api/v1/capabilities/{deviceId} — unregister a device (204, then 404 device-not-found). Kept out of the core group: the Symphony sandbox build stopped responding when it received this request.",
+  "description": "DELETE /api/v1/capabilities/{deviceId}: 204, then 404 for the same device. Not in core because the sandbox Symphony WFM stops on this request; run it against your own WFM.",
   "FolderPath": [
-    "../test-suites/wfm-supplier/core/test-cases"
+    "../test-suites/wfm-supplier/device-unregister/test-cases"
   ],
-  "flexibleOrder": false,
   "testCases": [
+    "wfm-unreg-1",
+    "wfm-unreg-2",
+    "wfm-unreg-3",
     "wfm-unregister-device"
   ]
 }

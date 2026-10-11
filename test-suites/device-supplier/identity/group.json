@@ -1,0 +1,21 @@
+{
+  "name": "identity",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, certificate conformance, trust in the WFM through the MIS CA, SVID rotation.",
+  "FolderPath": [
+    "../test-suites/device-supplier/identity/test-cases"
+  ],
+  "testCases": [
+    "device-mi004-rfc5280-certificate",
+    "device-mi018-tls-trust",
+    "scenario-miaf-identity-mtls",
+    "scenario-miaf-identity-svid-rotation",
+    "step-mi004-1.0",
+    "step-mi018-1.0",
+    "step-miaf-mtls-1",
+    "step-miaf-mtls-2",
+    "step-miaf-rotation-1",
+    "step-miaf-rotation-2"
+  ]
+}

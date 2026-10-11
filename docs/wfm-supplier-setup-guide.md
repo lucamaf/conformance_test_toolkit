@@ -344,14 +344,28 @@ Then:
 2) Functional tests   (Group-based test management)
 ```
 
-Then select the group. For the full WFM conformance test set:
+Then select the group. A group is a named set of tests from the suite, so you
+can run one area at a time and the report states which set was run:
+
+| Group | What it checks | When to run it |
+|---|---|---|
+| `quick-check` | Identity accepted over mTLS, a device registered, manifest served, conditional request answered (4 steps) | First, to confirm the URL and the identity setup |
+| `management-interface` | The Management Interface API: capabilities, desired state, content negotiation, status, ETag and cache headers | While working on the API |
+| `deployment-delivery` | A multi-component deployment: manifest URLs, deployment YAML, bundle archive and their digests | While working on deployment delivery |
+| `identity` | mTLS handshake, trust bundle, refused clients, SVID rotation | While working on MIAF |
+| `application-registry` | The OCI Application Registry: manifest, media types, pulls, tags | While working on the registry |
+| `observability` | A device reporting an OpenTelemetry collector is accepted | While working on observability |
+| `device-unregister` | `DELETE /api/v1/capabilities/{deviceId}` | Against your own WFM, as a separate run |
+| `postman-lifecycle`, `postman-error-handling` | Positive and negative requests written in Postman | As examples for adding your own tests from Postman |
+| `core` | Everything above except `device-unregister` | For the conformance result |
+
+For the full WFM conformance test set:
 
 ```
-3) core            (v1.0.0-rc.3)
+2) core            (v1.0.0-rc.3)
 ```
 
-Enter the number shown next to `core` in the list. Groups whose version is not
-`1.0.0-rc.3` ask a version-mismatch question before they run.
+Enter the number shown next to `core` in the list.
 
 `core` does not include the `DELETE /api/v1/capabilities/{deviceId}` check
 (unregister a device). That one is in its own group, `device-unregister`, so it
@@ -359,13 +373,10 @@ is only sent when you choose to: the Symphony sandbox build stopped responding
 when it received this request (its service restarts by itself after about a
 minute). Run `device-unregister` against your own WFM as a separate run.
 
-Two groups are written as Postman collections and show how to add your own
-tests from Postman: `vendor-positive-extended` (10 requests) and
-`vendor-negative-scenarios` (7 requests). They run the same way as `core`. The
-format is described in `docs/MARGO_Conformance _Approach.md`, section "Postman
-Template for Expressing sequences of API exchanges". The groups `bronze` and
-`silver` were written for an earlier version of the specification and do not
-pass against a 1.0.0-rc.3 WFM.
+The two Postman groups, `postman-lifecycle` (10 requests) and
+`postman-error-handling` (7 requests), run the same way as `core`. The format is
+described in `docs/MARGO_Conformance _Approach.md`, section "Postman Template
+for Expressing sequences of API exchanges".
 
 ### Enter your WFM endpoints
 
@@ -572,7 +583,7 @@ Phase 1 — Identity (once per WFM, re-run only if cert expires)
 
 Phase 2 — Run (repeat for each test run)
   □ bash ctt-runner/ctt-start.sh
-  □ Select: 1) WFM Supplier → 2) Functional tests → core (3 in the list)
+  □ Select: 1) WFM Supplier → 2) Functional tests → core (2 in the list)
   □ Enter WFM SBI URL — everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
   □ Press Enter for MIAF URL (same port unless WFM splits them)
   □ Multi-component prompts: press Enter x3

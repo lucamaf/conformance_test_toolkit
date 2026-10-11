@@ -1,0 +1,14 @@
+{
+  "name": "observability",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "A device that reports an OpenTelemetry collector in its capabilities is accepted by the WFM.",
+  "FolderPath": [
+    "../test-suites/wfm-supplier/observability/test-cases"
+  ],
+  "testCases": [
+    "wfm-otel-cap-1",
+    "wfm-otel-cap-2",
+    "wfm-otel-observability"
+  ]
+}

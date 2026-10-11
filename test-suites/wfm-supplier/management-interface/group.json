@@ -1,0 +1,28 @@
+{
+  "name": "management-interface",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "The Management Interface API: capabilities (accepted and rejected), desired-state manifest, content negotiation, status reporting, ETag and cache headers.",
+  "FolderPath": [
+    "../test-suites/wfm-supplier/management-interface/test-cases"
+  ],
+  "testCases": [
+    "step-wfm-hi-1.1",
+    "step-wfm-hi-1.2",
+    "step-wfm-hi-1.3",
+    "wfm-core-cap-1",
+    "wfm-core-cap-2",
+    "wfm-core-cap-3",
+    "wfm-core-cap-4",
+    "wfm-core-capabilities",
+    "wfm-core-cn-1",
+    "wfm-core-content-negotiation",
+    "wfm-core-desired-state",
+    "wfm-core-ds-1",
+    "wfm-core-ds-2",
+    "wfm-core-ds-3",
+    "wfm-core-status",
+    "wfm-core-status-1",
+    "wfm-header-integrity-manifest"
+  ]
+}

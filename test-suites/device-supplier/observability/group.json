@@ -1,0 +1,14 @@
+{
+  "name": "observability",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "OpenTelemetry: the device's collector pushes telemetry to the CTT. Reported as SKIP when no collector is pointed at the CTT.",
+  "FolderPath": [
+    "../test-suites/device-supplier/observability/test-cases"
+  ],
+  "testCases": [
+    "scenario-otel-observability",
+    "step-otel-2",
+    "step-otel-3"
+  ]
+}

@@ -2,7 +2,7 @@
   "name": "core",
   "version": "1.0.0-rc.3",
   "persona": "wfm-supplier",
-  "description": "WFM Supplier core conformance scenarios",
+  "description": "The full WFM Supplier conformance set for Margo 1.0.0-rc.3. Run this group for a conformance result. Unregistering a device is in its own group, device-unregister.",
   "FolderPath": [
     "../test-suites/wfm-supplier/core/test-cases"
   ],

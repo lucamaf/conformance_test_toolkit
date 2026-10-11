@@ -2,13 +2,21 @@
   "name": "application-registry",
   "version": "1.0.0-rc.3",
   "persona": "wfm-supplier",
-  "description": "Application Registry (OCI) conformance — media types, manifest structure, and registry API surface (MARGO-WFM-APPLICATIONREGISTRY-002 through -012). Uses the `oras` CLI against REGISTRY_REF (env var) instead of hitting the WFM's HTTP API — no mTLS/signing involved, kept in its own group for that reason. Defaults to our own spec-conformant fixture package (harbor.machine:8443/library/margo-ctt-hello-world:1.0.0, built per docs.margo.org/specification/applications/application-registry) if REGISTRY_REF is unset. Point it at any other vendor's registry with REGISTRY_REF=myregistry.example.com/org/hello-world:1.0.0 ./run-tests.sh",
+  "description": "The Application Registry (OCI): manifest structure, media types, application description, pulling manifests and blobs, tag listing.",
   "FolderPath": [
-    "../test-suites/wfm-supplier/application-registry/test-cases",
-    "../test-suites/wfm-supplier/core/test-cases"
+    "../test-suites/wfm-supplier/application-registry/test-cases"
   ],
-  "flexibleOrder": false,
   "testCases": [
+    "ar-002-application-description-present",
+    "ar-003-tags-listing",
+    "ar-004-011-resource-media-types",
+    "ar-005-blobs-pullable",
+    "ar-006-manifest-pullable",
+    "ar-007-manifest-conforms-to-oci",
+    "ar-008-registry-api-surface",
+    "ar-009-empty-config",
+    "ar-010-tags-list-json-shape",
+    "ar-012-artifact-type",
     "wfm-application-registry-oci-conformance"
   ]
 }

@@ -22,7 +22,7 @@ wfm-supplier/
 
 | Term | Meaning |
 |---|---|
-| **Test Group** | A named collection of test cases (e.g. `core`, `silver`, `header-integrity`). Each group has a `group.json`. |
+| **Test Group** | A named collection of test cases (e.g. `core`, `quick-check`, `identity`). Each group has a `group.json`. |
 | **group.json** | Describes a test group: its name, persona, and path to the scenario JSON under `test-suites/`. |
 | **Scenario JSON** | Declarative scenario file (`test-suites/wfm-supplier/<group>/test-cases/*.json`) read by the CTT Runner. |
 | **Newman** | Postman's CLI runner. Used in older/legacy WFM test flows. New scenarios use the native JS runner (`run_wfm_scenarios.js`). |
@@ -34,12 +34,15 @@ wfm-supplier/
 
 | Group | Purpose |
 |---|---|
-| `core` | Baseline: capabilities, desired-state retrieval, ETag, content negotiation, status reporting |
-| `header-integrity` | ETag correctness and Content-Type validation on the manifest endpoint |
-| `multi-component` | Multi-component `ApplicationDeployment` — wait=true/false, digest & caching contract |
+| `core` | Every scenario of the suite except `device-unregister` — the conformance result |
+| `quick-check` | Identity accepted, a device registered, manifest served, conditional request answered — first check of the setup |
+| `management-interface` | Capabilities, desired-state retrieval, content negotiation, status reporting, ETag and cache headers |
+| `deployment-delivery` | Multi-component `ApplicationDeployment` — manifest URLs, deployment YAML, bundle, digests |
+| `identity` | mTLS handshake, trust bundle, refused clients, SVID rotation |
 | `application-registry` | OCI registry conformance (AR-002 through AR-012) |
-| `silver` | Extended set including MIAF identity scenarios |
-| `diamond` | Full suite |
+| `observability` | A device reporting an OpenTelemetry collector is accepted |
+| `device-unregister` | `DELETE /api/v1/capabilities/{deviceId}` — kept out of `core` (stops the sandbox Symphony WFM) |
+| `postman-lifecycle`, `postman-error-handling` | The same kind of tests written as Postman collections |
 
 ## Key Requirement IDs
 
