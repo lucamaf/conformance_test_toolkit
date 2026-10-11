@@ -36,9 +36,18 @@ type ObserveSpec struct {
 	SettleSeconds int              `json:"settle_seconds,omitempty"` // absent: extra time given to the device after that (default 15)
 	OnlyIf        *ObserveMatch    `json:"only_if,omitempty"`        // absent: the check applies only if the device did this
 	OnlyIfReason  string           `json:"only_if_reason,omitempty"` // shown when it does not apply
+	ForSeconds    int              `json:"for_seconds,omitempty"`    // absent: watch for this long instead of counting polls (nothing is read from the mock WFM meanwhile)
+	Since         string           `json:"since,omitempty"`          // "now": only requests received from this step on
+	MarkAfter     bool             `json:"mark_after,omitempty"`     // present: later steps look only at requests after the one seen here
+	IfAbsent      string           `json:"if_absent,omitempty"`      // present: "skip" or "skip_scenario" instead of FAIL when the request is not seen
+	SkipReason    string           `json:"skip_reason,omitempty"`    // shown with if_absent
+	Instruct      string           `json:"instruct,omitempty"`       // printed for the operator before waiting
 }
 
-const observeMarkKey = "_observeMark"
+const (
+	observeMarkKey  = "_observeMark"
+	skipScenarioKey = "_skipScenario"
+)
 
 func ownSPIFFEID() string {
 	cert, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-cert.pem"), filepath.Join(certDir, "svid-key.pem"))
@@ -114,6 +123,21 @@ func observeHolds(entry map[string]interface{}, v StepValidation, ctx *TestConte
 			return aNum && eErr == nil && a > e
 		}
 	}
+	if v.Operation == "contains" {
+		// An array contains the value when one of its elements equals it.
+		if arr, ok := extractJSONPath(entry, v.Field).([]interface{}); ok {
+			want := fmt.Sprintf("%v", v.Value)
+			if sv, isStr := v.Value.(string); isStr {
+				want = interpolateHeaderValue(sv, ctx)
+			}
+			for _, x := range arr {
+				if fmt.Sprintf("%v", x) == want {
+					return true
+				}
+			}
+			return false
+		}
+	}
 	return validateResponse(entry, v, ctx)
 }
 
@@ -140,10 +164,18 @@ func observeMatches(entry map[string]interface{}, m ObserveMatch, ctx *TestConte
 func deviceEntries(entries []map[string]interface{}, ctx *TestContext) []map[string]interface{} {
 	own := ownSPIFFEID()
 	device, _ := ctx.Data["deviceClient"].(string)
+	addr, _ := ctx.Data["deviceAddr"].(string)
 	var out []map[string]interface{}
 	for _, e := range entries {
 		client, _ := e["client"].(string)
-		if client == "" || client == own {
+		if client == "" {
+			// A failed TLS handshake has no client identity: it is attributed by address.
+			if e["method"] == "TLS" && addr != "" && e["remote"] == addr {
+				out = append(out, e)
+			}
+			continue
+		}
+		if client == own {
 			continue
 		}
 		if device == "" {
@@ -151,6 +183,10 @@ func deviceEntries(entries []map[string]interface{}, ctx *TestContext) []map[str
 			ctx.Data["deviceClient"] = client
 		}
 		if client == device {
+			if addr == "" {
+				addr, _ = e["remote"].(string)
+				ctx.Data["deviceAddr"] = addr
+			}
 			out = append(out, e)
 		}
 	}
@@ -190,13 +226,23 @@ func runObserve(step TestStep, ctx *TestContext) TestResult {
 			}
 		}
 	}
+	if reason, _ := ctx.Data[skipScenarioKey].(string); reason != "" {
+		result.Status, result.Reason = "skip", "not applicable: "+reason
+		return result
+	}
 	within := time.Duration(spec.WithinSeconds) * time.Second
 	if within == 0 {
 		within = 180 * time.Second
 	}
 	deadline := time.Now().Add(within)
+	if spec.Since == "now" {
+		markJournal(ctx)
+	}
 	mark := observeMark(ctx)
 	waiting := false
+	if spec.Instruct != "" {
+		fmt.Printf("    👉 %s\n", spec.Instruct)
+	}
 
 	read := func() ([]map[string]interface{}, bool) {
 		all, _, err := fetchJournal(mark)
@@ -217,7 +263,12 @@ func runObserve(step TestStep, ctx *TestContext) TestResult {
 	if spec.Expect == "absent" {
 		// The device must first have had the chance to act on the manifest.
 		polls := 0
-		for {
+		for spec.ForSeconds > 0 {
+			fmt.Printf("    ⏳ watching the device for %ds\n", spec.ForSeconds)
+			time.Sleep(time.Duration(spec.ForSeconds) * time.Second)
+			break
+		}
+		for spec.ForSeconds == 0 {
 			entries, ok := read()
 			if !ok {
 				return result
@@ -240,7 +291,7 @@ func runObserve(step TestStep, ctx *TestContext) TestResult {
 			wait(fmt.Sprintf("to read the desired state %d time(s)", spec.AfterPolls))
 		}
 		settle := time.Duration(spec.SettleSeconds) * time.Second
-		if settle == 0 {
+		if settle == 0 && spec.ForSeconds == 0 {
 			settle = 15 * time.Second
 		}
 		time.Sleep(settle)
@@ -272,7 +323,11 @@ func runObserve(step TestStep, ctx *TestContext) TestResult {
 			}
 		}
 		result.Status = "pass"
-		result.Reason = fmt.Sprintf("no such request after the device read the desired state %d time(s)", polls)
+		if spec.ForSeconds > 0 {
+			result.Reason = fmt.Sprintf("no such request in %ds", spec.ForSeconds)
+		} else {
+			result.Reason = fmt.Sprintf("no such request after the device read the desired state %d time(s)", polls)
+		}
 		return result
 	}
 
@@ -314,11 +369,24 @@ func runObserve(step TestStep, ctx *TestContext) TestResult {
 					ctx.Data[key] = val
 				}
 			}
+			if spec.MarkAfter {
+				if seq, ok := toFloat64(e["seq"]); ok {
+					ctx.Data[observeMarkKey] = int(seq)
+				}
+			}
 			result.Status = "pass"
 			result.Reason = "seen: " + describeEntry(e)
 			return result
 		}
 		if time.Now().After(deadline) {
+			if spec.IfAbsent == "skip" || spec.IfAbsent == "skip_scenario" {
+				reason := firstNonEmpty(spec.SkipReason, "the device did not send this request")
+				if spec.IfAbsent == "skip_scenario" {
+					ctx.Data[skipScenarioKey] = reason
+				}
+				result.Status, result.Reason = "skip", "not applicable: "+reason
+				return result
+			}
 			result.Status = "fail"
 			if len(entries) == 0 && ctx.Data["deviceClient"] == nil {
 				result.Reason = fmt.Sprintf("no request from any device was received in %s — is the device running and pointed at %s?", within, MIAFServer)

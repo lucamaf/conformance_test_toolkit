@@ -49,7 +49,10 @@
           200
         ],
         "validations": [],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
       },
       {
         "id": "wfm-unreg-2",
@@ -60,7 +63,10 @@
         "headers": {},
         "expected_status": 204,
         "validations": [],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
       },
       {
         "id": "wfm-unreg-3",
@@ -82,7 +88,10 @@
             "value": "https://docs.margo.org/specification/problem-types#device-not-found"
           }
         ],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
       }
     ]
   }

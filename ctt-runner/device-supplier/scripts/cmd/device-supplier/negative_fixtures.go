@@ -64,6 +64,23 @@ var knownFixtures = map[NegativeFixture]bool{
 	FixtureDeploymentDigestMismatch:     true,
 	FixtureNonIncreasingManifestVersion: true,
 	FixtureWrongSizeBytes:               true,
+	FixtureBundleContentTampered:        true,
+	FixtureDeploymentContentTampered:    true,
+}
+
+// The two "content tampered" fixtures leave the manifest correct and change
+// the bytes served under the correct digest URL instead. Unlike the
+// *_digest_mismatch fixtures they also reach a device that builds its fetch
+// URL from the digest: it receives content whose sha256 is not the digest it
+// asked for, and must abort.
+const (
+	FixtureBundleContentTampered     NegativeFixture = "bundle_content_tampered"
+	FixtureDeploymentContentTampered NegativeFixture = "deployment_content_tampered"
+)
+
+// tamper returns content that no longer hashes to its advertised digest.
+func tamper(content []byte) []byte {
+	return append(append([]byte{}, content...), []byte("\n# tampered by the conformance test\n")...)
 }
 
 // isKnownFixture reports whether f is a fixture this build understands.

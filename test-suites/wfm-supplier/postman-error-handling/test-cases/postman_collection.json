@@ -61,7 +61,9 @@
         }
       ],
       "response": [],
-      "crIds": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
       "expected_status": 201,
       "accepted_statuses": [
         200
@@ -186,7 +188,9 @@
         }
       ],
       "response": [],
-      "crIds": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
       "expected_status": 200
     },
     {
@@ -399,7 +403,9 @@
         }
       ],
       "response": [],
-      "crIds": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
       "expected_status": 422,
       "validations": [
         {

@@ -1,8 +1,8 @@
 [
   {
-    "id": "scenario-otel-observability",
-    "name": "OTEL Observability \u2014 otelCollector Capability and Telemetry Push",
-    "description": "Verifies the vendor device's OTEL collector actively pushes telemetry to the CTT's OTLP HTTP receiver (port 4318) and Prometheus Remote Write endpoint (port 9090). PRECONDITION: configure the device's OTEL collector to push to http://<ctt-host>:4318 (OTLP HTTP) and http://<ctt-host>:9090/api/v1/write (Prometheus Remote Write) before running this scenario. Matches the sandbox observability architecture: device \u2192 Jaeger OTLP / Prometheus Remote Write \u2192 WFM observability stack.",
+    "id": "rd-13-observability",
+    "name": "Real device \u2014 observability",
+    "description": "The device's OpenTelemetry collector pushes telemetry to the CTT (OTLP on port 4318, Prometheus remote write on port 9090). Reported as SKIP when no telemetry arrives: point the device's collector at the CTT host to run it.",
     "crIds": [
       "MARGO-DEV-OBSERVABILITY-006",
       "MARGO-DEV-OBSERVABILITY-010",
@@ -11,7 +11,7 @@
     "optional": true,
     "steps": [
       {
-        "id": "step-otel-2",
+        "id": "rd-13-observability-otlp",
         "name": "Wait for Device OTEL Collector to Push Telemetry (traces or metrics)",
         "crIds": [
           "MARGO-DEV-OBSERVABILITY-006",
@@ -48,7 +48,7 @@
         }
       },
       {
-        "id": "step-otel-3",
+        "id": "rd-13-observability-remote-write",
         "name": "Confirm Prometheus Remote Write Also Received",
         "crIds": [
           "MARGO-DEV-OBSERVABILITY-006"

@@ -10,7 +10,9 @@
       {
         "id": "wfm-otel-cap-1",
         "name": "Report Capabilities With otelCollector: true — Accepted",
-        "crIds": [],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
         "mtls": true,
@@ -54,7 +56,9 @@
       {
         "id": "wfm-otel-cap-2",
         "name": "Report Capabilities With otelCollector: false — Accepted",
-        "crIds": [],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
         "mtls": true,

@@ -72,8 +72,9 @@ conformance_test_toolkit/
 The full set of each persona is the `core` group:
 `test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios, 45
 steps) and `test-suites/device-supplier/core/test-cases/device-supplier.json`
-(25 scenarios, 120 steps). A real device is judged by the device group
-`real-device`, which checks the requests the device sent to the mock WFM.
+(13 scenarios, 61 steps). The device `core` judges a real device: it checks the
+requests the device sends to the mock WFM. The device group `self-check` runs
+the CTT's own device client against the mock WFM and needs no device.
 
 ---
 
@@ -126,16 +127,16 @@ carries the group name and version.
 
 | Group | Persona | What it is for |
 |---|---|---|
-| `quick-check` | both | A first check of the URL and the identity setup |
+| `quick-check` | both | A first check of the URL and the identity setup (no device needed) |
+| `self-check`, `random-order` | Device | The CTT's own device client against the mock WFM (no device needed) |
 | `management-interface` | both | The Management Interface API |
 | `identity` | both | mTLS, trust, SVID rotation |
 | `observability` | both | OpenTelemetry |
 | `deployment-delivery`, `application-registry` | WFM | Delivering a deployment; the OCI registry |
 | `device-unregister` | WFM | `DELETE` capabilities, kept out of `core` |
 | `postman-lifecycle`, `postman-error-handling` | WFM | Tests written in Postman |
-| `manifest-integrity`, `random-order` | Device | Manifests a device must reject; scenarios in random order |
-| `real-device` | Device | Judges a real device from the requests it sent to the mock WFM |
-| `core` | both | The full set — run this for a conformance result |
+| `manifest-integrity` | Device | Manifests and content a device must reject; state kept across a restart |
+| `core` | both | The full set — run this for a conformance result. WFM: requests sent to the real WFM. Device: the requests a real device sends, judged by the mock WFM |
 
 Why groups exist and how they are created is described in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#6-the-test-data-model).

@@ -2,7 +2,7 @@
   "name": "quick-check",
   "version": "1.0.0-rc.3",
   "persona": "device-supplier",
-  "description": "A first check of the URLs and the identity setup, a few seconds: capabilities, manifest, deployment, bundle, status.",
+  "description": "No device needed: a first check of the URLs and the identity setup, a few seconds.",
   "FolderPath": [
     "../test-suites/device-supplier/quick-check/test-cases"
   ],

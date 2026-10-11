@@ -117,14 +117,17 @@ bodies.
 The toolkit plays the role of a conformant WFM (the mock WFM, mTLS on port
 3003). It is used in two ways:
 
-- The toolkit's own device client runs a group's scenarios against the mock
-  WFM. This checks the mock WFM and shows what a conforming device sends; it
-  says nothing about a vendor's device.
-- The vendor's real device agent connects to the mock WFM, and the group
-  `real-device` judges it. A device only ever calls out, so nothing is sent
-  to it: the mock WFM records every request it receives, the group changes
-  the desired state (also to manifests a device must reject), and each step
-  checks what the device then sent or did not send.
+- **Conformance of a device (`core` and its subsets).** The vendor's real
+  device agent connects to the mock WFM. A device only ever calls out, so
+  nothing is sent to it: the mock WFM records every request it receives and
+  judges it with the rules of `assertions.json`, which it loads at start. The
+  group changes the desired state (also to manifests and content a device
+  must reject), and each step reads what the device then sent or did not
+  send, and the mock WFM's verdict on it.
+- **Check of the setup (`self-check`, `quick-check`, `random-order`).** The
+  toolkit's own device client runs scenarios against the mock WFM. This
+  checks the mock WFM and the identity setup; it says nothing about a
+  vendor's device.
 
 ### Application Supplier
 
@@ -250,7 +253,8 @@ The groups shipped with the toolkit:
 
 | Group | Persona | What it checks |
 |---|---|---|
-| `quick-check` | both | A first check of the URL and the identity setup, a few seconds |
+| `quick-check` | both | A first check of the URL and the identity setup, a few seconds (no device needed) |
+| `self-check`, `random-order` | Device | The CTT's own device client against the mock WFM (no device needed) |
 | `management-interface` | both | The Management Interface API, accepted and rejected requests |
 | `identity` | both | mTLS handshake, trust, SVID rotation |
 | `observability` | both | OpenTelemetry |
@@ -258,10 +262,8 @@ The groups shipped with the toolkit:
 | `application-registry` | WFM | The OCI Application Registry |
 | `device-unregister` | WFM | `DELETE /api/v1/capabilities/{deviceId}` |
 | `postman-lifecycle`, `postman-error-handling` | WFM | The same kind of tests written as Postman collections |
-| `manifest-integrity` | Device | Manifests a device must reject, and one it must accept |
-| `random-order` | Device | The lifecycle scenarios in a different random order on every run |
-| `real-device` | Device | A real device, judged from the requests it sent to the mock WFM |
-| `core` | both | The full set (WFM: everything except `device-unregister`) — the conformance result |
+| `manifest-integrity` | Device | Manifests and content a device must reject, one it must accept, state kept across a restart |
+| `core` | both | The full set — the conformance result. WFM: everything except `device-unregister`. Device: every real-device scenario |
 
 `core` holds the complete test-case file of a persona. Each other group has
 its own `test-cases` folder with the scenarios it runs, so a scenario that is

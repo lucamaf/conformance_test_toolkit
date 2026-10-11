@@ -257,9 +257,9 @@ func handleMIAFPutCapabilities(w http.ResponseWriter, r *http.Request) {
 	// Reuses the same data-driven validation as the legacy endpoint — the
 	// capabilities body shape didn't change under MIAF, only how the caller
 	// is identified.
-	errors := validateRequest("POST_capabilities", body)
+	errors := validateRequest("PUT_capabilities", body)
 	if len(errors) > 0 {
-		respondValidationProblem(w, r, "POST_capabilities", errors)
+		respondValidationProblem(w, r, "PUT_capabilities", errors)
 		return
 	}
 
@@ -361,10 +361,13 @@ func handleMIAFGetBundle(w http.ResponseWriter, r *http.Request) {
 		respondProblem(w, r, 404, "invalid-bundle", "Invalid Bundle", fmt.Sprintf("Bundle not found for digest: %s", digest))
 		return
 	}
-	if normalizeETag(r.Header.Get("If-None-Match")) == digest {
+	if normalizeETag(r.Header.Get("If-None-Match")) == digest && client.NegativeFixture != FixtureBundleContentTampered {
 		w.Header().Set("ETag", quoteETag(digest))
 		w.WriteHeader(304)
 		return
+	}
+	if client.NegativeFixture == FixtureBundleContentTampered {
+		bundleBytes = tamper(bundleBytes)
 	}
 	w.Header().Set("Content-Type", "application/vnd.margo.bundle.v1+tar+gzip")
 	w.Header().Set("ETag", quoteETag(digest))
@@ -398,10 +401,13 @@ func handleMIAFGetDeploymentManifest(w http.ResponseWriter, r *http.Request) {
 		respondProblem(w, r, 404, "deployment-not-found", "Deployment Not Found", fmt.Sprintf("Deployment not found for digest: %s", digest))
 		return
 	}
-	if normalizeETag(r.Header.Get("If-None-Match")) == digest {
+	if normalizeETag(r.Header.Get("If-None-Match")) == digest && client.NegativeFixture != FixtureDeploymentContentTampered {
 		w.Header().Set("ETag", quoteETag(digest))
 		w.WriteHeader(304)
 		return
+	}
+	if client.NegativeFixture == FixtureDeploymentContentTampered {
+		yamlBytes = tamper(yamlBytes)
 	}
 	w.Header().Set("Content-Type", "application/yaml")
 	w.Header().Set("ETag", quoteETag(digest))
@@ -435,13 +441,6 @@ func handleMIAFPostStatus(w http.ResponseWriter, r *http.Request) {
 				ValidationError{RuleID: "status-path-001", Error: "deploymentId in body must match deploymentId in path"})
 			return
 		}
-	}
-
-	// rc.3: adoptedManifestVersion is required on every status report.
-	if _, ok := getFieldValue(body, "adoptedManifestVersion"); !ok {
-		respondProblem(w, r, 422, "semantic-error", "Semantic Error", "Request body includes a semantic error.",
-			ValidationError{RuleID: "status-miaf-001", Error: "adoptedManifestVersion is required"})
-		return
 	}
 
 	errors := validateRequest("POST_status", body)
@@ -575,6 +574,7 @@ func startMIAFServer(router *mux.Router) {
 	router.HandleFunc("/v1alpha2/margo/api/v1/deployments/{deploymentId}/status", requireSVID(handleMIAFPostStatus)).Methods("POST")
 	router.HandleFunc("/v1alpha2/margo/api/v1/test/deployments", requireSVID(handleMIAFTestSetDeployments)).Methods("PUT")
 	router.HandleFunc("/v1alpha2/margo/api/v1/test/requests", requireSVID(handleTestRequests)).Methods("GET")
+	router.HandleFunc("/v1alpha2/margo/api/v1/test/server-identity", requireSVID(handleTestServerIdentity)).Methods("PUT")
 
 	certFile := os.Getenv("MIAF_SERVER_CERT")
 	keyFile := os.Getenv("MIAF_SERVER_KEY")
@@ -620,7 +620,24 @@ func startMIAFServer(router *mux.Router) {
 			return recognizeWFMClient(uris[0].String())
 		},
 	}
-	server := &http.Server{Addr: port, Handler: router, TLSConfig: tlsConfig}
+	// For the "untrusted WFM" test the listener can present, for a limited time,
+	// a certificate with this WFM's SPIFFE ID that the MIS did not issue.
+	tlsConfig.GetConfigForClient = func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
+		if !untrustedIdentityActive() {
+			return nil, nil
+		}
+		cert, err := untrustedServerCertificate(wfmSPIFFEID)
+		if err != nil {
+			return nil, err
+		}
+		untrustedConns.Store(hello.Conn.RemoteAddr().String(), true)
+		cfg := tlsConfig.Clone()
+		cfg.GetConfigForClient = nil
+		cfg.Certificates = []tls.Certificate{cert}
+		return cfg, nil
+	}
+	server := &http.Server{Addr: port, Handler: router, TLSConfig: tlsConfig,
+		ErrorLog: log.New(handshakeErrorRecorder{}, "", log.LstdFlags)}
 
 	go func() {
 		log.Printf("🔐 MIAF (mTLS) listener on https://localhost%s as %s", port, wfmSPIFFEID)

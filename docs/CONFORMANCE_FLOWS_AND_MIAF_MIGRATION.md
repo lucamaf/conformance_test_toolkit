@@ -618,7 +618,7 @@ status‑report test case needs to check this field now, including on removal.
 - `run_tests.go` (the suite's own device client): presents a client SVID and
   validates the mock WFM's SVID; no signing. It also has *observe* steps
   (`observe.go`) that judge a real device from the mock WFM's request
-  journal (`journal.go`) — the device group `real-device`.
+  journal (`journal.go`) — the device group `core`.
 
 ---
 

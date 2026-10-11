@@ -415,7 +415,9 @@
   {
     "id": "wfm-core-status",
     "name": "Deployment Status Reporting",
-    "crIds": [],
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
+    ],
     "description": "A status report for a deployment ID the WFM did not assign. The specification leaves the answer open, so the report may be accepted (200/201) or rejected as a semantic error (422); a server error or any other answer fails.",
     "steps": [
       {
@@ -444,7 +446,10 @@
           422
         ],
         "validations": [],
-        "extract_context": {}
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
       }
     ]
   },

@@ -9,13 +9,13 @@ The Device Supplier persona is self-contained: **no external WFM is needed**.
 The CTT provides a spec-compliant mock WFM server locally and a simulated
 device-agent that exercises every required protocol flow against it.
 
-> **What the report covers.** The groups in Phase 3 (`core` and the others) run
-> the CTT's *own* simulated device against the CTT's mock WFM. They prove the
-> mock WFM is set up and working — their report says nothing about your device.
-> To test a real device, do Phases 1 and 2, then follow
-> [Testing a real device-agent](#testing-a-real-device-agent). Its last step
-> runs the `real-device` group, which judges the requests your device sent and
-> writes the report for the device.
+> **What the report covers.** The conformance result of a device comes from the
+> group `core`: it judges the requests your real device sends to the mock WFM.
+> Do Phases 1 and 2, then follow
+> [Testing a real device-agent](#testing-a-real-device-agent); its last step
+> runs `core`.
+> Phase 3 is a check of the setup only: the group `self-check` runs the CTT's
+> *own* simulated device against the mock WFM and says nothing about your device.
 
 ---
 
@@ -279,7 +279,7 @@ The server keeps running after you leave the menu. Stop it with option 4.
 
 ---
 
-## Phase 3 — Run the conformance suite
+## Phase 3 — Check the setup (no device needed)
 
 ### Via the interactive menu
 
@@ -304,29 +304,32 @@ The server is left running afterwards; stop it with option 4 when you are done.
 ```
 📋 Available Device Test Groups:
    1) core                     (v1.0.0-rc.3)
-        The full Device Supplier conformance set for Margo 1.0.0-rc.3. Run this
-        group for a conformance result.
-   2) identity                 (v1.0.0-rc.3)
-        Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, ...
+        Real device: the full Device Supplier conformance set for Margo
+        1.0.0-rc.3. Judges the device connected to the mock WFM ...
   ...
+   8) self-check               (v1.0.0-rc.3)
+        No device needed: the CTT's own device client against the mock WFM. ...
 ```
 
-Select `core` (enter its number from the list — `1` above). It runs the full
-set of rc.3 device-supplier scenarios; the other groups are subsets of it.
+Select `self-check` (enter its number from the list — `8` above). It runs the
+CTT's own device client against the mock WFM: 90 steps that must all pass. It
+confirms that the identity, the URLs and the mock WFM are in order before a
+real device is connected.
 
-A group is a named set of scenarios from the suite, so you can run one area at
-a time and the report states which set was run:
+A group is a named set of scenarios, so you can run one area at a time and the
+report states which set was run. Each description in the list starts with
+"Real device:" or "No device needed:".
 
-| Group | What it checks | When to run it |
-|---|---|---|
-| `quick-check` | Capabilities reported, manifest, deployment and bundle fetched, status reported (9 steps) | First, to confirm the URLs and the identity setup |
-| `management-interface` | The Management Interface API as a device uses it, with the errors for each call | While working on the API client |
-| `manifest-integrity` | Manifests a device MUST reject (wrong digest, unsupported algorithm, version not increasing) and one it MUST accept | While working on manifest validation |
-| `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation | While working on MIAF |
-| `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (SKIP otherwise) |
-| `random-order` | The lifecycle scenarios in a different random order on every run | To show that no scenario depends on another |
-| `core` | Every scenario of the suite | To check the mock WFM and the CTT's own device client |
-| `real-device` | What a real device sent to the mock WFM | For the result of a real device — see [Testing a real device-agent](#testing-a-real-device-agent) |
+| Group | Needs a device | What it checks | When to run it |
+|---|---|---|---|
+| `quick-check` | no | Capabilities, manifest, deployment, bundle, status (11 steps) | First, to confirm the URLs and the identity setup |
+| `self-check` | no | The CTT's own device client against the mock WFM: every API call, its errors, the manifests a device must reject | Before connecting a device; after changing `assertions.json` |
+| `random-order` | no | The self-check lifecycle scenarios in a different random order on every run | To show that no scenario depends on another |
+| `management-interface` | yes | Capabilities, desired state, fetch, status, a deployment added and withdrawn | While working on the API client |
+| `manifest-integrity` | yes | Manifests and content a device MUST reject, one it MUST accept, state kept across a restart | While working on manifest validation |
+| `identity` | yes | The device's SVID, refusing a WFM the MIS did not certify, SVID rotation | While working on MIAF |
+| `observability` | yes | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (SKIP otherwise) |
+| `core` | yes | All of the "yes" groups together | For the conformance result of a device — see [Testing a real device-agent](#testing-a-real-device-agent) |
 
 ### URLs to enter
 
@@ -343,9 +346,9 @@ Enter Management Interface (mTLS) URL [https://192.168.x.x:3003/v1alpha2/margo]:
 Press Enter. All conformance steps go to the mTLS port (3003); port 3001 is
 only used for the health check and telemetry status.
 
-A full `core` run takes about 5 minutes. Two steps of the optional
-observability scenario wait up to 2 minutes each for telemetry from a real
-device and are reported as skipped when none arrives.
+A `self-check` run takes a few seconds. Two SVID Rotation steps are reported as
+SKIP until the CTT's client SVID has been re-issued and installed again with
+Setup Identity.
 
 The HTML report is written to two locations:
 
@@ -363,7 +366,7 @@ coverage summary, per-scenario table, and a full step-detail table.
 
 The mock WFM from Phase 2 is the target. The device gets its identity from the
 same MIS and connects to the mock WFM. You can watch the mock WFM's log to see
-what it sends (Step 3), and the `real-device` group writes the report (Step 4).
+what it sends (Step 3), and the `core` group writes the report (Step 4).
 
 ### Step 1 — Issue the device an SVID
 
@@ -445,7 +448,7 @@ export CTT_SAMPLE_REVISION=<version>                    # e.g. 1.0.0
 bash ctt-runner/ctt-start.sh    # → 2) Device Supplier → 2) Start Mock WFM Server
 ```
 
-### Step 4 — Get the report for the device
+### Step 4 — Get the conformance report for the device
 
 With the mock WFM running and the device connected to it:
 
@@ -454,44 +457,68 @@ cd ~/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
 ```
 
-Select **2) Device Supplier → 3. Run Tests** and choose the group `real-device`.
+Select **2) Device Supplier → 3. Run Tests** and choose the group `core`.
 Press Enter for the two URLs. (Without the menu:
-`bash ctt-runner/ctt-start.sh device real-device`.)
+`bash ctt-runner/ctt-start.sh device core`.)
 
-In this group the CTT sends nothing to the device. Each step reads what the
-mock WFM received from your device and judges it. Between steps the CTT changes
-the desired state on the mock WFM, also to manifests a device must reject, and
-waits for the device to read it — so the run takes several minutes; lines
-starting with `⏳ waiting for the device` are normal.
+In this group the CTT sends nothing to the device. The mock WFM records every
+request your device sends and judges it with the rules of `assertions.json`,
+which it loads when it starts. Each step reads one of those verdicts. Between
+steps the CTT changes the desired state on the mock WFM — also to manifests and
+content a device must reject — and waits for the device to read it. A run takes
+about 15 minutes; lines starting with `⏳ waiting for the device` are normal.
 
 | Scenario | What the device must do |
 |---|---|
-| Identity and capabilities | connect over mTLS with its SVID and report valid capabilities |
-| Desired state, fetch and status | read the manifest, fetch the bundle or the deployment by digest, report status with `adoptedManifestVersion` |
-| A deployment is added | read the new manifest and report status for the new deployment |
+| Identity | connect over mTLS with an X.509-SVID that is a leaf certificate with one URI SAN |
+| Capabilities | report capabilities that pass the mock WFM's validation; declare an OCI runtime, an OpenTelemetry collector, a deployment type, memory, storage and CPUs |
+| Desired state, fetch and status | read the manifest, fetch the bundle or the deployment by digest, report status, re-read with the ETag (304) |
+| A deployment is added and withdrawn | report status for the new deployment, then `removing` or `removed` after it is withdrawn |
 | Manifest version does not increase | not act on it, and keep its previous state |
 | Unsupported digest algorithm (`sha512`) | not act on it, not fetch anything it names, and keep its previous state |
-| Bundle / deployment does not match its digest | not act on it — judged only if the device downloaded the mismatching content, otherwise reported as SKIP "not applicable" |
+| Bundle / deployment file does not match its digest | not act on it — judged only if the device downloaded that content, otherwise SKIP "not applicable" |
 | Wrong `sizeBytes`, correct digests | accept the manifest and report status for its new deployment |
+| A WFM the MIS did not certify | send no request while the mock WFM presents a certificate the MIS did not issue (50 seconds), then continue |
+| State survives a restart | after a restart, still send the ETag of the adopted manifest and still reject a lower manifest version |
+| SVID rotation | keep working with a re-issued SVID for the same SPIFFE ID |
+| Observability | push telemetry to the CTT (SKIP when no collector is pointed at the CTT) |
+
+**The one thing you do during the run:** when this line appears, restart the
+device (you have 3 minutes):
+
+```
+👉 Restart the device under test now (within 3 minutes). To also test SVID rotation, replace its SVID with a re-issued one for the same SPIFFE ID before starting it.
+```
+
+If the device is not restarted, the "State survives a restart" steps are
+reported as SKIP. If its SVID is not replaced, "SVID rotation" is reported as
+SKIP. To replace it, issue the device a new SVID exactly as in Step 1 (same WFM
+ID and client ID) and install it on the device before starting it again.
 
 How to read the result:
 
 - **PASS** on a "must not" step means the device did not send the forbidden
   request after it had read the manifest two or three times.
-- **FAIL** shows the request that was wrong, for example
+- **FAIL** shows the request that was wrong, or the rule of `assertions.json`
+  it did not meet, for example
   `the device sent a request it must not send here: GET /api/v1/bundles/sha512:...`.
 - **"it does not send the ETag of the rejected manifest back"** fails when the
   device answers the next poll with `If-None-Match` of a manifest it had to
   reject: it has stored that manifest as its state.
+- **SKIP "not applicable"** means the check could not be judged on this device
+  or in this run; the reason is given.
 - The deployments added during the run point at the same placeholder package as
   the first one, so a device reports them as `failed` unless
   `CTT_SAMPLE_REPOSITORY` is set. Any status report counts as "acted on it".
 
-The mock WFM keeps everything it received since it was started. For a clean
-run with another device, stop and start the mock WFM first (options 4 and 2).
+The mock WFM keeps everything it received since it was started, and a device
+keeps the manifest version it adopted. For a clean run, stop and start the mock
+WFM (options 4 and 2) and start the device with empty state.
 
-The report is written to `ctt-runner/reports/device-supplier/`, like every
-other device report, with the requirement IDs next to each step.
+The report is written to `ctt-runner/reports/device-supplier/` with the
+requirement IDs next to each step. Which requirement is judged by which step,
+and which requirements cannot be judged, is listed in
+`docs/device-supplier-requirements-coverage.md`.
 
 ---
 
@@ -688,7 +715,8 @@ Phase 2 — Start the mock WFM
   □ Note the Management Interface URL and WFM SPIFFE ID it prints
 
 Phase 3 — CTT self-test (CTT simulates device-agent against mock WFM)
-  □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → core → Enter, Enter at the URL prompts
+  □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → self-check → Enter, Enter at the URL prompts   (setup check, no device)
+  □ With a real device connected: 3) Run Tests → core → restart the device when asked
   □ Open report: ctt-runner/reports/device-supplier/conformance-report-<ts>.html
 
 Testing a real device (the Phase 3 report does not cover it)

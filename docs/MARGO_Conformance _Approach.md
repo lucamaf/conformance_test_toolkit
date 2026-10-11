@@ -1197,8 +1197,12 @@ HTTP response header (prefix with `\_headers.`)
 {
   "endpoints": 
   {
-    "POST_capabilities":  { ... },
+    "PUT_capabilities":   { ... },
     "POST_status":        { ... }
+  },
+  "device_expectations": 
+  {
+    "PUT_capabilities":   [ ... ]
   },
   "error_responses": 
   {
@@ -1209,9 +1213,11 @@ HTTP response header (prefix with `\_headers.`)
 }
 ```
 
-- The entry names are fixed names used by the mock WFM: `POST_capabilities` holds the rules for `PUT /api/v1/capabilities/{deviceId}` and `POST_status` the rules for `POST /api/v1/deployments/{deploymentId}/status`.
+- The mock WFM loads this file when it starts and it decides the validation: change a rule, restart the mock WFM, and the verdict changes.
 
-- The file also contains `rejected_certificates` and the entries `POST_onboarding` and `GET_onboarding_certificate`. They belong to the onboarding API of earlier specification versions and are not used for Margo 1.0.0-rc.3.
+- `endpoints` holds the rules of the Margo 1.0.0-rc.3 API: `PUT_capabilities` for `PUT /api/v1/capabilities/{deviceId}` and `POST_status` for `POST /api/v1/deployments/{deploymentId}/status`. A request that breaks a rule is rejected with problem details.
+
+- `device_expectations` holds rules in the same format for what a Margo device must declare beyond the API schema, for example an OCI runtime or an OpenTelemetry collector. A request that breaks one is still accepted; the verdict of every rule is recorded with the request (`expectations.<rule_id>` is `pass` or says what is wrong) and read by the observe steps of the device group `core`.
 
 <table>
 <tr>
@@ -1245,7 +1251,7 @@ Defines what error format each type of failure uses
 - An element of  ‘endponts’ has the following structure – 
 
 ```json
-"POST_capabilities": 
+"PUT_capabilities": 
 {
   "path": "/api/v1/capabilities/{deviceId}",
   "method": "PUT",
@@ -1492,6 +1498,34 @@ For `"string"` type: minimum character count
 </tr>
 <tr>
 <td>
+`pattern`
+</td>
+<td>
+string
+</td>
+<td>
+No
+</td>
+<td>
+For `"string"` type: a regular expression the value must match
+</td>
+</tr>
+<tr>
+<td>
+`itemsInclude`
+</td>
+<td>
+string\[]
+</td>
+<td>
+No
+</td>
+<td>
+For `"array"` type: every listed value must be among the items
+</td>
+</tr>
+<tr>
+<td>
 `minItems`
 </td>
 <td>
@@ -1619,7 +1653,7 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 
 - A real device only calls out; the Conformance Framework cannot send it a request. For a real device the mock WFM records every request it receives, and an `observe` step checks what the device sent — or, for a manifest the device must reject, what it did not send.
 
-- The group `test-suites/device-supplier/real-device` is written this way. A normal step that changes the desired state on the mock WFM (`PUT /api/v1/test/deployments?client={deviceClient}`) starts a new observation window.
+- The device group `core` (`test-suites/device-supplier/core`) is written this way. The mock WFM judges each request with the rules of `assertions.json` (see [Enablement for API Contract tests]); a step reads the verdict: the status the request was answered with, and `expectations.<rule\_id>`, which is `pass` or says what is wrong. A normal step that changes the desired state on the mock WFM (`PUT /api/v1/test/deployments?client={deviceClient}`) starts a new observation window.
 
 ```json
 {
@@ -1711,6 +1745,38 @@ How long to wait for the device. Default 180
 </td>
 <td>
 `absent`: a request (`method`, `path\_regex`, `where`) the device must have sent for the check to apply. Otherwise the step is reported as SKIP "not applicable" with the reason
+</td>
+</tr>
+<tr>
+<td>
+`for\_seconds`
+</td>
+<td>
+`absent`: watch for this long instead of counting reads of the desired state — used while the mock WFM presents a certificate the device must refuse
+</td>
+</tr>
+<tr>
+<td>
+`if\_absent`, `skip\_reason`
+</td>
+<td>
+`present`: `"skip"` reports SKIP "not applicable" instead of FAIL when the request is not seen; `"skip\_scenario"` also skips the rest of the scenario
+</td>
+</tr>
+<tr>
+<td>
+`since`, `mark\_after`
+</td>
+<td>
+`"since": "now"` looks only at requests received from this step on. `"mark\_after": true` makes the following steps look only at requests after the one seen here
+</td>
+</tr>
+<tr>
+<td>
+`instruct`
+</td>
+<td>
+A line printed for the operator before waiting, for example "Restart the device now"
 </td>
 </tr>
 </table>

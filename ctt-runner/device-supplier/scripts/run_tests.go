@@ -409,8 +409,12 @@ func runStep(step TestStep, ctx *TestContext) TestResult {
 	if step.Observe != nil {
 		return runObserve(step, ctx)
 	}
-	// A change of the desired state starts a new observation window.
-	if strings.Contains(step.Endpoint, "/api/v1/test/deployments") {
+	if reason, _ := ctx.Data[skipScenarioKey].(string); reason != "" {
+		return TestResult{StepID: step.ID, StepName: step.Name, Method: step.Method, Endpoint: step.Endpoint,
+			Timestamp: time.Now().UTC().Format(time.RFC3339), Status: "skip", Reason: "not applicable: " + reason}
+	}
+	// A change made through the test-control endpoints starts a new observation window.
+	if strings.Contains(step.Endpoint, "/api/v1/test/") {
 		markJournal(ctx)
 	}
 	if step.Poll == nil {

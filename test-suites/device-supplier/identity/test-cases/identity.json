@@ -1,254 +1,243 @@
 [
   {
-    "id": "scenario-miaf-identity-mtls",
-    "name": "MIAF Identity \u2014 mTLS SVID Authentication",
-    "description": "Identity over mTLS: the client presents its X.509-SVID and is accepted; a client without a certificate, and one with a certificate the MIS did not issue, are refused by the mock WFM.",
+    "id": "rd-01-identity",
+    "name": "Real device \u2014 identity",
+    "description": "The device under test connects to the mock WFM over mutual TLS with its own X.509-SVID. Nothing is sent to the device: every step checks what the device sent, as the mock WFM received and judged it.",
     "crIds": [
+      "MARGO-DEV-DEPLOYMENT-003",
+      "MARGO-DEV-MANAGEMENTINTERFACE-004",
       "MARGO-DEV-MANAGEMENTINTERFACE-005",
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
-      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
     ],
     "steps": [
       {
-        "id": "step-miaf-mtls-1",
-        "name": "Client Presents Its SVID On A Capabilities Report \u2014 Accepted",
+        "id": "rd-01-identity-accepted",
+        "name": "The device connects over mTLS with its X.509-SVID and the mock WFM accepts it",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001"
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+          "MARGO-DEV-DEPLOYMENT-003"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-identity-check",
-        "mtls": true,
-        "request_body": {
-          "properties": {
-            "id": "device-identity-check",
-            "vendor": "TestVendor",
-            "modelNumber": "CTT-MIAF-001",
-            "serialNumber": "SN-MIAF-001",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "_client_cert.spiffe_id",
-            "operation": "matches_regex",
-            "value": "^spiffe://.+/.+"
-          }
-        ],
-        "extract_context": {
-          "deviceSpiffeId": "_client_cert.spiffe_id"
-        },
-        "accepted_statuses": [
-          200
-        ]
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 180,
+          "check": [
+            {
+              "field": "client",
+              "operation": "matches_regex",
+              "value": "^spiffe://[^/]+/margo/wfm/[^/]+/client/[^/]+$"
+            }
+          ]
+        }
       },
       {
-        "id": "step-miaf-mtls-2",
-        "name": "Client's SPIFFE ID Is Recognised By The WFM \u2014 Request Accepted",
+        "id": "rd-01-identity-svid-profile",
+        "name": "The device's certificate is an SVID leaf: one URI SAN, not a CA",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+          "MARGO-DEV-MANAGEMENTINTERFACE-004",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_client_cert.spiffe_id",
-            "operation": "exists"
-          },
-          {
-            "field": "_client_cert.trust_domain",
-            "operation": "is_string"
-          }
-        ],
-        "extract_context": {}
-      },
-      {
-        "id": "step-miaf-mtls-3",
-        "name": "A Client Without A Certificate Is Refused",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
-        ],
-        "svid_source": "none",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 0,
-        "accepted_statuses": [
-          403
-        ],
-        "expect_transport_error": true,
-        "validations": [],
-        "extract_context": {}
-      },
-      {
-        "id": "step-miaf-mtls-4",
-        "name": "A Client Certificate The MIS Did Not Issue Is Refused",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
-        ],
-        "svid_source": "untrusted",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 0,
-        "accepted_statuses": [
-          403
-        ],
-        "expect_transport_error": true,
-        "validations": [],
-        "extract_context": {}
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 30,
+          "check": [
+            {
+              "field": "cert.uri_sans",
+              "operation": "equals",
+              "value": 1
+            },
+            {
+              "field": "cert.is_ca",
+              "operation": "equals",
+              "value": false
+            }
+          ]
+        }
       }
     ]
   },
   {
-    "id": "scenario-miaf-identity-svid-rotation",
-    "name": "MIAF Identity \u2014 SVID Rotation Continuity",
-    "description": "After the client SVID is rotated, access continues without re-registration: a request with the pre-rotation SVID and a request with the re-issued SVID (same SPIFFE ID) are both accepted. Runs only once the client SVID has been re-issued and installed again through Setup Identity, which keeps the SVID it replaces; until then both steps are reported as SKIP.",
+    "id": "rd-10-wfm-trust",
+    "name": "Real device \u2014 a WFM the MIS did not certify is refused",
+    "description": "For 50 seconds the mock WFM presents a certificate with its own SPIFFE ID that the MIS did not issue. The device must refuse the connection: it must not send any request over it. Afterwards the mock WFM presents its SVID again and the device continues.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-018",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+    ],
+    "steps": [
+      {
+        "id": "rd-10-wfm-trust-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-10-wfm-trust-arm",
+        "name": "Mock WFM: present a certificate the MIS did not issue for 50 seconds",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/server-identity",
+        "mtls": true,
+        "request_body": {
+          "untrustedSeconds": 50
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "rd-10-wfm-trust-refused",
+        "name": "The device sends no request to a WFM whose certificate the MIS did not issue",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-018",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "observe": {
+          "expect": "absent",
+          "path_regex": "^/api/v1/",
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "untrusted"
+            }
+          ],
+          "for_seconds": 58,
+          "only_if": {
+            "method": "TLS",
+            "path_regex": "^/handshake-error$",
+            "where": [
+              {
+                "field": "server_identity",
+                "operation": "equals",
+                "value": "untrusted"
+              }
+            ]
+          },
+          "only_if_reason": "the device did not try to connect while the mock WFM presented the untrusted certificate"
+        }
+      },
+      {
+        "id": "rd-10-wfm-trust-resumed",
+        "name": "The device continues when the WFM presents its SVID again",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-018"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 180,
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "svid"
+            }
+          ],
+          "since": "now"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-12-svid-rotation",
+    "name": "Real device \u2014 access continues after SVID rotation",
+    "description": "When the device's SVID is replaced by a re-issued one for the same SPIFFE ID, the device keeps working without registering again. Reported as SKIP when the SVID was not replaced during the run.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
     ],
     "steps": [
       {
-        "id": "step-miaf-rotation-1",
-        "name": "Request With The Pre-Rotation SVID (baseline)",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
+        "id": "rd-12-svid-rotation-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
         },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {},
-        "svid_source": "previous"
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
       },
       {
-        "id": "step-miaf-rotation-2",
-        "name": "Request With The Re-Issued SVID (after rotation)",
+        "id": "rd-12-svid-rotation-accepted",
+        "name": "The device presents a re-issued SVID for the same SPIFFE ID and its requests are accepted",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "svid_source": "refreshed",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
-      }
-    ]
-  },
-  {
-    "id": "device-mi004-rfc5280-certificate",
-    "name": "MI-004 \u2014 Device Certificate Must Conform To RFC 5280",
-    "description": "MARGO-DEV-MANAGEMENTINTERFACE-004: all client SVIDs MUST conform to RFC 5280. Under MIAF there is no onboarding call to reject a bad cert at -- a non-conformant certificate fails the mTLS handshake itself before any request is processed, and MIS's minter only issues conformant SVIDs, so there is currently no tooling to fabricate a non-conformant one to test the negative case. This step positively confirms our SVID (RFC-5280-conformant by construction) completes a real mTLS handshake and is accepted. NEGATIVE CASE RETIRED -- needs a way to mint/fabricate a non-conformant SVID; tracked as a follow-up, not silently dropped.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-004"
-    ],
-    "steps": [
-      {
-        "id": "step-mi004-1.0",
-        "name": "Connect With A Conforming SVID Over mTLS \u2014 Accepted",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-004"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
-      }
-    ]
-  },
-  {
-    "id": "device-mi018-tls-trust",
-    "name": "MI-018 \u2014 Device Trusts The WFM Server Certificate Via The Root CA",
-    "description": "MARGO-DEV-MANAGEMENTINTERFACE-018: the client MUST trust the WFM's server certificate through a securely obtained root of trust. Under MIAF this is the trust bundle fetched from MIS (CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.3 Phase 2), not a bespoke /onboarding/certificate call -- mtlsClient() in signing.go already verifies the WFM's SVID chains to that bundle on every single mtls step in this suite, so a successful connection here IS the positive proof. NEGATIVE CASE RETIRED -- the old :3002 untrusted-cert listener isn't mTLS-capable with a real SVID yet; needs its own MIAF-shaped negative fixture, tracked as a follow-up, not silently dropped.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-005",
-      "MARGO-DEV-MANAGEMENTINTERFACE-018"
-    ],
-    "steps": [
-      {
-        "id": "step-mi018-1.0",
-        "name": "Connect To The WFM Over mTLS \u2014 Server SVID Verified Against The Trust Bundle",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-018"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 10,
+          "where": [
+            {
+              "field": "cert.sha256",
+              "operation": "not_contains",
+              "value": "{deviceCert}"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device's SVID was not replaced during the run"
+        }
       }
     ]
   }

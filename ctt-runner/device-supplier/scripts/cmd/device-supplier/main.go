@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,11 @@ type AssertionsConfig struct {
 	Endpoints            map[string]EndpointAssertion `json:"endpoints"`
 	ErrorResponses       map[string]ErrorResponseSpec `json:"error_responses"`
 	RejectedCertificates []string                     `json:"rejected_certificates,omitempty"`
+	// DeviceExpectations are rules a real device's requests are judged against
+	// without the request being rejected: what a Margo device must declare or
+	// send beyond what the API schema requires. Keyed like Endpoints; the result
+	// of every rule is recorded with the request (see journal.go).
+	DeviceExpectations map[string][]ValidationRule `json:"device_expectations,omitempty"`
 }
 
 type EndpointAssertion struct {
@@ -77,10 +83,14 @@ type ValidationRule struct {
 	Value       interface{} `json:"value,omitempty"`
 	Enum        []string    `json:"enum,omitempty"`
 	MinLength   int         `json:"minLength,omitempty"`
+	// Pattern: for "string" — a regular expression the value must match.
+	Pattern string `json:"pattern,omitempty"`
 	MinItems    int         `json:"minItems,omitempty"`
 	ItemsType   string      `json:"itemsType,omitempty"`
 	ItemsEnum   []string    `json:"itemsEnum,omitempty"`
-	Description string      `json:"description"`
+	// ItemsInclude: for "array" — every listed value must be among the items.
+	ItemsInclude []string `json:"itemsInclude,omitempty"`
+	Description  string   `json:"description"`
 }
 
 type ErrorResponseSpec struct {
@@ -193,6 +203,36 @@ func validateRequest(endpointKey string, body map[string]interface{}) []Validati
 //     handled here — that's a separate rule in assertions.json with a
 //     wildcard path (e.g. "properties.cpus.*.cores"), resolved by
 //     getFieldValues and checked by its own, independent applyRule() call.
+// evaluateExpectations judges a request body against assertions.json's
+// device_expectations for the endpoint: rule ID → "pass", or what is wrong.
+func evaluateExpectations(endpointKey string, body map[string]interface{}) map[string]string {
+	if assertionsConfig == nil {
+		return nil
+	}
+	rules := assertionsConfig.DeviceExpectations[endpointKey]
+	if len(rules) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(rules))
+	for _, rule := range rules {
+		if err := applyRule(rule, body); err != nil {
+			out[rule.RuleID] = firstNonEmptyString(rule.Description, err.Error) + " (" + err.Error + ")"
+		} else {
+			out[rule.RuleID] = "pass"
+		}
+	}
+	return out
+}
+
+func firstNonEmptyString(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func applyRule(rule ValidationRule, body map[string]interface{}) *ValidationError {
 	if rule.RequiredIf != "" {
 		if _, parentExists := getFieldValues(body, rule.RequiredIf); !parentExists {
@@ -246,6 +286,12 @@ func applyRule(rule ValidationRule, body map[string]interface{}) *ValidationErro
 				}
 			}
 
+			if rule.Pattern != "" {
+				if re, err := regexp.Compile(rule.Pattern); err == nil && !re.MatchString(strValue) {
+					return &ValidationError{RuleID: rule.RuleID, Error: fmt.Sprintf("%s has a form the specification does not allow: '%s'", rule.Field, strValue)}
+				}
+			}
+
 		case "array":
 			arr, ok := fieldValue.([]interface{})
 			if !ok {
@@ -263,6 +309,18 @@ func applyRule(rule ValidationRule, body map[string]interface{}) *ValidationErro
 			for _, item := range arr {
 				if err := validateArrayItem(rule, item); err != nil {
 					return err
+				}
+			}
+			for _, wanted := range rule.ItemsInclude {
+				found := false
+				for _, item := range arr {
+					if s, ok := item.(string); ok && s == wanted {
+						found = true
+						break
+					}
+				}
+				if !found {
+					return &ValidationError{RuleID: rule.RuleID, Error: fmt.Sprintf("%s must include %q", rule.Field, wanted)}
 				}
 			}
 
@@ -283,11 +341,15 @@ func applyRule(rule ValidationRule, body map[string]interface{}) *ValidationErro
 			}
 
 		case "boolean":
-			if _, ok := fieldValue.(bool); !ok {
+			b, ok := fieldValue.(bool)
+			if !ok {
 				return &ValidationError{
 					RuleID: rule.RuleID,
 					Error:  fmt.Sprintf("%s must be a boolean, got %T", rule.Field, fieldValue),
 				}
+			}
+			if want, isBool := rule.Value.(bool); isBool && b != want {
+				return &ValidationError{RuleID: rule.RuleID, Error: fmt.Sprintf("%s must be %v, got %v", rule.Field, want, b)}
 			}
 		}
 	}
@@ -1111,9 +1173,9 @@ func handlePostCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// VALIDATE USING ASSERTIONS FROM JSON
-	errors := validateRequest("POST_capabilities", body)
+	errors := validateRequest("PUT_capabilities", body)
 	if len(errors) > 0 {
-		statusCode, payload := validationErrorResponse("POST_capabilities", errors)
+		statusCode, payload := validationErrorResponse("PUT_capabilities", errors)
 		respondJSON(w, statusCode, payload)
 		return
 	}

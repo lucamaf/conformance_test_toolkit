@@ -2,7 +2,7 @@
   "name": "random-order",
   "version": "1.0.0-rc.3",
   "persona": "device-supplier",
-  "description": "The device lifecycle scenarios in a different random order on every run, to show that no scenario depends on another.",
+  "description": "No device needed: the self-check lifecycle scenarios in a different random order on every run, to show that no scenario depends on another.",
   "FolderPath": [
     "../test-suites/device-supplier/random-order/test-cases"
   ],

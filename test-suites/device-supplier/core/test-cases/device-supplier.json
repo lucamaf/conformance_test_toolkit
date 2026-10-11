@@ -1,8 +1,88 @@
 [
   {
-    "id": "scenario-capabilities",
-    "name": "Capabilities Reporting",
-    "description": "POST and PUT capability manifests that match the spec-aligned schema.",
+    "id": "rd-01-identity",
+    "name": "Real device \u2014 identity",
+    "description": "The device under test connects to the mock WFM over mutual TLS with its own X.509-SVID. Nothing is sent to the device: every step checks what the device sent, as the mock WFM received and judged it.",
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-003",
+      "MARGO-DEV-MANAGEMENTINTERFACE-004",
+      "MARGO-DEV-MANAGEMENTINTERFACE-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
+    ],
+    "steps": [
+      {
+        "id": "rd-01-identity-accepted",
+        "name": "The device connects over mTLS with its X.509-SVID and the mock WFM accepts it",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+          "MARGO-DEV-DEPLOYMENT-003"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 180,
+          "check": [
+            {
+              "field": "client",
+              "operation": "matches_regex",
+              "value": "^spiffe://[^/]+/margo/wfm/[^/]+/client/[^/]+$"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-01-identity-svid-profile",
+        "name": "The device's certificate is an SVID leaf: one URI SAN, not a CA",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-004",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 30,
+          "check": [
+            {
+              "field": "cert.uri_sans",
+              "operation": "equals",
+              "value": 1
+            },
+            {
+              "field": "cert.is_ca",
+              "operation": "equals",
+              "value": false
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-02-capabilities",
+    "name": "Real device \u2014 capabilities",
+    "description": "The device reports its capabilities. The mock WFM validates the report against the rules of assertions.json (endpoint rules and device_expectations); each step reads one of those verdicts.",
     "crIds": [
       "MARGO-DEV-APPLICATIONDESCRIPTION-001",
       "MARGO-DEV-APPLICATIONDESCRIPTION-002",
@@ -10,1636 +90,812 @@
       "MARGO-DEV-DEPLOYMENT-002",
       "MARGO-DEV-DEPLOYMENT-004",
       "MARGO-DEV-DEPLOYMENT-005",
-      "MARGO-DEV-MANAGEMENTINTERFACE-016"
-    ],
-    "steps": [
-      {
-        "id": "step-2.1",
-        "name": "Report Capabilities (create)",
-        "crIds": [
-          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-003",
-          "MARGO-DEV-DEPLOYMENT-002",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-001",
-        "request_body": {
-          "properties": {
-            "id": "device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "camera"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ]
-      },
-      {
-        "id": "step-2.2",
-        "name": "Report Capabilities (update)",
-        "crIds": [
-          "MARGO-DEV-DEPLOYMENT-002",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-001",
-        "request_body": {
-          "properties": {
-            "id": "device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 8,
-                "architecture": "amd64"
-              }
-            ],
-            "memory": "32Gi",
-            "storage": "512Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              },
-              {
-                "type": "wifi"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "scenario-deployments",
-    "name": "Deployment Retrieval And Status",
-    "description": "Deployment state retrieval, cache validation, immutable artifact downloads, and status updates.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
-    ],
-    "steps": [
-      {
-        "id": "step-3.1",
-        "name": "Get Current Deployments",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          },
-          {
-            "field": "bundle.mediaType",
-            "operation": "equals",
-            "value": "application/vnd.margo.bundle.v1+tar+gzip"
-          },
-          {
-            "field": "bundle.digest",
-            "operation": "not_empty"
-          },
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          },
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "is_string"
-          },
-          {
-            "field": "bundle.url",
-            "operation": "not_empty"
-          },
-          {
-            "field": "deployments.0.url",
-            "operation": "not_empty"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "manifestEtag": "_headers.ETag",
-          "bundleDigest": "bundle.digest",
-          "deploymentId": "deployments.0.deploymentId",
-          "deploymentDigest": "deployments.0.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "step-3.2",
-        "name": "Get Deployments With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json",
-          "If-None-Match": "{manifestEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "step-3.3",
-        "name": "Download Deployment Bundle",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016",
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/{bundleDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/vnd.margo.bundle.v1+tar+gzip"
-          },
-          {
-            "field": "_headers.Cache-Control",
-            "operation": "contains",
-            "value": "immutable"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "bundleEtag": "_headers.ETag"
-        },
-        "mtls": true
-      },
-      {
-        "id": "step-3.4",
-        "name": "Download Bundle With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/{bundleDigest}",
-        "headers": {
-          "If-None-Match": "{bundleEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "step-3.5",
-        "name": "Download Individual Deployment Manifest",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016",
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/yaml"
-          },
-          {
-            "field": "_headers.Cache-Control",
-            "operation": "contains",
-            "value": "immutable"
-          },
-          {
-            "field": "_headers.Vary",
-            "operation": "contains",
-            "value": "Accept-Encoding"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "contains",
-            "value": "{deploymentDigest}"
-          }
-        ],
-        "extract_context": {
-          "deploymentEtag": "_headers.ETag"
-        },
-        "mtls": true
-      },
-      {
-        "id": "step-3.6",
-        "name": "Download Individual Deployment Manifest With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
-        "headers": {
-          "If-None-Match": "{deploymentEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "step-3.7",
-        "name": "Report Deployment Status",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-3.8",
-        "name": "Report Deployment Status: failed, with error details",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "failed",
-            "error": {
-              "code": "IMAGE_PULL_FAILED",
-              "source": "device",
-              "message": "Conformance test error"
-            }
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "failed",
-              "error": {
-                "code": "IMAGE_PULL_FAILED",
-                "source": "device",
-                "message": "Conformance test error"
-              }
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-3.9",
-        "name": "Report Deployment Status: removing",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "removing"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "removing"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "scenario-capabilities-errors",
-    "name": "Capabilities Error Handling",
-    "description": "Negative tests for digest, schema, role, interface, and client validation.",
-    "crIds": [],
-    "steps": [
-      {
-        "id": "step-5.1",
-        "name": "Reject Capabilities With Missing Properties",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-caps-errors",
-        "request_body": {},
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-5.2",
-        "name": "Reject Capabilities With Invalid Peripheral Type",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-caps-errors",
-        "request_body": {
-          "properties": {
-            "id": "device-002",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "not-a-real-type"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-5.3",
-        "name": "Reject Capabilities With Invalid Interface Type",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-caps-errors",
-        "request_body": {
-          "properties": {
-            "id": "device-003",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "serial"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-5.4",
-        "name": "Reject Capabilities With Invalid Cpu Architecture",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-caps-errors",
-        "request_body": {
-          "properties": {
-            "id": "device-004",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "sparc"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "scenario-status-and-retrieval-errors",
-    "name": "Status And Retrieval Errors",
-    "description": "Negative coverage for deployment content negotiation, immutable resource lookup, and status schema validation.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
-    ],
-    "steps": [
-      {
-        "id": "step-6.1",
-        "name": "Get Current Deployments (Setup)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "manifestEtag": "_headers.ETag",
-          "bundleDigest": "bundle.digest",
-          "deploymentId": "deployments.0.deploymentId",
-          "deploymentDigest": "deployments.0.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "step-6.2",
-        "name": "Reject Deployments Request With Unsupported Accept Header",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/json"
-        },
-        "expected_status": 406,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-6.3",
-        "name": "Reject Bundle Download With Wrong Digest",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/not-the-right-digest",
-        "headers": {},
-        "expected_status": 404,
-        "validations": [
-          {
-            "field": "error",
-            "operation": "contains",
-            "value": "Bundle not found"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-6.4",
-        "name": "Reject Deployment Manifest Download With Wrong Digest",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/not-the-right-digest",
-        "headers": {},
-        "expected_status": 404,
-        "validations": [
-          {
-            "field": "error",
-            "operation": "contains",
-            "value": "Deployment not found for digest"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-6.5",
-        "name": "Reject Status With Invalid State",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "done"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-6.6",
-        "name": "Reject Status With Missing Component Name",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-6.7",
-        "name": "Reject Status With Path Deployment Mismatch",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ],
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "another-deployment",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "scenario-live-assertion-demo",
-    "name": "Live Assertion Demo \u2014 Dynamic Error Code",
-    "description": "The mock WFM accepts a memory value in a non-standard format, because the specification places no format constraint on it. The rules the mock WFM applies come from assertions.json, which it reads at start.",
-    "crIds": [
-      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-      "MARGO-DEV-APPLICATIONDESCRIPTION-002"
-    ],
-    "steps": [
-      {
-        "id": "step-custom-1",
-        "name": "Non-Standard Memory String Is Accepted (spec places no format constraint on memory/storage)",
-        "crIds": [
-          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
-          "MARGO-DEV-APPLICATIONDESCRIPTION-002"
-        ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/demo-device-001",
-        "request_body": {
-          "properties": {
-            "id": "device-invalid-mem",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-99999",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "amd64"
-              }
-            ],
-            "memory": "sixteen_gb",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ]
-      }
-    ]
-  },
-  {
-    "id": "device-core-capability-roles",
-    "name": "Capability Reporting \u2014 Device Role Variants",
-    "description": "Per docs.margo.org/specification/margo-management-interface/device-capabilities and the Device Supplier conformance requirements, a device fills either the Standalone Cluster role (Kubernetes + Helm) or the Standalone Device role (Compose) \u2014 supportedDeploymentTypes is how a device declares which. This scenario covers both role variants as positive cases, plus negative coverage for invalid enum values and a malformed cpus[] entry not exercised by other groups.",
-    "crIds": [
-      "MARGO-DEV-APPLICATIONDESCRIPTION-003",
-      "MARGO-DEV-DEPLOYMENT-002",
-      "MARGO-DEV-DEPLOYMENT-004",
-      "MARGO-DEV-DEPLOYMENT-005",
       "MARGO-DEV-DEPLOYMENT-006",
       "MARGO-DEV-DEPLOYMENT-007",
       "MARGO-DEV-DEPLOYMENT-008",
-      "MARGO-DEV-DEPLOYMENT-009"
+      "MARGO-DEV-DEPLOYMENT-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-001"
     ],
     "steps": [
       {
-        "id": "step-core-1.1",
-        "name": "Report Capabilities \u2014 Standalone Device Role (compose only)",
-        "crIds": [
-          "MARGO-DEV-DEPLOYMENT-008",
-          "MARGO-DEV-DEPLOYMENT-009",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005"
-        ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-core-roles",
-        "request_body": {
-          "properties": {
-            "id": "device-core-roles",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-COMPOSE-1",
-            "serialNumber": "SN-CORE-001",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": true,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "compose"
-            ]
-          }
+        "id": "rd-02-capabilities-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
         },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ]
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
       },
       {
-        "id": "step-core-1.2",
-        "name": "Report Capabilities \u2014 Standalone Cluster Role (helm only)",
+        "id": "rd-02-capabilities-accepted",
+        "name": "The device reports its capabilities and the report passes the mock WFM's validation",
         "crIds": [
-          "MARGO-DEV-DEPLOYMENT-006",
-          "MARGO-DEV-DEPLOYMENT-007",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-core-roles",
-        "request_body": {
-          "properties": {
-            "id": "device-core-roles",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-HELM-1",
-            "serialNumber": "SN-CORE-002",
-            "cpus": [
-              {
-                "cores": 8,
-                "architecture": "amd64"
-              }
-            ],
-            "memory": "32Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              },
-              {
-                "type": "wifi"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": true,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm"
-            ]
-          }
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": []
         },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
+        "extract_context": {
+          "reportedDeviceId": "body.properties.id"
+        }
       },
       {
-        "id": "step-core-1.3",
-        "name": "Reject Capabilities \u2014 Invalid supportedDeploymentTypes Value",
+        "id": "rd-02-capabilities-device-id",
+        "name": "The device ID in the request path is the ID in the report",
         "crIds": [
-          "MARGO-DEV-DEPLOYMENT-002"
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-001"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-core-roles",
-        "request_body": {
-          "properties": {
-            "id": "device-core-roles",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-INVALID-1",
-            "serialNumber": "SN-CORE-003",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": true,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "docker-swarm"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-id",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "path",
+              "operation": "contains",
+              "value": "{reportedDeviceId}"
+            }
+          ]
+        }
       },
       {
-        "id": "step-core-1.4",
-        "name": "Reject Capabilities \u2014 Invalid supportedRuntimes Value",
+        "id": "rd-02-capabilities-runtime",
+        "name": "The device provides an OCI container runtime",
         "crIds": [
           "MARGO-DEV-DEPLOYMENT-004"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-core-roles",
-        "request_body": {
-          "properties": {
-            "id": "device-core-roles",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-INVALID-2",
-            "serialNumber": "SN-CORE-004",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": true,
-            "supportedRuntimes": [
-              "containerd-direct"
-            ],
-            "supportedDeploymentTypes": [
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-runtime-oci",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
       },
       {
-        "id": "step-core-1.5",
-        "name": "Reject Capabilities \u2014 cpus[] Entry Missing Required cores",
+        "id": "rd-02-capabilities-otel",
+        "name": "The device provides an OpenTelemetry collector",
         "crIds": [
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-otel-collector",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-deployment-type",
+        "name": "The device declares a deployment type of a Margo device role",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-deployment-type",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-role-device",
+        "name": "Standalone device role: the device deploys Compose applications",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-008",
+          "MARGO-DEV-DEPLOYMENT-009"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 5,
+          "check": [],
+          "where": [
+            {
+              "field": "expectations.device-role-standalone-device",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device does not declare the standalone device role (compose)"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-role-cluster",
+        "name": "Standalone cluster role: the device deploys Helm charts",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-006",
+          "MARGO-DEV-DEPLOYMENT-007"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 5,
+          "check": [],
+          "where": [
+            {
+              "field": "expectations.device-role-standalone-cluster",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device does not declare the standalone cluster role (helm)"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-resources",
+        "name": "The device states the memory, storage and CPU cores it provides",
+        "crIds": [
+          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
           "MARGO-DEV-APPLICATIONDESCRIPTION-003"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-core-roles",
-        "request_body": {
-          "properties": {
-            "id": "device-core-roles",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-INVALID-3",
-            "serialNumber": "SN-CORE-005",
-            "cpus": [
-              {
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": true,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "device-core-manifest-semantics",
-    "name": "Desired State \u2014 Default Negotiation and Zero-Deployment Manifest",
-    "description": "Per docs.margo.org/specification/margo-management-interface/desired-state: (1) the WFM (here, our mock server) MUST default to application/vnd.margo.manifest.v1+json when the Accept header is omitted entirely, not just when it's the exact expected value; (2) when a client has zero deployments assigned, the manifest's deployments field MUST still be a valid (empty) array. Both are edge cases the other device-supplier groups don't exercise directly. Note: the spec also requires the manifest's bundle field to be explicit null (not omitted) when deployments is empty \u2014 not independently verified here, because this suite's validation engine can't distinguish a field that's present-but-null from one that's absent (both read as Go/JS nil); confirmed instead by reading the mock server's response-construction code directly.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016"
-    ],
-    "steps": [
-      {
-        "id": "step-core-2.1",
-        "name": "Get Deployments With No Accept Header \u2014 Defaults To Manifest Format",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/vnd.margo.manifest.v1+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "step-core-2.2",
-        "name": "Reset Desired State To Empty (test-control)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": []
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "step-core-2.3",
-        "name": "Get Deployments \u2014 Zero Deployments Still Returns A Valid (Empty) Manifest",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          },
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "step-core-2-cleanup",
-        "name": "Cleanup: Restore Default Deployment",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
           ],
-          "negativeFixture": ""
-        },
-        "expected_status": 200,
-        "validations": [],
-        "mtls": true
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-memory",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "expectations.device-storage",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "expectations.device-cpus",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
       }
     ]
   },
   {
-    "id": "device-unregister",
-    "name": "Unregister A Device (DELETE capabilities)",
-    "description": "A device is registered, unregistered with DELETE (204), and a second DELETE for the same device is answered 404 device-not-found with problem details. The device can then register again.",
+    "id": "rd-03-desired-state",
+    "name": "Real device \u2014 desired state, fetch and status",
+    "description": "The device reads its desired-state manifest, fetches the bundle or the deployment it lists by digest, reports the status of the deployment with the manifest version it adopted, and re-reads with the ETag of that manifest.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+    ],
     "steps": [
       {
-        "id": "step-unreg-1",
-        "name": "Report Capabilities For The Device To Unregister",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-unregister-test",
-        "request_body": {
-          "properties": {
-            "id": "device-unregister-test",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "camera"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
+        "id": "rd-03-desired-state-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
         },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ]
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
       },
       {
-        "id": "step-unreg-2",
-        "name": "Unregister The Device \u2014 204 No Content",
+        "id": "rd-03-desired-state-read",
+        "name": "The device reads the desired-state manifest",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-016"
         ],
-        "method": "DELETE",
-        "endpoint": "/api/v1/capabilities/device-unregister-test",
-        "headers": {},
-        "expected_status": 204,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 180
+        }
       },
       {
-        "id": "step-unreg-3",
-        "name": "Unregister The Same Device Again \u2014 404 device-not-found",
+        "id": "rd-03-desired-state-fetch",
+        "name": "The device fetches the bundle or a deployment by its digest",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
-        "method": "DELETE",
-        "endpoint": "/api/v1/capabilities/device-unregister-test",
-        "headers": {},
-        "expected_status": 404,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          },
-          {
-            "field": "type",
-            "operation": "contains",
-            "value": "device-not-found"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/(bundles|deployments/[^/]+)/sha256:[0-9a-f]+$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 240
+        }
       },
       {
-        "id": "step-unreg-4",
-        "name": "Report Capabilities Again \u2014 The Device Is Registered Anew",
+        "id": "rd-03-desired-state-status",
+        "name": "The device reports the deployment status and the report passes the mock WFM's validation",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
         ],
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-unregister-test",
-        "request_body": {
-          "properties": {
-            "id": "device-unregister-test",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-12345",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "camera"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ]
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/[^/]+/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300
+        }
+      },
+      {
+        "id": "rd-03-desired-state-etag",
+        "name": "The device re-reads the manifest with the ETag of the manifest it adopted (304 Not Modified)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "status": [
+            304
+          ],
+          "within_seconds": 240
+        }
       }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016"
     ]
   },
   {
-    "id": "device-mi008-unsupported-digest-algorithm",
-    "name": "MI-008 \u2014 Manifest With Unsupported Digest Algorithm Must Be Rejected",
-    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-008 ('If a manifest references an unsupported digest algorithm, the client MUST treat the manifest as invalid and abort processing'). The mock is armed with the 'unsupported_digest_algorithm' negative fixture so GET /deployments returns a manifest whose digests use sha512 instead of sha256. The suite then asserts (a) the fixture is actually present in the response and (b) its own manifest-conformance check (expect_manifest_rejected) flags the manifest for rejection. This proves the suite would correctly fail a real device that acted on such a manifest.",
+    "id": "rd-04-deployment-lifecycle",
+    "name": "Real device \u2014 a deployment is added and withdrawn",
+    "description": "The mock WFM adds a deployment to the desired state and later withdraws it. The device reads each new manifest and reports the status of that deployment after each change.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-008"
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
     ],
     "steps": [
       {
-        "id": "step-mi008-1.1",
-        "name": "Arm The unsupported_digest_algorithm Negative Fixture",
+        "id": "rd-04-deployment-lifecycle-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-add",
+        "name": "Mock WFM: add deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01 to the desired state",
         "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
         "request_body": {
           "deploymentIds": [
-            "mi008-app"
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-read",
+        "name": "The device reads the new manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200
+          ],
+          "within_seconds": 240,
+          "where": [
+            {
+              "field": "response.manifestVersion",
+              "operation": "equals",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-status",
+        "name": "The device reports status for the added deployment with the new manifest version",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "check": [
+            {
+              "field": "body.adoptedManifestVersion",
+              "operation": "gte",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-withdraw",
+        "name": "Mock WFM: withdraw deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01 from the desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-removed",
+        "name": "The device reports the withdrawn deployment as removing or removed",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "where": [
+            {
+              "field": "body.status.state",
+              "operation": "one_of",
+              "value": [
+                "removing",
+                "removed"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-05-manifest-version",
+    "name": "Real device \u2014 a manifest version that does not increase is rejected",
+    "description": "The mock WFM serves a changed manifest whose manifestVersion is 1, not greater than the version the device has adopted. The device must reject it and keep its state.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-010",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015"
+    ],
+    "steps": [
+      {
+        "id": "rd-05-manifest-version-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-05-manifest-version-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02"
+          ],
+          "negativeFixture": "non_increasing_manifest_version"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-05-manifest-version-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-010"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e02/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20
+        }
+      },
+      {
+        "id": "rd-05-manifest-version-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-010",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5
+        }
+      },
+      {
+        "id": "rd-05-manifest-version-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-06-digest-algorithm",
+    "name": "Real device \u2014 an unsupported digest algorithm is rejected",
+    "description": "The mock WFM serves a manifest whose digests use sha512. The device must treat the manifest as invalid, stop processing it and keep its state.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-008",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015"
+    ],
+    "steps": [
+      {
+        "id": "rd-06-digest-algorithm-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-06-digest-algorithm-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03"
           ],
           "negativeFixture": "unsupported_digest_algorithm"
         },
+        "headers": {},
         "expected_status": 200,
         "validations": [
           {
-            "field": "negativeFixture",
-            "operation": "equals",
-            "value": "unsupported_digest_algorithm"
+            "field": "manifestVersion",
+            "operation": "is_number"
           }
         ],
-        "mtls": true
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
       },
       {
-        "id": "step-mi008-1.2",
-        "name": "GET Deployments \u2014 Manifest Uses An Unsupported Digest Algorithm And Must Be Rejected",
+        "id": "rd-06-digest-algorithm-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-008"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "bundle.digest",
-            "operation": "contains",
-            "value": "sha512:"
-          },
-          {
-            "field": "deployments.0.digest",
-            "operation": "contains",
-            "value": "sha512:"
-          }
-        ],
-        "expect_manifest_rejected": true,
-        "mtls": true
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e03/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20
+        }
       },
       {
-        "id": "step-mi008-cleanup",
-        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
-          ],
-          "negativeFixture": ""
-        },
-        "expected_status": 200,
-        "validations": [],
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "device-mi006-bundle-digest-mismatch",
-    "name": "MI-006/009 \u2014 Bundle Digest That Doesn't Match Content Must Be Rejected",
-    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-006 / -009: the client MUST verify computed digests match manifest values and abort on any mismatch. The 'bundle_digest_mismatch' fixture corrupts bundle.digest while leaving bundle.url pointing at the real archive; evaluateManifest downloads it, hashes it, and must flag the mismatch.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-006",
-      "MARGO-DEV-MANAGEMENTINTERFACE-009"
-    ],
-    "steps": [
-      {
-        "id": "step-mi006-1.1",
-        "name": "Arm bundle_digest_mismatch Fixture",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
-          ],
-          "negativeFixture": "bundle_digest_mismatch"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "negativeFixture",
-            "operation": "equals",
-            "value": "bundle_digest_mismatch"
-          }
-        ],
-        "mtls": true
-      },
-      {
-        "id": "step-mi006-1.2",
-        "name": "GET Deployments \u2014 Bundle Digest Mismatch Must Be Rejected",
+        "id": "rd-06-digest-algorithm-no-fetch",
+        "name": "The device does not fetch anything by a digest of the unsupported algorithm",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-006",
-          "MARGO-DEV-MANAGEMENTINTERFACE-009"
+          "MARGO-DEV-MANAGEMENTINTERFACE-008"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "expect_manifest_rejected": true,
-        "mtls": true
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/(bundles|deployments/[^/]+)/sha512:",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 10
+        }
       },
       {
-        "id": "step-mi006-cleanup",
-        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "id": "rd-06-digest-algorithm-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-008",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5
+        }
+      },
+      {
+        "id": "rd-06-digest-algorithm-restore",
+        "name": "Mock WFM: restore the default desired state",
         "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
         "request_body": {
           "deploymentIds": [
-            "self-test-app"
-          ],
-          "negativeFixture": ""
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
         },
+        "headers": {},
         "expected_status": 200,
-        "validations": [],
-        "mtls": true
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
       }
     ]
   },
   {
-    "id": "device-mi019-deployment-digest-mismatch",
-    "name": "MI-019 \u2014 Any Fetched Artifact With A Wrong Digest Must Be Rejected",
-    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-019: the client MUST verify the digest of every fetched artifact. The 'deployment_digest_mismatch' fixture corrupts the first deployments[].digest only (the bundle digest stays correct), so the violation is caught on a per-deployment artifact, not the bundle.",
+    "id": "rd-07-bundle-content",
+    "name": "Real device \u2014 a bundle that does not match its digest is rejected",
+    "description": "The mock WFM serves a correct manifest, but the bundle archive it delivers does not hash to the bundle digest. A device that downloads the bundle must abort the update and keep its previous state.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
       "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
       {
-        "id": "step-mi019-1.1",
-        "name": "Arm deployment_digest_mismatch Fixture",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
+        "id": "rd-07-bundle-content-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
           ],
-          "negativeFixture": "deployment_digest_mismatch"
+          "within_seconds": 120
         },
-        "expected_status": 200,
-        "mtls": true
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
       },
       {
-        "id": "step-mi019-1.2",
-        "name": "GET Deployments \u2014 Deployment Digest Mismatch Must Be Rejected",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-006",
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "expect_manifest_rejected": true,
-        "mtls": true
-      },
-      {
-        "id": "step-mi019-cleanup",
-        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "id": "rd-07-bundle-content-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04 in a manifest the device must reject",
         "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
         "request_body": {
           "deploymentIds": [
-            "self-test-app"
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04"
           ],
-          "negativeFixture": ""
+          "negativeFixture": "bundle_content_tampered"
         },
-        "expected_status": 200,
-        "validations": [],
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "device-mi010-non-increasing-manifest-version",
-    "name": "MI-010 \u2014 A manifestVersion Not Strictly Greater Than The Last Must Be Rejected",
-    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-010. The scenario first reads a manifest at version >= 2 (so the runner records it), then the 'non_increasing_manifest_version' fixture serves a manifest back at version 1; evaluateManifest must reject it as a rollback.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-010"
-    ],
-    "steps": [
-      {
-        "id": "step-mi010-1.1",
-        "name": "Assign A Deployment (manifestVersion climbs to 2)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
-          ]
-        },
-        "expected_status": 200,
-        "mtls": true
-      },
-      {
-        "id": "step-mi010-1.2",
-        "name": "GET Deployments \u2014 Establish The Current Version",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
+        "headers": {},
         "expected_status": 200,
         "validations": [
           {
@@ -1647,945 +903,326 @@
             "operation": "is_number"
           }
         ],
-        "mtls": true
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
       },
       {
-        "id": "step-mi010-1.3",
-        "name": "Arm non_increasing_manifest_version Fixture",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
-          ],
-          "negativeFixture": "non_increasing_manifest_version"
-        },
-        "expected_status": 200,
-        "mtls": true
-      },
-      {
-        "id": "step-mi010-1.4",
-        "name": "GET Deployments \u2014 Version Went Backwards, Must Be Rejected",
+        "id": "rd-07-bundle-content-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-010"
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
+          "MARGO-DEV-MANAGEMENTINTERFACE-009",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "expect_manifest_rejected": true,
-        "mtls": true
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e04/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/bundles/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download the bundle archive, so it was not faced with content that does not match the digest"
+        }
       },
       {
-        "id": "step-mi010-cleanup",
-        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
+        "id": "rd-07-bundle-content-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-009",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/bundles/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download the bundle archive, so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-07-bundle-content-restore",
+        "name": "Mock WFM: restore the default desired state",
         "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
         "request_body": {
           "deploymentIds": [
-            "self-test-app"
-          ],
-          "negativeFixture": ""
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
         },
+        "headers": {},
         "expected_status": 200,
-        "validations": [],
-        "mtls": true
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
       }
     ]
   },
   {
-    "id": "device-mi025-026-sizebytes-not-integrity",
-    "name": "MI-025/026 \u2014 A Wrong sizeBytes (Digest Still Valid) Must NOT Cause Rejection",
-    "description": "SUITE SELF-TEST for MARGO-DEV-MANAGEMENTINTERFACE-025 / -026: sizeBytes MUST NOT be used for integrity verification. The 'wrong_size_bytes' fixture sets every sizeBytes to 1 but leaves digests correct; a conformant client verifies by digest and MUST still proceed, so the suite asserts expect_manifest_accepted.",
+    "id": "rd-08-deployment-content",
+    "name": "Real device \u2014 a deployment file that does not match its digest is rejected",
+    "description": "The mock WFM serves a correct manifest, but the deployment files it delivers do not hash to their digests. A device that downloads the file of the new deployment must abort the update and keep its previous state.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-006",
+      "MARGO-DEV-MANAGEMENTINTERFACE-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
+    ],
+    "steps": [
+      {
+        "id": "rd-08-deployment-content-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-08-deployment-content-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05 in a manifest the device must reject",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05"
+          ],
+          "negativeFixture": "deployment_content_tampered"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-08-deployment-content-rejected",
+        "name": "The device does not act on the rejected manifest (no status report for its new deployment)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-006",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download this deployment file on its own (it used the bundle), so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-08-deployment-content-state-kept",
+        "name": "The device keeps its previous state (it does not send the ETag of the rejected manifest back)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-009",
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "after_polls": 3,
+          "within_seconds": 300,
+          "settle_seconds": 5,
+          "only_if": {
+            "method": "GET",
+            "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e05/",
+            "where": [
+              {
+                "field": "status",
+                "operation": "equals",
+                "value": 200
+              }
+            ]
+          },
+          "only_if_reason": "the device did not download this deployment file on its own (it used the bundle), so it was not faced with content that does not match the digest"
+        }
+      },
+      {
+        "id": "rd-08-deployment-content-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-09-size-bytes",
+    "name": "Real device \u2014 sizeBytes is not used for integrity",
+    "description": "The mock WFM serves a manifest with a wrong sizeBytes and correct digests. The device must still accept it.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-025",
       "MARGO-DEV-MANAGEMENTINTERFACE-026"
     ],
     "steps": [
       {
-        "id": "step-mi025-1.1",
-        "name": "Arm wrong_size_bytes Fixture",
+        "id": "rd-09-size-bytes-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-09-size-bytes-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06 in a manifest with a wrong sizeBytes",
         "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
         "request_body": {
           "deploymentIds": [
-            "self-test-app"
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06"
           ],
           "negativeFixture": "wrong_size_bytes"
         },
+        "headers": {},
         "expected_status": 200,
-        "mtls": true
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
       },
       {
-        "id": "step-mi025-1.2",
-        "name": "GET Deployments \u2014 sizeBytes Is Bogus But The Manifest Is Still Acceptable",
+        "id": "rd-09-size-bytes-accepted",
+        "name": "The device accepts the manifest and reports status for its new deployment",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-025",
           "MARGO-DEV-MANAGEMENTINTERFACE-026"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "bundle.sizeBytes",
-            "operation": "equals",
-            "value": 1
-          }
-        ],
-        "expect_manifest_accepted": true,
-        "mtls": true
-      },
-      {
-        "id": "step-mi025-cleanup",
-        "name": "Cleanup: Restore Default Deployment And Clear Fixture",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "self-test-app"
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e06/status$",
+          "status": [
+            200,
+            201
           ],
-          "negativeFixture": ""
-        },
-        "expected_status": 200,
-        "validations": [],
-        "mtls": true
-      }
-    ]
-  },
-  {
-    "id": "device-mi004-rfc5280-certificate",
-    "name": "MI-004 \u2014 Device Certificate Must Conform To RFC 5280",
-    "description": "MARGO-DEV-MANAGEMENTINTERFACE-004: all client SVIDs MUST conform to RFC 5280. Under MIAF there is no onboarding call to reject a bad cert at -- a non-conformant certificate fails the mTLS handshake itself before any request is processed, and MIS's minter only issues conformant SVIDs, so there is currently no tooling to fabricate a non-conformant one to test the negative case. This step positively confirms our SVID (RFC-5280-conformant by construction) completes a real mTLS handshake and is accepted. NEGATIVE CASE RETIRED -- needs a way to mint/fabricate a non-conformant SVID; tracked as a follow-up, not silently dropped.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-004"
-    ],
-    "steps": [
+          "within_seconds": 300
+        }
+      },
       {
-        "id": "step-mi004-1.0",
-        "name": "Connect With A Conforming SVID Over mTLS \u2014 Accepted",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-004"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
+        "id": "rd-09-size-bytes-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
         "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
-      }
-    ]
-  },
-  {
-    "id": "device-mi018-tls-trust",
-    "name": "MI-018 \u2014 Device Trusts The WFM Server Certificate Via The Root CA",
-    "description": "MARGO-DEV-MANAGEMENTINTERFACE-018: the client MUST trust the WFM's server certificate through a securely obtained root of trust. Under MIAF this is the trust bundle fetched from MIS (CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.3 Phase 2), not a bespoke /onboarding/certificate call -- mtlsClient() in signing.go already verifies the WFM's SVID chains to that bundle on every single mtls step in this suite, so a successful connection here IS the positive proof. NEGATIVE CASE RETIRED -- the old :3002 untrusted-cert listener isn't mTLS-capable with a real SVID yet; needs its own MIAF-shaped negative fixture, tracked as a follow-up, not silently dropped.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-005",
-      "MARGO-DEV-MANAGEMENTINTERFACE-018"
-    ],
-    "steps": [
-      {
-        "id": "step-mi018-1.0",
-        "name": "Connect To The WFM Over mTLS \u2014 Server SVID Verified Against The Trust Bundle",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-018"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
-      }
-    ]
-  },
-  {
-    "id": "flex-bundle",
-    "name": "Flexible Order \u2014 Bundle Download",
-    "description": "Self-contained: the first step is a local GET-deployments setup (scenario-scoped, not shared) to obtain bundleDigest, so this scenario never depends on flex-desired-state having run first. Runs under this suite's static mTLS identity, no shared onboarding context needed.",
-    "steps": [
-      {
-        "id": "flex-bundle-setup-get-deployments",
-        "name": "Get Current Deployments (local setup)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "bundle.digest",
-            "operation": "not_empty"
-          }
-        ],
-        "extract_context": {
-          "bundleDigest": "bundle.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-bundle-download",
-        "name": "Download Deployment Bundle",
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/{bundleDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/vnd.margo.bundle.v1+tar+gzip"
-          },
-          {
-            "field": "_headers.Cache-Control",
-            "operation": "contains",
-            "value": "immutable"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "bundleEtag": "_headers.ETag"
-        },
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-bundle-etag-match",
-        "name": "Download Bundle With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/{bundleDigest}",
-        "headers": {
-          "If-None-Match": "{bundleEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-bundle-reject-wrong-digest",
-        "name": "Reject Bundle Download With Wrong Digest",
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/not-the-right-digest",
-        "headers": {},
-        "expected_status": 404,
-        "validations": [
-          {
-            "field": "error",
-            "operation": "contains",
-            "value": "Bundle not found"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
-    ]
-  },
-  {
-    "id": "flex-capabilities",
-    "name": "Flexible Order \u2014 Capabilities",
-    "description": "POST/PUT capabilities under this suite's static mTLS identity (MIAF has no per-run onboarding, so no shared clientId/scenario-ordering dependency exists anymore). Includes a positive case that omits properties.resources entirely (regression test for the assertions.json conditional-required fix) and a negative case where resources is present but incomplete (proves its children are still enforced whenever resources is present at all).",
-    "steps": [
-      {
-        "id": "flex-capabilities-create",
-        "name": "Report Capabilities (create, full resources)",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-001",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "camera"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "accepted_statuses": [
-          200
-        ],
-        "crIds": [
-          "MARGO-DEV-DEPLOYMENT-002",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "flex-capabilities-update",
-        "name": "Report Capabilities (update, full resources)",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-001",
-            "cpus": [
-              {
-                "cores": 8,
-                "architecture": "amd64"
-              }
-            ],
-            "memory": "32Gi",
-            "storage": "512Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              },
-              {
-                "type": "wifi"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-DEPLOYMENT-002",
-          "MARGO-DEV-DEPLOYMENT-004",
-          "MARGO-DEV-DEPLOYMENT-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "flex-capabilities-empty-peripherals",
-        "name": "Report Capabilities With Empty Peripherals",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-001",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "status",
-            "operation": "equals",
-            "value": "capabilities_received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-capabilities-cpus-omitted",
-        "name": "Report Capabilities With cpus Omitted (optional per schema \u2014 only id/vendor/modelNumber/serialNumber are required)",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-001",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-001",
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-capabilities-reject-missing-properties",
-        "name": "Reject Capabilities With Missing Properties",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {},
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-capabilities-reject-invalid-peripheral-type",
-        "name": "Reject Capabilities With Invalid Peripheral Type",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-002",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-002",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [
-              {
-                "type": "not-a-real-type"
-              }
-            ],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-capabilities-reject-invalid-interface-type",
-        "name": "Reject Capabilities With Invalid Interface Type",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-003",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-003",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "serial"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-capabilities-reject-invalid-cpu-architecture",
-        "name": "Reject Capabilities With Invalid Cpu Architecture",
-        "method": "PUT",
-        "endpoint": "/api/v1/capabilities/flex-device-001",
-        "request_body": {
-          "properties": {
-            "id": "flex-device-004",
-            "vendor": "Acme Corp",
-            "modelNumber": "ACM-XYZ",
-            "serialNumber": "SN-FLEX-004",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "sparc"
-              }
-            ],
-            "memory": "16Gi",
-            "storage": "256Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
-    "crIds": [
-      "MARGO-DEV-DEPLOYMENT-002",
-      "MARGO-DEV-DEPLOYMENT-004",
-      "MARGO-DEV-DEPLOYMENT-005",
-      "MARGO-DEV-MANAGEMENTINTERFACE-016"
-    ]
-  },
-  {
-    "id": "flex-deployment-manifest",
-    "name": "Flexible Order \u2014 Deployment Manifest Download",
-    "description": "Self-contained: the first step is a local GET-deployments setup (scenario-scoped, not shared) to obtain deploymentId+digest, so this scenario never depends on flex-desired-state having run first. Runs under this suite's static mTLS identity, no shared onboarding context needed.",
-    "steps": [
-      {
-        "id": "flex-deployment-manifest-setup",
-        "name": "Get Current Deployments (local setup)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "deploymentId": "deployments.0.deploymentId",
-          "deploymentDigest": "deployments.0.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-deployment-manifest-download",
-        "name": "Download Individual Deployment Manifest",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/yaml"
-          },
-          {
-            "field": "_headers.Cache-Control",
-            "operation": "contains",
-            "value": "immutable"
-          },
-          {
-            "field": "_headers.Vary",
-            "operation": "contains",
-            "value": "Accept-Encoding"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "contains",
-            "value": "{deploymentDigest}"
-          }
-        ],
-        "extract_context": {
-          "deploymentEtag": "_headers.ETag"
-        },
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-deployment-manifest-etag-match",
-        "name": "Download Individual Deployment Manifest With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
-        "headers": {
-          "If-None-Match": "{deploymentEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-deployment-manifest-reject-wrong-digest",
-        "name": "Reject Deployment Manifest Download With Wrong Digest",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/{deploymentId}/not-the-right-digest",
-        "headers": {},
-        "expected_status": 404,
-        "validations": [
-          {
-            "field": "error",
-            "operation": "contains",
-            "value": "Deployment not found for digest"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
-    ]
-  },
-  {
-    "id": "flex-desired-state",
-    "name": "Flexible Order \u2014 Desired State (GET deployments)",
-    "description": "GET /deployments is the spec's desired-state endpoint (UnsignedAppStateManifest = 'the complete desired state for all workloads assigned to a device'). Uses the shared this suite's static mTLS identity (MIAF has no per-run onboarding); extracted values stay scenario-local.",
-    "steps": [
-      {
-        "id": "flex-desired-state-get",
-        "name": "Get Current Deployments",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          },
-          {
-            "field": "bundle.mediaType",
-            "operation": "equals",
-            "value": "application/vnd.margo.bundle.v1+tar+gzip"
-          },
-          {
-            "field": "bundle.digest",
-            "operation": "not_empty"
-          },
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          },
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "is_string"
-          },
-          {
-            "field": "bundle.url",
-            "operation": "not_empty"
-          },
-          {
-            "field": "deployments.0.url",
-            "operation": "not_empty"
-          },
-          {
-            "field": "_headers.ETag",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "manifestEtag": "_headers.ETag",
-          "bundleDigest": "bundle.digest",
-          "deploymentId": "deployments.0.deploymentId",
-          "deploymentDigest": "deployments.0.digest"
-        },
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "flex-desired-state-etag-match",
-        "name": "Get Deployments With Matching ETag",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json",
-          "If-None-Match": "{manifestEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-016"
-        ]
-      },
-      {
-        "id": "flex-desired-state-reject-bad-accept",
-        "name": "Reject Deployments Request With Unsupported Accept Header",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/json"
-        },
-        "expected_status": 406,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-016"
-    ]
-  },
-  {
-    "id": "flex-desired-state-reconciliation",
-    "name": "Flexible Order \u2014 Desired State Reconciliation Lifecycle",
-    "description": "Per docs.margo.org/specification/margo-management-interface/desired-state, 'desired state' is a reconciliation pattern (poll -> version check -> fetch -> reconcile -> report status), not a single endpoint \u2014 confirmed against a real device-agent's stateSync/deployment/status logs on this VM. This scenario scripts the mock server's desired-state timeline via the test-control endpoint (PUT .../test/clients/{reconClientId}/deployments, not part of the real spec) to exercise manifestVersion progression, ETag steady-state caching, and add/remove reconciliation with status reporting \u2014 mirroring the real device-agent trace (empty -> DESIRED-STATE-ADDED -> installed -> removed). Onboards its own dedicated client (not the shared this suite's static mTLS identity) so its hardcoded manifestVersion assertions stay valid no matter what order this scenario runs in relative to others that also mutate the shared client's desired state.",
-    "steps": [
-      {
-        "id": "flex-reconciliation-reset-empty",
-        "name": "Reset Desired State To Empty (test-control)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [],
-          "resetManifestVersion": true
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 2
-          },
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-get-empty",
-        "name": "Get Deployments \u2014 Confirm Empty Desired State",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 2
-          },
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          }
-        ],
-        "extract_context": {
-          "reconEmptyEtag": "_headers.ETag"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-steady-state-304",
-        "name": "Re-poll With Same ETag \u2014 Steady State (304, no reconciliation needed)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json",
-          "If-None-Match": "{reconEmptyEtag}"
-        },
-        "expected_status": 304,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-add-default",
-        "name": "Add Default Deployment Back (test-control) \u2014 DESIRED-STATE-ADDED",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
         "request_body": {
           "deploymentIds": [
             "a3e2f5dc-912e-494f-8395-52cf3769bc06"
@@ -2596,1174 +1233,319 @@
         "validations": [
           {
             "field": "manifestVersion",
-            "operation": "equals",
-            "value": 3
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-get-after-add",
-        "name": "Get Deployments \u2014 Confirm Deployment Present, Version Advanced",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json",
-          "If-None-Match": "{reconEmptyEtag}"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 3
-          },
-          {
-            "field": "bundle.digest",
-            "operation": "not_empty"
-          },
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "equals",
-            "value": "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+            "operation": "is_number"
           }
         ],
         "extract_context": {
-          "reconBundleDigest": "bundle.digest",
-          "reconDeploymentDigest": "deployments.0.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-fetch-bundle",
-        "name": "Fetch Bundle For Newly-Added Deployment",
-        "method": "GET",
-        "endpoint": "/api/v1/bundles/{reconBundleDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.ETag",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-fetch-manifest",
-        "name": "Fetch Individual Deployment Manifest",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/a3e2f5dc-912e-494f-8395-52cf3769bc06/{reconDeploymentDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/yaml"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-status-pending",
-        "name": "Report Status: pending",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/a3e2f5dc-912e-494f-8395-52cf3769bc06/status",
-        "request_body": {
-          "deploymentId": "a3e2f5dc-912e-494f-8395-52cf3769bc06",
-          "status": {
-            "state": "pending"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "pending"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-status-installing",
-        "name": "Report Status: installing",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/a3e2f5dc-912e-494f-8395-52cf3769bc06/status",
-        "request_body": {
-          "deploymentId": "a3e2f5dc-912e-494f-8395-52cf3769bc06",
-          "status": {
-            "state": "installing"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installing"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-status-installed",
-        "name": "Report Status: installed",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/a3e2f5dc-912e-494f-8395-52cf3769bc06/status",
-        "request_body": {
-          "deploymentId": "a3e2f5dc-912e-494f-8395-52cf3769bc06",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-add-second-deployment",
-        "name": "Assign A Second Deployment (test-control)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
-            "recon-temp-deployment-001"
-          ]
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 4
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-status-second-installed",
-        "name": "Report Status: installed (second deployment)",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/recon-temp-deployment-001/status",
-        "request_body": {
-          "deploymentId": "recon-temp-deployment-001",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-remove-second-deployment",
-        "name": "Unassign Second Deployment (test-control) \u2014 back to default only",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
-          ]
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 5
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-reconciliation-status-second-removed",
-        "name": "Report Status: removed (second deployment, no longer desired)",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/recon-temp-deployment-001/status",
-        "request_body": {
-          "deploymentId": "recon-temp-deployment-001",
-          "status": {
-            "state": "removed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "removed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-reconciliation-get-final-state",
-        "name": "Get Deployments \u2014 Confirm Restored To Default Only",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "equals",
-            "value": 5
-          },
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "equals",
-            "value": "a3e2f5dc-912e-494f-8395-52cf3769bc06"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
+          "newVersion": "manifestVersion"
+        }
       }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ]
   },
   {
-    "id": "flex-desired-state-multi-app",
-    "name": "Flexible Order \u2014 Multi-App Desired State (mock server reports both apps)",
-    "description": "Device-supplier counterpart to the wfm-supplier multi-app scenario, but fully deterministic since this mock server is entirely under test-harness control (no external operator to wait on). Uses the test-control endpoint to assign two REAL sample apps (sample-app-a: nginx, sample-app-b: redis \u2014 see device-supplier/sample-apps/{app-a,app-b}/compose.yaml, served by this mock server at /sample-apps/{app}/compose.yaml) simultaneously, verifies the mock server correctly reports BOTH in one desired-state manifest, brings both to 'installed' via individual status reports, then removes one (app-b) and verifies exactly one (app-a) remains. Ends by restoring the original default deployment (a3e2f5dc-912e-494f-8395-52cf3769bc06), matching every other flexible-order scenario's assumption, so this is safe to run in any shuffle order.",
-    "steps": [
-      {
-        "id": "flex-multiapp-assign-both",
-        "name": "Assign Both Sample Apps (test-control)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a",
-            "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b"
-          ]
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments",
-            "operation": "is_array"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-get-both",
-        "name": "Get Deployments \u2014 Confirm Mock Server Reports Both Apps",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "equals",
-            "value": "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a"
-          },
-          {
-            "field": "deployments.1.deploymentId",
-            "operation": "equals",
-            "value": "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b"
-          },
-          {
-            "field": "bundle.digest",
-            "operation": "not_empty"
-          }
-        ],
-        "extract_context": {
-          "appADigest": "deployments.0.digest",
-          "appBDigest": "deployments.1.digest"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-fetch-app-a-manifest",
-        "name": "Fetch App A Deployment Manifest (nginx compose)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a/{appADigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/yaml"
-          },
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "sample-app-a"
-          },
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "repository: oci://registry.example.com/margo-ctt/sample-app-a"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-multiapp-fetch-app-a-compose",
-        "name": "Fetch App A's Actual compose.yaml (served by this mock server)",
-        "method": "GET",
-        "endpoint": "/sample-apps/app-a/compose.yaml",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "nginx"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-status-app-a-pending",
-        "name": "Report App A Status: pending",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a/status",
-        "request_body": {
-          "deploymentId": "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a",
-          "status": {
-            "state": "pending"
-          },
-          "components": [
-            {
-              "name": "sample-app-a",
-              "state": "pending"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-status-app-a-installing",
-        "name": "Report App A Status: installing",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a/status",
-        "request_body": {
-          "deploymentId": "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a",
-          "status": {
-            "state": "installing"
-          },
-          "components": [
-            {
-              "name": "sample-app-a",
-              "state": "installing"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-status-app-a-installed",
-        "name": "Report App A Status: installed",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a/status",
-        "request_body": {
-          "deploymentId": "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "sample-app-a",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-fetch-app-b-manifest",
-        "name": "Fetch App B Deployment Manifest (redis compose)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments/c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b/{appBDigest}",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/yaml"
-          },
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "sample-app-b"
-          },
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "repository: oci://registry.example.com/margo-ctt/sample-app-b"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-019"
-        ]
-      },
-      {
-        "id": "flex-multiapp-fetch-app-b-compose",
-        "name": "Fetch App B's Actual compose.yaml (served by this mock server)",
-        "method": "GET",
-        "endpoint": "/sample-apps/app-b/compose.yaml",
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "_raw",
-            "operation": "contains",
-            "value": "redis"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-status-app-b-pending",
-        "name": "Report App B Status: pending",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b/status",
-        "request_body": {
-          "deploymentId": "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b",
-          "status": {
-            "state": "pending"
-          },
-          "components": [
-            {
-              "name": "sample-app-b",
-              "state": "pending"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-status-app-b-installing",
-        "name": "Report App B Status: installing",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b/status",
-        "request_body": {
-          "deploymentId": "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b",
-          "status": {
-            "state": "installing"
-          },
-          "components": [
-            {
-              "name": "sample-app-b",
-              "state": "installing"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-status-app-b-installed",
-        "name": "Report App B Status: installed \u2014 both apps now running",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b/status",
-        "request_body": {
-          "deploymentId": "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "sample-app-b",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-remove-app-b",
-        "name": "Remove App B, Keep App A (test-control)",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a"
-          ]
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-get-after-remove",
-        "name": "Get Deployments \u2014 Confirm Exactly App A Remains",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "equals",
-            "value": "b7f1c3a0-1a2b-4c3d-9e5f-6a7b8c9d0e1a"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-status-app-b-removed",
-        "name": "Report App B Status: removed (no longer desired)",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b/status",
-        "request_body": {
-          "deploymentId": "c8e2d4b1-2b3c-5d4e-0f6a-7b8c9d0e1f2b",
-          "status": {
-            "state": "removed"
-          },
-          "components": [
-            {
-              "name": "sample-app-b",
-              "state": "removed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-multiapp-restore-default",
-        "name": "Restore Default Deployment (test-control) \u2014 leave shared client in the state siblings expect",
-        "method": "PUT",
-        "endpoint": "/api/v1/test/deployments",
-        "request_body": {
-          "deploymentIds": [
-            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
-          ]
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-multiapp-get-final-state",
-        "name": "Get Deployments \u2014 Confirm Restored To Default Only",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "equals",
-            "value": "a3e2f5dc-912e-494f-8395-52cf3769bc06"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
+    "id": "rd-10-wfm-trust",
+    "name": "Real device \u2014 a WFM the MIS did not certify is refused",
+    "description": "For 50 seconds the mock WFM presents a certificate with its own SPIFFE ID that the MIS did not issue. The device must refuse the connection: it must not send any request over it. Afterwards the mock WFM presents its SVID again and the device continues.",
     "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019"
-    ]
-  },
-  {
-    "id": "flex-status",
-    "name": "Flexible Order \u2014 Deployment Status Reporting",
-    "description": "Self-contained: the first step is a local GET-deployments setup (scenario-scoped, not shared) to obtain deploymentId, so this scenario never depends on flex-desired-state having run first. Runs under this suite's static mTLS identity, no shared onboarding context needed.",
-    "steps": [
-      {
-        "id": "flex-status-setup",
-        "name": "Get Current Deployments (local setup)",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "deployments.0.deploymentId",
-            "operation": "exists"
-          }
-        ],
-        "extract_context": {
-          "deploymentId": "deployments.0.deploymentId"
-        },
-        "mtls": true
-      },
-      {
-        "id": "flex-status-post-installed",
-        "name": "Report Deployment Status",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-status-post-with-deviceid",
-        "name": "Report Deployment Status With Optional deviceId (now type-checked)",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "deviceId": "flex-device-001",
-          "status": {
-            "state": "installing"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installing"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "acknowledgement",
-            "operation": "equals",
-            "value": "received"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true,
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007"
-        ]
-      },
-      {
-        "id": "flex-status-reject-invalid-state",
-        "name": "Reject Status With Invalid State",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "done"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-status-reject-missing-component-name",
-        "name": "Reject Status With Missing Component Name",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "{deploymentId}",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      },
-      {
-        "id": "flex-status-reject-deploymentid-mismatch",
-        "name": "Reject Status With Path Deployment Mismatch",
-        "method": "POST",
-        "endpoint": "/api/v1/deployments/{deploymentId}/status",
-        "request_body": {
-          "deploymentId": "another-deployment",
-          "status": {
-            "state": "installed"
-          },
-          "components": [
-            {
-              "name": "app-component-1",
-              "state": "installed"
-            }
-          ],
-          "adoptedManifestVersion": 1
-        },
-        "headers": {},
-        "expected_status": 422,
-        "validations": [
-          {
-            "field": "errors",
-            "operation": "is_array"
-          },
-          {
-            "field": "_headers.Content-Type",
-            "operation": "contains",
-            "value": "application/problem+json"
-          }
-        ],
-        "extract_context": {},
-        "mtls": true
-      }
-    ],
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-007"
-    ]
-  },
-  {
-    "id": "scenario-miaf-identity-mtls",
-    "name": "MIAF Identity \u2014 mTLS SVID Authentication",
-    "description": "Identity over mTLS: the client presents its X.509-SVID and is accepted; a client without a certificate, and one with a certificate the MIS did not issue, are refused by the mock WFM.",
-    "crIds": [
-      "MARGO-DEV-MANAGEMENTINTERFACE-005",
-      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+      "MARGO-DEV-MANAGEMENTINTERFACE-018",
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
     ],
     "steps": [
       {
-        "id": "step-miaf-mtls-1",
-        "name": "Client Presents Its SVID On A Capabilities Report \u2014 Accepted",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-005",
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001"
-        ],
+        "id": "rd-10-wfm-trust-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-10-wfm-trust-arm",
+        "name": "Mock WFM: present a certificate the MIS did not issue for 50 seconds",
         "method": "PUT",
-        "endpoint": "/api/v1/capabilities/device-identity-check",
+        "endpoint": "/api/v1/test/server-identity",
         "mtls": true,
         "request_body": {
-          "properties": {
-            "id": "device-identity-check",
-            "vendor": "TestVendor",
-            "modelNumber": "CTT-MIAF-001",
-            "serialNumber": "SN-MIAF-001",
-            "cpus": [
-              {
-                "cores": 4,
-                "architecture": "arm64"
-              }
-            ],
-            "memory": "8Gi",
-            "storage": "64Gi",
-            "interfaces": [
-              {
-                "type": "ethernet"
-              }
-            ],
-            "peripherals": [],
-            "otelCollector": false,
-            "supportedRuntimes": [
-              "oci"
-            ],
-            "supportedDeploymentTypes": [
-              "helm",
-              "compose"
-            ]
-          }
+          "untrustedSeconds": 50
         },
         "headers": {},
-        "expected_status": 201,
-        "validations": [
-          {
-            "field": "_client_cert.spiffe_id",
-            "operation": "matches_regex",
-            "value": "^spiffe://.+/.+"
-          }
-        ],
-        "extract_context": {
-          "deviceSpiffeId": "_client_cert.spiffe_id"
-        },
-        "accepted_statuses": [
-          200
-        ]
-      },
-      {
-        "id": "step-miaf-mtls-2",
-        "name": "Client's SPIFFE ID Is Recognised By The WFM \u2014 Request Accepted",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
         "expected_status": 200,
-        "validations": [
-          {
-            "field": "_client_cert.spiffe_id",
-            "operation": "exists"
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "rd-10-wfm-trust-refused",
+        "name": "The device sends no request to a WFM whose certificate the MIS did not issue",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-018",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "observe": {
+          "expect": "absent",
+          "path_regex": "^/api/v1/",
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "untrusted"
+            }
+          ],
+          "for_seconds": 58,
+          "only_if": {
+            "method": "TLS",
+            "path_regex": "^/handshake-error$",
+            "where": [
+              {
+                "field": "server_identity",
+                "operation": "equals",
+                "value": "untrusted"
+              }
+            ]
           },
-          {
-            "field": "_client_cert.trust_domain",
-            "operation": "is_string"
-          }
-        ],
-        "extract_context": {}
+          "only_if_reason": "the device did not try to connect while the mock WFM presented the untrusted certificate"
+        }
       },
       {
-        "id": "step-miaf-mtls-3",
-        "name": "A Client Without A Certificate Is Refused",
+        "id": "rd-10-wfm-trust-resumed",
+        "name": "The device continues when the WFM presents its SVID again",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+          "MARGO-DEV-MANAGEMENTINTERFACE-018"
         ],
-        "svid_source": "none",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 0,
-        "accepted_statuses": [
-          403
-        ],
-        "expect_transport_error": true,
-        "validations": [],
-        "extract_context": {}
-      },
-      {
-        "id": "step-miaf-mtls-4",
-        "name": "A Client Certificate The MIS Did Not Issue Is Refused",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
-        ],
-        "svid_source": "untrusted",
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 0,
-        "accepted_statuses": [
-          403
-        ],
-        "expect_transport_error": true,
-        "validations": [],
-        "extract_context": {}
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 180,
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "svid"
+            }
+          ],
+          "since": "now"
+        }
       }
     ]
   },
   {
-    "id": "scenario-miaf-identity-svid-rotation",
-    "name": "MIAF Identity \u2014 SVID Rotation Continuity",
-    "description": "After the client SVID is rotated, access continues without re-registration: a request with the pre-rotation SVID and a request with the re-issued SVID (same SPIFFE ID) are both accepted. Runs only once the client SVID has been re-issued and installed again through Setup Identity, which keeps the SVID it replaces; until then both steps are reported as SKIP.",
+    "id": "rd-11-restart",
+    "name": "Real device \u2014 state survives a restart",
+    "description": "The operator restarts the device during this scenario. After the restart the device must still know the manifest it adopted (it sends its ETag) and must still reject a manifest version that does not increase. Reported as SKIP when the device is not restarted.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
+      "MARGO-DEV-MANAGEMENTINTERFACE-017"
+    ],
+    "steps": [
+      {
+        "id": "rd-11-restart-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-11-restart-restarted",
+        "name": "The operator restarts the device (it reports its capabilities again)",
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 180,
+          "since": "now",
+          "mark_after": true,
+          "if_absent": "skip_scenario",
+          "skip_reason": "the device was not restarted during the run",
+          "instruct": "Restart the device under test now (within 3 minutes). To also test SVID rotation, replace its SVID with a re-issued one for the same SPIFFE ID before starting it."
+        }
+      },
+      {
+        "id": "rd-11-restart-etag",
+        "name": "After the restart the device still sends the ETag of the manifest it adopted",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-015",
+          "MARGO-DEV-MANAGEMENTINTERFACE-017"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 180,
+          "check": [
+            {
+              "field": "headers.If-None-Match",
+              "operation": "not_empty"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-11-restart-arm",
+        "name": "Mock WFM: assign deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e07 in a manifest whose version does not increase",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e07"
+          ],
+          "negativeFixture": "non_increasing_manifest_version"
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-11-restart-rollback",
+        "name": "After the restart the device still rejects a manifest version that does not increase",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-017"
+        ],
+        "observe": {
+          "expect": "absent",
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e07/status$",
+          "after_polls": 2,
+          "within_seconds": 300,
+          "settle_seconds": 20
+        }
+      },
+      {
+        "id": "rd-11-restart-restore",
+        "name": "Mock WFM: restore the default desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-12-svid-rotation",
+    "name": "Real device \u2014 access continues after SVID rotation",
+    "description": "When the device's SVID is replaced by a re-issued one for the same SPIFFE ID, the device keeps working without registering again. Reported as SKIP when the SVID was not replaced during the run.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
     ],
     "steps": [
       {
-        "id": "step-miaf-rotation-1",
-        "name": "Request With The Pre-Rotation SVID (baseline)",
-        "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
-        ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
+        "id": "rd-12-svid-rotation-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
         },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {},
-        "svid_source": "previous"
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
       },
       {
-        "id": "step-miaf-rotation-2",
-        "name": "Request With The Re-Issued SVID (after rotation)",
+        "id": "rd-12-svid-rotation-accepted",
+        "name": "The device presents a re-issued SVID for the same SPIFFE ID and its requests are accepted",
         "crIds": [
           "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
         ],
-        "method": "GET",
-        "endpoint": "/api/v1/deployments",
-        "mtls": true,
-        "svid_source": "refreshed",
-        "headers": {
-          "Accept": "application/vnd.margo.manifest.v1+json"
-        },
-        "expected_status": 200,
-        "validations": [
-          {
-            "field": "manifestVersion",
-            "operation": "is_number"
-          }
-        ],
-        "extract_context": {}
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 10,
+          "where": [
+            {
+              "field": "cert.sha256",
+              "operation": "not_contains",
+              "value": "{deviceCert}"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device's SVID was not replaced during the run"
+        }
       }
     ]
   },
   {
-    "id": "scenario-otel-observability",
-    "name": "OTEL Observability \u2014 otelCollector Capability and Telemetry Push",
-    "description": "Verifies the vendor device's OTEL collector actively pushes telemetry to the CTT's OTLP HTTP receiver (port 4318) and Prometheus Remote Write endpoint (port 9090). PRECONDITION: configure the device's OTEL collector to push to http://<ctt-host>:4318 (OTLP HTTP) and http://<ctt-host>:9090/api/v1/write (Prometheus Remote Write) before running this scenario. Matches the sandbox observability architecture: device \u2192 Jaeger OTLP / Prometheus Remote Write \u2192 WFM observability stack.",
+    "id": "rd-13-observability",
+    "name": "Real device \u2014 observability",
+    "description": "The device's OpenTelemetry collector pushes telemetry to the CTT (OTLP on port 4318, Prometheus remote write on port 9090). Reported as SKIP when no telemetry arrives: point the device's collector at the CTT host to run it.",
     "crIds": [
       "MARGO-DEV-OBSERVABILITY-006",
       "MARGO-DEV-OBSERVABILITY-010",
@@ -3772,7 +1554,7 @@
     "optional": true,
     "steps": [
       {
-        "id": "step-otel-2",
+        "id": "rd-13-observability-otlp",
         "name": "Wait for Device OTEL Collector to Push Telemetry (traces or metrics)",
         "crIds": [
           "MARGO-DEV-OBSERVABILITY-006",
@@ -3809,7 +1591,7 @@
         }
       },
       {
-        "id": "step-otel-3",
+        "id": "rd-13-observability-remote-write",
         "name": "Confirm Prometheus Remote Write Also Received",
         "crIds": [
           "MARGO-DEV-OBSERVABILITY-006"

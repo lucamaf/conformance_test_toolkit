@@ -2,22 +2,21 @@
   "name": "identity",
   "version": "1.0.0-rc.3",
   "persona": "device-supplier",
-  "description": "Identity and trust (MIAF): mTLS handshake with X.509-SVIDs, clients that are refused (no certificate, a certificate the MIS did not issue), trust in the WFM through the MIS CA, SVID rotation.",
+  "description": "Real device: its X.509-SVID, refusing a WFM the MIS did not certify, and SVID rotation.",
   "FolderPath": [
     "../test-suites/device-supplier/identity/test-cases"
   ],
   "testCases": [
-    "device-mi004-rfc5280-certificate",
-    "device-mi018-tls-trust",
-    "scenario-miaf-identity-mtls",
-    "scenario-miaf-identity-svid-rotation",
-    "step-mi004-1.0",
-    "step-mi018-1.0",
-    "step-miaf-mtls-1",
-    "step-miaf-mtls-2",
-    "step-miaf-mtls-3",
-    "step-miaf-mtls-4",
-    "step-miaf-rotation-1",
-    "step-miaf-rotation-2"
+    "rd-01-identity",
+    "rd-01-identity-accepted",
+    "rd-01-identity-svid-profile",
+    "rd-10-wfm-trust",
+    "rd-10-wfm-trust-arm",
+    "rd-10-wfm-trust-connected",
+    "rd-10-wfm-trust-refused",
+    "rd-10-wfm-trust-resumed",
+    "rd-12-svid-rotation",
+    "rd-12-svid-rotation-accepted",
+    "rd-12-svid-rotation-connected"
   ]
 }

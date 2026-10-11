@@ -39,14 +39,13 @@ ctt-runner/device-supplier/
 
 | Group | Purpose |
 |---|---|
-| `core` | Every scenario of the suite — the conformance result |
-| `quick-check` | Capabilities, manifest, deployment, bundle, status — first check of the setup |
-| `management-interface` | The Management Interface API as a device uses it, with the errors for each call |
-| `manifest-integrity` | Manifests a device MUST reject and one it MUST accept (negative fixtures) |
-| `identity` | mTLS handshake, certificate conformance, trust in the WFM, SVID rotation |
-| `observability` | The device's OpenTelemetry collector pushes telemetry to the CTT |
-| `random-order` | The lifecycle scenarios executed in random order (`"flexibleOrder": true` in `group.json`) |
-| `real-device` | Observation steps (`"observe"`) that judge the requests a real device sent to the mock WFM |
+| `core` | Real device — the conformance result: observation steps (`"observe"`) that judge the requests a real device sends to the mock WFM |
+| `management-interface`, `manifest-integrity`, `identity`, `observability` | Real device — the scenarios of `core` for one area |
+| `self-check` | No device — the CTT's own device client against the mock WFM: every API call, its errors, the negative fixtures. Run it after changing `assertions.json` or the mock WFM |
+| `quick-check` | No device — capabilities, manifest, deployment, bundle, status: first check of the setup |
+| `random-order` | No device — the self-check lifecycle scenarios in random order (`"flexibleOrder": true` in `group.json`) |
+
+The mock WFM decides what is valid: it loads `ctt-runner/device-supplier/utils/manifests/assertions.json` when it starts. `endpoints` holds the rules of the rc.3 API (a request that breaks one is answered 422); `device_expectations` holds what a Margo device must declare beyond the API schema (the request is accepted, the verdict of each rule is recorded with it). The steps of `core` read those verdicts; they contain no rules of their own.
 
 ## How to Add or Update a Test Group
 
@@ -61,7 +60,7 @@ ctt-runner/device-supplier/
    ```
 
    It writes `test-suites/device-supplier/<group>/group.json` with every scenario and step ID found in that folder.
-3. A new scenario that belongs to the full set goes into `core/test-cases/device-supplier.json` as well; then run the creator again for `core`.
+3. A new real-device scenario that belongs to the conformance set goes into `core/test-cases/device-supplier.json` as well; a new self-run scenario goes into `self-check/test-cases/self-check.json`. Then run the creator again for that group.
 
 `random-order` additionally has `"flexibleOrder": true` in its `group.json`. The creator has no prompt for this field; it keeps the value when the group is updated.
 
@@ -87,7 +86,7 @@ The menu builds `ctt-runner/device-supplier/bin/run_tests` and runs it. To repea
 ```bash
 cd ctt-runner/device-supplier
 ./bin/run_tests -file ../../test-suites/device-supplier/core/test-cases/device-supplier.json \
-  -url https://localhost:3003/v1alpha2/margo -scenario scenario-capabilities
+  -url https://localhost:3003/v1alpha2/margo -scenario rd-02-capabilities
 ```
 
 | Flag | Description |
