@@ -138,7 +138,6 @@
     "description": "Deployment state retrieval, cache validation, immutable artifact downloads, and status updates.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-007",
-      "MARGO-DEV-MANAGEMENTINTERFACE-014",
       "MARGO-DEV-MANAGEMENTINTERFACE-016",
       "MARGO-DEV-MANAGEMENTINTERFACE-019",
       "MARGO-DEV-MANAGEMENTINTERFACE-031"
@@ -148,8 +147,7 @@
         "id": "step-3.1",
         "name": "Get Current Deployments",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-031",
-          "MARGO-DEV-MANAGEMENTINTERFACE-014"
+          "MARGO-DEV-MANAGEMENTINTERFACE-031"
         ],
         "method": "GET",
         "endpoint": "/api/v1/deployments",
@@ -263,7 +261,6 @@
         "id": "step-3.5",
         "name": "Download Individual Deployment Manifest",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-014",
           "MARGO-DEV-MANAGEMENTINTERFACE-019"
         ],
         "method": "GET",
@@ -314,8 +311,7 @@
         "id": "step-3.7",
         "name": "Report Deployment Status",
         "crIds": [
-          "MARGO-DEV-MANAGEMENTINTERFACE-007",
-          "MARGO-DEV-MANAGEMENTINTERFACE-024"
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
         ],
         "method": "POST",
         "endpoint": "/api/v1/deployments/{deploymentId}/status",
@@ -352,11 +348,6 @@
     "description": "Negative tests for digest, schema, role, interface, and client validation.",
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-MANAGEMENTINTERFACE-020",
-      "MARGO-DEV-MANAGEMENTINTERFACE-021",
-      "MARGO-DEV-MANAGEMENTINTERFACE-022",
-      "MARGO-DEV-MANAGEMENTINTERFACE-023",
-      "MARGO-DEV-MANAGEMENTINTERFACE-024",
       "MARGO-DEV-DEPLOYMENT-002"
     ],
     "steps": [
@@ -528,12 +519,7 @@
     "crIds": [
       "MARGO-DEV-MANAGEMENTINTERFACE-007",
       "MARGO-DEV-MANAGEMENTINTERFACE-016",
-      "MARGO-DEV-MANAGEMENTINTERFACE-019",
-      "MARGO-DEV-MANAGEMENTINTERFACE-020",
-      "MARGO-DEV-MANAGEMENTINTERFACE-021",
-      "MARGO-DEV-MANAGEMENTINTERFACE-022",
-      "MARGO-DEV-MANAGEMENTINTERFACE-023",
-      "MARGO-DEV-MANAGEMENTINTERFACE-024"
+      "MARGO-DEV-MANAGEMENTINTERFACE-019"
     ],
     "steps": [
       {

@@ -3,20 +3,14 @@
     "id": "wfm-core-capabilities",
     "name": "Device Capabilities — Report, Update, and Validation",
     "crIds": [
-      "MARGO-WFM-MANAGEMENTINTERFACE-021",
-      "MARGO-WFM-MANAGEMENTINTERFACE-022",
-      "MARGO-WFM-MANAGEMENTINTERFACE-023",
-      "MARGO-WFM-MANAGEMENTINTERFACE-041"
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
     ],
     "description": "MIAF replacement for wfm-core/postman_collection.json's capabilities items (see CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md §7.2 — Postman can't present an mTLS client SVID, so this consolidated file is the all-declarative equivalent for the WFM-supplier persona going forward). No onboarding call (none exists under MIAF); capabilities is PUT-only (no more POST-then-PUT); no apiVersion/kind envelope.",
     "steps": [
       {
         "id": "wfm-core-cap-1",
         "name": "Report Device Capabilities (create)",
-        "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-021",
-          "MARGO-WFM-MANAGEMENTINTERFACE-022"
-        ],
+        "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-core-device",
         "mtls": true,
@@ -61,11 +55,7 @@
       {
         "id": "wfm-core-cap-2",
         "name": "Update Device Capabilities (same deviceId, second call)",
-        "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-021",
-          "MARGO-WFM-MANAGEMENTINTERFACE-022",
-          "MARGO-WFM-MANAGEMENTINTERFACE-041"
-        ],
+        "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-core-device",
         "mtls": true,
@@ -360,11 +350,7 @@
   {
     "id": "wfm-core-status",
     "name": "Deployment Status Reporting",
-    "crIds": [
-      "MARGO-WFM-MANAGEMENTINTERFACE-021",
-      "MARGO-WFM-MANAGEMENTINTERFACE-022",
-      "MARGO-WFM-MANAGEMENTINTERFACE-041"
-    ],
+    "crIds": [],
     "description": "Reports status for a synthetic deployment ID — a real WFM will 4xx/track this against its own known deployments, so this asserts request-shape acceptance (status code + acknowledgement contract), not that the specific deploymentId is meaningful to the WFM under test.",
     "steps": [
       {
@@ -1125,18 +1111,12 @@
     "id": "wfm-otel-observability",
     "name": "OTEL Observability — WFM Accepts Device with otelCollector Capability",
     "description": "Verifies the vendor's WFM correctly accepts a device capabilities manifest that declares otelCollector:true, indicating the device has an OTEL collector that will push telemetry to the WFM's observability stack (Jaeger OTLP port 30417, Prometheus Remote Write port 30909). This is the SBI-side conformance check: the WFM must store and acknowledge the otelCollector flag without error. Full telemetry pipeline (device OTEL collector → WFM Jaeger/Prometheus) is validated in the device-supplier persona's scenario-otel-observability.",
-    "crIds": [
-      "MARGO-WFM-MANAGEMENTINTERFACE-021",
-      "MARGO-WFM-MANAGEMENTINTERFACE-022"
-    ],
+    "crIds": [],
     "steps": [
       {
         "id": "wfm-otel-cap-1",
         "name": "Report Capabilities with otelCollector: true — WFM Must Accept",
-        "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-021",
-          "MARGO-WFM-MANAGEMENTINTERFACE-022"
-        ],
+        "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
         "mtls": true,
@@ -1180,11 +1160,7 @@
       {
         "id": "wfm-otel-cap-2",
         "name": "Update Capabilities — WFM Preserves otelCollector: true on Second PUT",
-        "crIds": [
-          "MARGO-WFM-MANAGEMENTINTERFACE-021",
-          "MARGO-WFM-MANAGEMENTINTERFACE-022",
-          "MARGO-WFM-MANAGEMENTINTERFACE-041"
-        ],
+        "crIds": [],
         "method": "PUT",
         "endpoint": "/api/v1/capabilities/wfm-otel-device",
         "mtls": true,
