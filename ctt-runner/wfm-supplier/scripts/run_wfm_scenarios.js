@@ -1043,6 +1043,12 @@ function validate(responseSource, validation) {
       return typeof actual === 'number' ? '' : `${validation.field} is not a number`;
     case 'is_array':
       return Array.isArray(actual) ? '' : `${validation.field} is not an array`;
+    case 'is_object':
+      return actual !== null && typeof actual === 'object' && !Array.isArray(actual)
+        ? ''
+        : `${validation.field} is not an object`;
+    case 'gte':
+      return Number(actual) >= Number(expected) ? '' : `${validation.field} expected >= ${expected}, got ${actual}`;
     case 'not_empty':
       return actual !== undefined && actual !== null && String(actual).length > 0
         ? ''

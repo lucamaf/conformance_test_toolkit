@@ -677,15 +677,23 @@ create_test_group() {
 
     GROUP_PATH="$GROUP_DIR/$GROUP_NAME"
 
+    # Pressing Enter keeps an existing group's version and description; a new
+    # group defaults to the spec version this toolkit targets.
+    local default_version="1.0.0-rc.3" default_description="User created group"
+    if [[ -f "$GROUP_PATH/group.json" ]]; then
+        default_version=$(jq -r '.version // "1.0.0-rc.3"' "$GROUP_PATH/group.json" 2>/dev/null || echo "1.0.0-rc.3")
+        default_description=$(jq -r '.description // "User created group"' "$GROUP_PATH/group.json" 2>/dev/null || echo "User created group")
+    fi
+
     # App Version
     echo ""
-    read -p "Enter version of Margo Specification: " VERSION
-    [[ -z "$VERSION" ]] && VERSION="1.0.0-rc.2"
+    read -p "Enter version of Margo Specification [$default_version]: " VERSION
+    [[ -z "$VERSION" ]] && VERSION="$default_version"
 
     # Description
     echo ""
-    read -p "Enter a short description for group: " DESCRIPTION
-    [[ -z "$DESCRIPTION" ]] && DESCRIPTION="User created group"
+    read -p "Enter a short description for group [$default_description]: " DESCRIPTION
+    [[ -z "$DESCRIPTION" ]] && DESCRIPTION="$default_description"
 
     # Append mode
     APPEND_MODE=false
@@ -732,8 +740,10 @@ create_test_group() {
 
     ALL_TESTS=()
 
+    # Read from the resolved folder, so this works from any working directory;
+    # INPUT_PATH (relative to this folder) is only what group.json records.
     shopt -s nullglob
-    files=("$INPUT_PATH"/*.json)
+    files=("$_resolved"/*.json)
 
     if [[ ${#files[@]} -eq 0 ]]; then
         error "No JSON files found in folder!"
@@ -958,6 +968,11 @@ interactive_mode() {
             2|margo|functional|template)
                 echo ""
                 info "Functional Test Mode Selected"
+                echo ""
+                echo "WFM test cases can be a Postman collection (v2.1) or a Margo scenario file (JSON)."
+                echo "Template reference: $(realpath "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md" 2>/dev/null)"
+                echo "                    (section: Postman Template for Expressing sequences of API exchanges)"
+                echo "Working example:    $(realpath "$SCRIPT_DIR/../test-suites/wfm-supplier/core/test-cases/wfm-supplier.json" 2>/dev/null)"
 
                 set_supplier_context "wfm-supplier"
                 group_management_menu
@@ -983,14 +998,16 @@ interactive_mode() {
                 info "You selected: Device Supplier"
                 echo ""
 
-                TEMPLATE_PATH="$SCRIPT_DIR/../_archive/device-supplier/docs/template.md"
-                TEMPLATE_PATH="$(realpath "$TEMPLATE_PATH" 2>/dev/null || echo "$TEMPLATE_PATH")"
+                TEMPLATE_PATH="$(realpath "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md" 2>/dev/null || echo "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md")"
+                EXAMPLE_PATH="$(realpath "$SCRIPT_DIR/../test-suites/device-supplier/core/test-cases/device-supplier.json" 2>/dev/null || true)"
 
                 echo "!! WARNING !!"
                 echo "================================================"
                 echo "Please ensure that all test cases are developed using the Margo template."
                 echo ""
                 echo "Template reference: $TEMPLATE_PATH"
+                echo "                    (section: Margo schema for server-side test-cases)"
+                echo "Working example:    $EXAMPLE_PATH"
 
                 # Go directly to group-based selection
                 set_supplier_context "device-supplier"

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -401,6 +402,13 @@ func runStep(step TestStep, ctx *TestContext) TestResult {
 		timeout = 60 * time.Second
 	}
 
+	for _, cond := range step.Poll.Until {
+		if !validationOperations[cond.Operation] {
+			return TestResult{StepID: step.ID, StepName: step.Name, Status: "fail",
+				Reason: fmt.Sprintf("unsupported validation operation in poll.until: %q (field '%s')", cond.Operation, cond.Field)}
+		}
+	}
+
 	deadline := time.Now().Add(timeout)
 	var last TestResult
 	for {
@@ -631,9 +639,17 @@ func executeStep(step TestStep, ctx *TestContext) TestResult {
 
 	// Run validations
 	for _, validation := range step.Validations {
+		if !validationOperations[validation.Operation] {
+			result.Status = "fail"
+			result.Reason = fmt.Sprintf("unsupported validation operation: %q (field '%s')", validation.Operation, validation.Field)
+			return result
+		}
 		if !validateResponse(respData, validation, ctx) {
 			result.Status = "fail"
 			result.Reason = fmt.Sprintf("Validation failed for field '%s': %s", validation.Field, validation.Operation)
+			if validation.Value != nil {
+				result.Reason += fmt.Sprintf(" %v (got %v)", validation.Value, extractJSONPath(respData, validation.Field))
+			}
 			return result
 		}
 	}
@@ -889,8 +905,24 @@ func interpolateHeaderValue(value string, ctx *TestContext) string {
 
 // Desired-state manifest rules (evaluateManifest, signedGET) live in manifest_rules.go.
 
+// validationOperations is every operation a scenario file may use. The WFM
+// runner (run_wfm_scenarios.js) accepts the same set. Anything else — a typo,
+// an operation that does not exist — fails the step instead of passing.
+var validationOperations = map[string]bool{
+	"equals": true, "exists": true, "not_empty": true, "is_string": true, "is_number": true,
+	"is_array": true, "is_object": true, "contains": true, "not_contains": true,
+	"gte": true, "greater_than": true, "array_length_gte": true, "array_length_equals": true,
+	"one_of": true, "matches_regex": true,
+}
+
 func validateResponse(data interface{}, validation StepValidation, ctx *TestContext) bool {
 	value := extractJSONPath(data, validation.Field)
+	if validation.Operation == "not_contains" {
+		// Passes when the value is absent or does not include the substring.
+		str, isStr := value.(string)
+		unwanted, _ := validation.Value.(string)
+		return value == nil || !isStr || !strings.Contains(str, interpolateHeaderValue(unwanted, ctx))
+	}
 	if value == nil {
 		return false
 	}
@@ -936,8 +968,42 @@ func validateResponse(data interface{}, validation StepValidation, ctx *TestCont
 		val, okV := toFloat64(value)
 		exp, okE := toFloat64(expected)
 		return okV && okE && val >= exp
+	case "greater_than":
+		val, okV := toFloat64(value)
+		exp, okE := toFloat64(expected)
+		return okV && okE && val > exp
+	case "array_length_gte", "array_length_equals":
+		arr, okA := value.([]interface{})
+		exp, okE := toFloat64(expected)
+		if !okA || !okE {
+			return false
+		}
+		if validation.Operation == "array_length_equals" {
+			return float64(len(arr)) == exp
+		}
+		return float64(len(arr)) >= exp
+	case "one_of":
+		options, ok := validation.Value.([]interface{})
+		if !ok {
+			return false
+		}
+		for _, option := range options {
+			if option == value {
+				return true
+			}
+		}
+		return false
+	case "matches_regex":
+		// The raw pattern, not the {context}-substituted one: a quantifier such
+		// as {64} must not be mistaken for a context variable.
+		pattern, ok := validation.Value.(string)
+		if !ok {
+			return false
+		}
+		re, err := regexp.Compile(pattern)
+		return err == nil && re.MatchString(fmt.Sprint(value))
 	default:
-		return true
+		return false
 	}
 }
 
