@@ -38,6 +38,13 @@ var MIAFServer = ""
 // ClaimedAppVersion is the artifact/app version under test, set via -claimed-app-version.
 var ClaimedAppVersion = "unknown"
 
+// GroupName is the test group being run (from -group); shown in the report.
+var GroupName = ""
+
+// ObservedDevice is the SPIFFE ID of the real device seen in the mock WFM's
+// request journal (set by observe steps); shown in the report.
+var ObservedDevice = ""
+
 // CTTMargoVersion is the Margo spec version this conformance tool validates against, set via -ctt-margo-version.
 var CTTMargoVersion = "unknown"
 
@@ -121,7 +128,7 @@ type TestStep struct {
 	//   "previous"     the SVID it replaced (SVID Rotation scenario)
 	//   "untrusted"    a certificate with our SPIFFE ID that the MIS did not issue
 	//   "none"         no client certificate at all
-	// "previous"/"refreshed" steps are reported as SKIP when no SVID was rotated.
+	// "previous"/"refreshed" steps are reported as NOT RUN when no SVID was rotated.
 	SvidSource string `json:"svid_source,omitempty"`
 	// Observe: instead of sending a request, judge what a real device sent to
 	// the mock WFM (see observe.go).
@@ -182,6 +189,7 @@ func main() {
 	clientIDFlag := flag.String("client-id", "", "Pre-existing clientId to seed {clientId} with instead of onboarding fresh. Lets you run scenario files one at a time by hand: run onboarding.json first, copy the clientId it prints, then pass it here for subsequent files.")
 	verboseFlag := flag.Bool("verbose", false, "Print the full JSON response body (plus response headers) for every step. Useful when running one scenario file at a time by hand to inspect exactly what the server returned.")
 	claimedAppVersionFlag := flag.String("claimed-app-version", "unknown", "Claimed App Version — the artifact/app version under test, from the selected group's group.json")
+	groupFlag := flag.String("group", "", "Name of the test group being run; shown in the report")
 	cttMargoVersionFlag := flag.String("ctt-margo-version", "1.0.0-rc.3", "CTT Margo Version — the Margo spec version this conformance tool validates against")
 	flag.Parse()
 	WFMServer = *urlFlag
@@ -191,6 +199,7 @@ func main() {
 	}
 	verbose = *verboseFlag
 	ClaimedAppVersion = *claimedAppVersionFlag
+	GroupName = *groupFlag
 	CTTMargoVersion = *cttMargoVersionFlag
 
 	if err := ensureCertificates(); err != nil {
@@ -259,7 +268,7 @@ func main() {
 	covered, attempted := crIDCoverage(allResults)
 	fmt.Println(`╔══════════════════════════════════════════════════════════════════════════════╗`)
 	fmt.Printf("║  Test Results: %d PASSED, %d FAILED (Total: %d)\n", passCount, failCount, passCount+failCount)
-	fmt.Printf("║  Requirements verified: %d  (referenced by tests: %d)\n", len(covered), len(attempted))
+	fmt.Printf("║  Requirements passing: %d of %d\n", len(covered), len(attempted))
 	fmt.Println(`╚══════════════════════════════════════════════════════════════════════════════╝`)
 
 	// Save results to file
@@ -321,7 +330,7 @@ func runScenarioSteps(scenario TestScenario, ctx *TestContext, stepFilter string
 			fmt.Printf("    ✅ PASS - HTTP %d (Expected: %d)\n", result.StatusCode, step.ExpectedStatus)
 			pass++
 		} else if result.Status == "skip" {
-			fmt.Printf("    ⏭  SKIP - %s\n", result.Reason)
+			fmt.Printf("    ⏭  NOT RUN - %s\n", result.Reason)
 		} else {
 			fmt.Printf("    ❌ FAIL - %s\n", result.Reason)
 			fail++
@@ -1112,18 +1121,25 @@ func mergeCRIds(lists ...[]string) []string {
 	return out
 }
 
-// crIDCoverage returns (verified, referenced): CR-IDs cited by at least one
-// passing step, and CR-IDs cited by any step (pass or fail).
+// crIDCoverage returns (verified, referenced): CR-IDs with at least one passing
+// step and no failing step (the report's PASS rule), and CR-IDs cited by any step.
 func crIDCoverage(results []TestResult) (verified, referenced []string) {
 	v := map[string]bool{}
 	ref := map[string]bool{}
+	failed := map[string]bool{}
 	for _, r := range results {
 		for _, id := range r.CRIds {
 			ref[id] = true
-			if r.Status == "pass" {
+			switch reportState(r.Status) {
+			case "pass":
 				v[id] = true
+			case "fail":
+				failed[id] = true
 			}
 		}
+	}
+	for id := range failed {
+		delete(v, id)
 	}
 	return sortedKeys(v), sortedKeys(ref)
 }
@@ -1149,39 +1165,57 @@ type scenarioTally struct {
 	total, passed, faild, skipped int
 }
 
+// reportCSS is the stylesheet of the conformance report. It is the same text
+// as REPORT_CSS in ctt-runner/wfm-supplier/scripts/run_wfm_scenarios.js.
+const reportCSS = `
+    @page { size: A4 landscape; margin: 12mm 12mm 20mm 12mm; } /* bottom: room for the signature stamp */
+    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2933; }
+    h1 { font-size: 22px; margin-bottom: 4px; }
+    h2 { font-size: 16px; margin: 24px 0 8px; }
+    .meta { font-size: 13px; color: #555; margin-bottom: 18px; }
+    .summary { margin-bottom: 10px; font-size: 15px; font-weight: bold; }
+    .summary.all-pass { color: #166534; }
+    .summary.has-fail { color: #b91c1c; }
+    table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 24px; }
+    th, td { border: 1px solid #d7dde5; padding: 7px 9px; text-align: left; vertical-align: top; }
+    th { background: #eef2f7; }
+    td.wrap { overflow-wrap: anywhere; }
+    td.id, td.pass, td.fail, td.skip { white-space: nowrap; }
+    td.pass { color: #166534; font-weight: 700; }
+    td.fail, tr.fail td.reason { color: #b91c1c; font-weight: 700; }
+    td.skip, tr.skip td.reason { color: #6b7280; font-weight: 700; }
+    .version-warning { margin-bottom: 14px; padding: 10px 14px; border-radius: 4px; background: #dcfce7; color: #166534; border: 1px solid #86efac; font-size: 13px; font-weight: bold; }
+  `
+
+// reportState maps a step status to the report's row class.
+func reportState(status string) string {
+	switch status {
+	case "pass":
+		return "pass"
+	case "skip":
+		return "skip"
+	}
+	return "fail"
+}
+
+const noRequirementsNote = "The tests of this group carry no requirement IDs."
+
+var reportWord = map[string]string{"pass": "PASS", "fail": "FAIL", "skip": "NOT RUN"}
+
 // generateHTMLReport builds one self-contained HTML page (inline CSS, no
-// external assets) summarizing a full test run, and returns it as a string
-// for the caller to write to disk. It's the device-supplier persona's
-// equivalent of run_wfm_scenarios.js's writeReport() on the wfm-supplier
-// side. It works in three passes over the same `results` slice (one
-// TestResult per step that ran):
+// external assets) summarizing a full test run. The template is shared with
+// the wfm-supplier runner (writeReport in run_wfm_scenarios.js): same title,
+// header fields, sections, columns, wording and CSS. Change both together.
+// The CLI turns this HTML into the signed PDF (scripts/pdf_ops.sh).
 //
-//  1. A simple pass/fail count across every result, for the headline summary.
-//  2. A per-scenario rollup (scenarioTally): how many of each scenario's
-//     steps passed, keeping scenarios in the order they first appear rather
-//     than sorting them, so the report reads in the same order the run
-//     printed to the console.
-//  3. CR-ID coverage, via crIDCoverage() (see below) — which CR-IDs got
-//     "verified" (at least one step referencing them passed) vs. just
-//     "referenced" (mentioned by at least one step, whether it passed or
-//     not) — rendered as a chip list, green for verified. Note this means a
-//     CR-ID can show as verified even if some OTHER step referencing it
-//     failed — it only takes one passing step to count.
-//
-// The rest of the function is template-string HTML/CSS assembly via a
-// strings.Builder — there's no separate templating engine, each section
-// (summary line, scenario table, CR-ID chips, per-step detail table) is just
-// a loop over one of the pieces of data computed above.
+// Sections: header (persona, group, versions, system under test, run time),
+// result line, Requirements Coverage, Scenario Summary, Step Details.
+// A requirement is FAIL when any step that cites it failed, PASS when at
+// least one such step passed and none failed, NOT RUN when none of them ran.
 func generateHTMLReport(results []TestResult) string {
-	passCount, failCount, skipCount := 0, 0, 0
+	count := map[string]int{}
 	for _, r := range results {
-		if r.Status == "pass" {
-			passCount++
-		} else if r.Status == "skip" {
-			skipCount++
-		} else {
-			failCount++
-		}
+		count[reportState(r.Status)]++
 	}
 
 	// Per-scenario rollup, preserving first-seen order.
@@ -1195,134 +1229,148 @@ func generateHTMLReport(results []TestResult) string {
 			order = append(order, r.ScenarioID)
 		}
 		t.total++
-		if r.Status == "pass" {
+		switch reportState(r.Status) {
+		case "pass":
 			t.passed++
-		} else if r.Status == "skip" {
+		case "skip":
 			t.skipped++
-		} else {
+		default:
 			t.faild++
 		}
 	}
 
-	verified, referenced := crIDCoverage(results)
-	verifiedSet := map[string]bool{}
-	for _, id := range verified {
-		verifiedSet[id] = true
+	// Requirement → state and the steps that cite it.
+	reqState := map[string]string{}
+	reqSteps := map[string][]string{}
+	for _, r := range results {
+		s := reportState(r.Status)
+		for _, id := range r.CRIds {
+			reqSteps[id] = append(reqSteps[id], r.StepID)
+			switch {
+			case s == "fail" || reqState[id] == "fail":
+				reqState[id] = "fail"
+			case s == "pass" || reqState[id] == "pass":
+				reqState[id] = "pass"
+			default:
+				reqState[id] = "skip"
+			}
+		}
+	}
+	reqIDs := make([]string, 0, len(reqState))
+	reqCount := map[string]int{}
+	for id, s := range reqState {
+		reqIDs = append(reqIDs, id)
+		reqCount[s]++
+	}
+	sort.Strings(reqIDs)
+
+	const persona = "Device Supplier"
+	group := GroupName
+	if group == "" {
+		group = "unknown"
+	}
+	// The device is known only when an observe step saw its requests.
+	sut := "no device identified in this run (mock WFM " + MIAFServer + ")"
+	if ObservedDevice != "" {
+		sut = "device " + ObservedDevice + " via mock WFM " + MIAFServer
 	}
 
 	var b strings.Builder
-	b.WriteString(`<!doctype html>
+	fmt.Fprintf(&b, `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Device Conformance Report</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; color: #1f2933; }
-    h1 { font-size: 22px; margin-bottom: 4px; }
-    h2 { font-size: 16px; margin: 24px 0 8px; }
-    .meta { font-size: 13px; color: #555; margin-bottom: 18px; }
-    .summary { margin-bottom: 10px; font-size: 15px; font-weight: bold; }
-    .summary.all-pass { color: #166534; }
-    .summary.has-fail { color: #b91c1c; }
-    table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 24px; }
-    th, td { border: 1px solid #d7dde5; padding: 7px 9px; text-align: left; vertical-align: top; }
-    th { background: #eef2f7; }
-    tr.pass td:nth-child(9) { color: #166534; font-weight: 700; }
-    tr.fail td:nth-child(9), tr.fail td:last-child { color: #b91c1c; font-weight: 700; }
-    tr.skip td:nth-child(9) { color: #92400e; font-weight: 700; }
-    .version-warning { margin-bottom: 14px; padding: 10px 14px; border-radius: 4px; background: #dcfce7; color: #166534; border: 1px solid #86efac; font-size: 13px; font-weight: bold; }
-  </style>
+  <title>Margo Conformance Report — %s — %s</title>
+  <style>%s</style>
 </head>
 <body>
-  <h1>Margo Device Conformance Report</h1>
-`)
-	fmt.Fprintf(&b, `  <div class="meta">
+  <h1>Margo Conformance Report</h1>
+  <div class="meta">
+    Persona: <strong>%s</strong> &nbsp;|&nbsp;
+    Group: <strong>%s</strong> &nbsp;|&nbsp;
     Claimed App Version: <strong>%s</strong> &nbsp;|&nbsp;
     CTT Margo Version: <strong>%s</strong> &nbsp;|&nbsp;
-    Target WFM: <strong>%s</strong> &nbsp;|&nbsp;
+    System under test: <strong>%s</strong> &nbsp;|&nbsp;
     Run: <strong>%s</strong>
   </div>
-`, htmlEscape(ClaimedAppVersion), htmlEscape(CTTMargoVersion), htmlEscape(WFMServer), time.Now().Format(time.RFC3339))
+`, persona, htmlEscape(group), reportCSS, persona, htmlEscape(group), htmlEscape(ClaimedAppVersion),
+		htmlEscape(CTTMargoVersion), htmlEscape(sut), time.Now().UTC().Format("2006-01-02T15:04:05Z"))
 
 	if ClaimedAppVersion != "unknown" && ClaimedAppVersion != CTTMargoVersion {
 		fmt.Fprintf(&b, `  <div class="version-warning">⚠ Version Mismatch: Claimed App Version (%s) differs from CTT Margo Version (%s)</div>
 `, htmlEscape(ClaimedAppVersion), htmlEscape(CTTMargoVersion))
 	}
 
-	cls := "all-pass"
-	icon := "✅"
-	if failCount != 0 {
+	cls, icon := "all-pass", "✅"
+	if count["fail"] != 0 {
 		cls, icon = "has-fail", "❌"
 	}
-	skipStr := ""
-	if skipCount > 0 {
-		skipStr = fmt.Sprintf(", %d skipped", skipCount)
-	}
-	fmt.Fprintf(&b, `  <div class="summary %s">%s %d passed, %d failed%s, %d total</div>
-`, cls, icon, passCount, failCount, skipStr, len(results))
+	fmt.Fprintf(&b, `  <div class="summary %s">%s %d passed, %d failed, %d not run, %d total</div>
+`, cls, icon, count["pass"], count["fail"], count["skip"], len(results))
 
 	// Requirements coverage
-	fmt.Fprintf(&b, `  <h2>Requirements Coverage</h2>
-  <div class="summary">%d requirement(s) verified by passing tests &nbsp;|&nbsp; %d referenced by tests in total</div>
+	b.WriteString("\n  <h2>Requirements Coverage</h2>\n")
+	if len(reqIDs) == 0 {
+		b.WriteString("  <div class=\"meta\">" + noRequirementsNote + "</div>\n")
+	} else {
+		fmt.Fprintf(&b, `  <div class="meta">%d of %d requirements passing &nbsp;|&nbsp; %d failing &nbsp;|&nbsp; %d not run</div>
   <table>
-    <thead><tr><th>CR-ID</th><th>Verified</th></tr></thead>
+    <thead><tr><th>Requirement ID</th><th>Result</th><th>Checked by steps</th></tr></thead>
     <tbody>
-`, len(verified), len(referenced))
-	for _, id := range referenced {
-		rowCls, mark := "pass", "✅"
-		if !verifiedSet[id] {
-			rowCls, mark = "fail", "❌"
+`, reqCount["pass"], len(reqIDs), reqCount["fail"], reqCount["skip"])
+		for _, id := range reqIDs {
+			s := reqState[id]
+			fmt.Fprintf(&b, "    <tr class=\"%s\"><td class=\"id\">%s</td><td class=\"%s\">%s</td><td class=\"wrap\">%s</td></tr>\n",
+				s, htmlEscape(id), s, reportWord[s], htmlEscape(strings.Join(reqSteps[id], ", ")))
 		}
-		fmt.Fprintf(&b, "    <tr class=\"%s\"><td>%s</td><td>%s</td></tr>\n", rowCls, htmlEscape(id), mark)
+		b.WriteString("    </tbody>\n  </table>\n")
 	}
-	b.WriteString("    </tbody>\n  </table>\n")
 
 	// Scenario summary
-	b.WriteString(`  <h2>Scenario Summary</h2>
+	b.WriteString(`
+  <h2>Scenario Summary</h2>
   <table>
-    <thead><tr><th>Scenario</th><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th></tr></thead>
+    <thead><tr><th>Scenario</th><th>Total</th><th>Passed</th><th>Failed</th><th>Not run</th></tr></thead>
     <tbody>
 `)
 	for _, id := range order {
 		t := tallies[id]
-		rowCls := "pass"
+		rowCls, failCls := "pass", ""
 		if t.faild != 0 {
-			rowCls = "fail"
+			rowCls, failCls = "fail", ` class="fail"`
 		} else if t.skipped != 0 {
 			rowCls = "skip"
 		}
-		fmt.Fprintf(&b, "    <tr class=\"%s\"><td>%s</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td></tr>\n",
-			rowCls, htmlEscape(t.name), t.total, t.passed, t.faild, t.skipped)
+		fmt.Fprintf(&b, "    <tr class=\"%s\"><td>%s</td><td>%d</td><td>%d</td><td%s>%d</td><td>%d</td></tr>\n",
+			rowCls, htmlEscape(t.name), t.total, t.passed, failCls, t.faild, t.skipped)
 	}
 	b.WriteString("    </tbody>\n  </table>\n")
 
 	// Step details
-	b.WriteString(`  <h2>Step Details</h2>
+	b.WriteString(`
+  <h2>Step Details</h2>
   <table>
     <thead><tr>
-      <th>Scenario</th><th>Step</th><th>Name</th><th>CR-IDs</th>
-      <th>Method</th><th>Endpoint</th><th>Expected</th><th>Actual</th><th>Status</th><th>Failure Reason</th>
+      <th>Scenario</th><th>Step</th><th>Name</th><th>Requirement IDs</th>
+      <th>Method</th><th>Endpoint</th><th>Expected</th><th>Actual</th><th>Result</th><th>Reason</th>
     </tr></thead>
     <tbody>
 `)
+	num := func(n int) string {
+		if n == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%d", n)
+	}
 	for _, r := range results {
-		rowCls, statusText := "pass", "PASS"
-		if r.Status == "skip" {
-			rowCls, statusText = "skip", "SKIP"
-		} else if r.Status != "pass" {
-			rowCls, statusText = "fail", "FAIL"
-		}
-		expected := ""
-		if r.Expected != 0 {
-			expected = fmt.Sprintf("%d", r.Expected)
-		}
+		s := reportState(r.Status)
 		fmt.Fprintf(&b, `    <tr class="%s">
-      <td>%s</td><td>%s</td><td>%s</td><td>%s</td>
-      <td>%s</td><td>%s</td><td>%s</td><td>%d</td><td>%s</td><td>%s</td>
+      <td>%s</td><td>%s</td><td>%s</td><td class="wrap">%s</td>
+      <td>%s</td><td class="wrap">%s</td><td>%s</td><td>%s</td><td class="%s">%s</td><td class="reason">%s</td>
     </tr>
-`, rowCls, htmlEscape(r.ScenarioName), htmlEscape(r.StepID),
+`, s, htmlEscape(r.ScenarioName), htmlEscape(r.StepID),
 			htmlEscape(r.StepName), htmlEscape(strings.Join(r.CRIds, ", ")),
-			htmlEscape(r.Method), htmlEscape(r.Endpoint), expected, r.StatusCode, statusText, htmlEscape(r.Reason))
+			htmlEscape(r.Method), htmlEscape(r.Endpoint), num(r.Expected), num(r.StatusCode), s, reportWord[s], htmlEscape(r.Reason))
 	}
 	b.WriteString("    </tbody>\n  </table>\n</body>\n</html>\n")
 

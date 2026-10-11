@@ -7,7 +7,7 @@
 #          - WFM Supplier: sends the group's requests to a real WFM over mTLS
 #          - Device Supplier: runs the mock WFM and the group's scenarios
 #          - Application Supplier: validates an Application Package
-#          - Generates the HTML conformance report
+#          - Generates the HTML conformance report and its signed PDF
 #
 # Story: #278 - "As a Margo adopter, I would like to have a tool to allow me
 #        to select the suitable persona and run a set of conformance test-cases
@@ -660,6 +660,47 @@ create_temp_scenarios_file() {
     mktemp /tmp/margo-device-scenarios.XXXXXX.json
 }
 
+# Every run ends here: the HTML report is turned into a signed PDF next to it
+# (scripts/pdf_ops.sh). The first time, that script installs its PDF tools
+# (sudo + internet, about a minute).
+#   CTT_SIGN_REPORT=no       skip the signed PDF
+#   CTT_SIGN_CERT, CTT_SIGN_PASSPHRASE
+#                            sign with your own .p12 instead of the CTT's
+#                            self-signed CA (kept in scripts/signing-identity/)
+# A failure here never changes the test result; the HTML report stays as it is.
+sign_report() {
+    local html="$1"
+    [[ -f "$html" ]] || return 0
+    local signer="$SCRIPT_DIR/../scripts/pdf_ops.sh"
+    if [[ ! -f "$signer" ]]; then
+        warn "Signed PDF not created: $signer not found"
+        return 0
+    fi
+    if [[ "${CTT_SIGN_REPORT:-yes}" =~ ^[nN] ]]; then
+        info "Signed PDF skipped (CTT_SIGN_REPORT=${CTT_SIGN_REPORT})."
+        return 0
+    fi
+
+    local out_dir base
+    out_dir="$(dirname "$html")"
+    base="$(basename "$html" .html)"
+    local args=("$html")
+    [[ -n "${CTT_SIGN_CERT:-}" ]] && args+=("$CTT_SIGN_CERT" "${CTT_SIGN_PASSPHRASE:-}")
+
+    log "🔏 Creating the signed PDF report (the first time this installs the PDF tools and may ask for sudo)..."
+    if PDF_OUTPUT_DIR="$out_dir" bash "$signer" "${args[@]}" > "$out_dir/report-signing.log" 2>&1 \
+        && [[ -f "$out_dir/${base}_signed.pdf" ]]; then
+        rm -f "$out_dir/${base}.pdf"
+        success "Signed report: $out_dir/${base}_signed.pdf"
+        if [[ -z "${CTT_SIGN_CERT:-}" ]]; then
+            info "Signer CA certificate (send it with the report): $out_dir/ca_cert.pem"
+        fi
+    else
+        warn "Signed PDF not created — see $out_dir/report-signing.log (the HTML report is not affected)"
+    fi
+    return 0
+}
+
 get_ctt_margo_version() {
     echo "1.0.0-rc.3"
 }
@@ -851,6 +892,7 @@ run_wfm_scenario_group() {
     node "$scenario_runner" "$wfm_url" "$scenario_file" "$report_file" "$cert_dir" "$group_name" "$claimed_app_version" "${miaf_flags[@]}"
     local result=$?
     set -e
+    sign_report "$report_file"
 
     rm -f "$scenario_file"
 
@@ -909,6 +951,7 @@ run_wfm_contract_collection() {
     node "$scenario_runner" "$wfm_url" "$run_collection" "$report_file" "$cert_dir" "contract" "$(get_ctt_margo_version)"
     local result=$?
     set -e
+    sign_report "$report_file"
     [[ -n "$filtered_collection" ]] && rm -f "$filtered_collection"
 
     if [[ $result -eq 0 ]]; then
@@ -1147,6 +1190,7 @@ execute_wfm_tests_with_group() {
         node "$scenario_runner" "$wfm_url" "$filtered_collection" "$report_file" "$cert_dir" "$group_name" "$group_version" "${miaf_flags[@]}"
         local result=$?
         set -e
+        sign_report "$report_file"
 
         rm -f "$filtered_collection"
 
@@ -1236,6 +1280,7 @@ execute_device_tests() {
     # duplicated here because this function is also reached directly via
     # `../ctt-runner/ctt-start.sh device <group>`.
     local extra_flags=()
+    [[ -n "$group_path" ]] && extra_flags+=("-group" "$(basename "$group_path")")
     if [[ -n "$group_path" && "$(jq -r '.flexibleOrder // false' "$group_path/group.json" 2>/dev/null)" == "true" ]]; then
         extra_flags+=("-flexible-order")
         info "🔀 Flexible-order mode enabled for group '$(basename "$group_path")'."
@@ -1333,6 +1378,7 @@ execute_device_tests() {
         success "Device Tests Completed"
         success "Report: $RUNNER_DEVICE/$(basename "$latest_report")"
         success "Execution log: $RUNNER_DEVICE/test-execution.log"
+        sign_report "$RUNNER_DEVICE/$(basename "$latest_report")"
     else
         success "Device Tests Completed"
         info "Reports location: $CONFORMANCE_DIR/device-supplier/reports/"
@@ -1490,7 +1536,13 @@ REPORTS:
 
   Each row shows the request, the expected and the actual result, and the
   requirement IDs the check is evidence for. A check that could not be run
-  is reported as NOT RUN or SKIP with the reason.
+  is reported as NOT RUN with the reason. Both personas use the same layout.
+
+  Every run also writes the report as a signed PDF (<report>_signed.pdf) and
+  the signer's CA certificate (ca_cert.pem) to the same folder. Check one with:
+    scripts/.venv/bin/python scripts/pdf_verify.py <report>_signed.pdf ca_cert.pem
+  CTT_SIGN_REPORT=no skips it; CTT_SIGN_CERT=<file.p12> (and
+  CTT_SIGN_PASSPHRASE) signs with your own certificate.
 
 REQUIREMENTS:
 
@@ -2199,7 +2251,7 @@ device_run_tests() {
     # Groups may opt into flexible-order mode via a "flexibleOrder" key in
     # group.json — runs the fixed_first scenario first, then the rest in random
     # order. Absent/false for every existing group, so this is a no-op for them.
-    local extra_flags=()
+    local extra_flags=("-group" "$(basename "$device_group")")
     if [[ "$(jq -r '.flexibleOrder // false' "$device_group/group.json" 2>/dev/null)" == "true" ]]; then
         extra_flags+=("-flexible-order")
         info "🔀 Flexible-order mode enabled for group '$group_name'."
@@ -2246,6 +2298,7 @@ device_run_tests() {
     if [[ -n "$latest_report" && -f "$latest_report" ]]; then
         cp "$latest_report" "$RUNNER_DEVICE/"
         success "Report: $RUNNER_DEVICE/$(basename "$latest_report")"
+        sign_report "$RUNNER_DEVICE/$(basename "$latest_report")"
     else
         info "Reports location: $device_dir/reports/"
     fi

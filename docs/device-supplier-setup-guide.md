@@ -339,7 +339,7 @@ report states which set was run. Each description in the list starts with
 | `management-interface` | yes | Capabilities, desired state, fetch, status, a deployment added and withdrawn | While working on the API client |
 | `manifest-integrity` | yes | Manifests and content a device MUST reject, one it MUST accept, state kept across a restart | While working on manifest validation |
 | `identity` | yes | The device's SVID, refusing a WFM the MIS did not certify, SVID rotation | While working on MIAF |
-| `observability` | yes | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (SKIP otherwise) |
+| `observability` | yes | The device's OpenTelemetry collector pushes telemetry to the CTT | When a collector is configured (NOT RUN otherwise) |
 | `core` | yes | All of the "yes" groups together | For the conformance result of a device — see [Testing a real device-agent](#testing-a-real-device-agent) |
 
 ### URLs to enter
@@ -358,18 +358,86 @@ Press Enter. All conformance steps go to the mTLS port (3003); port 3001 is
 only used for the health check and telemetry status.
 
 A `self-check` run takes a few seconds. Two SVID Rotation steps are reported as
-SKIP until the CTT's client SVID has been re-issued and installed again with
+NOT RUN until the CTT's client SVID has been re-issued and installed again with
 Setup Identity.
 
-The HTML report is written to two locations:
+### The report and its signed PDF
+
+The report is written to `ctt-runner/reports/device-supplier/`. Every run leaves
+three files there:
 
 ```
-ctt-runner/device-supplier/reports/conformance-report-<timestamp>.html
-ctt-runner/reports/device-supplier/conformance-report-<timestamp>.html
+conformance-report_<timestamp>.html          the report, open it in any browser
+conformance-report_<timestamp>_signed.pdf    the same report as a digitally signed PDF
+ca_cert.pem                           the certificate needed to check the signature
 ```
 
-Open either in any browser. The report includes a conformance requirement
-coverage summary, per-scenario table, and a full step-detail table.
+The WFM Supplier and the Device Supplier reports use the same layout:
+
+| Part | What it shows |
+|------|---------------|
+| Header | Persona, group, claimed version, CTT Margo version, system under test (the SPIFFE ID of the device that sent requests to the mock WFM; `no device identified in this run` for the groups that need no device), run time |
+| Result line | Steps passed, failed, not run, total |
+| Requirements Coverage | One row per requirement ID: `PASS`, `FAIL` or `NOT RUN`, and the steps that check it |
+| Scenario Summary | Passed, failed and not run steps per scenario |
+| Step Details | Every step: requirement IDs, method, endpoint, expected and actual HTTP code, result, reason |
+
+A requirement is `FAIL` when any step that checks it failed, `PASS` when at
+least one of its steps passed and none failed, and `NOT RUN` when none of its
+steps ran.
+
+#### The signed PDF
+
+The signed PDF is created automatically at the end of every run; there is no
+extra command. The run prints:
+
+```
+🔏 Creating the signed PDF report (the first time this installs the PDF tools and may ask for sudo)...
+✅ Signed report: .../ctt-runner/reports/device-supplier/conformance-report_<timestamp>_signed.pdf
+ℹ️  Signer CA certificate (send it with the report): .../ctt-runner/reports/device-supplier/ca_cert.pem
+```
+
+The first run installs the PDF tools (needs sudo and internet, about one
+minute). Later runs take about 15 seconds.
+
+The signature shows that the PDF was not changed after the run. The CTT signs
+with its own certificate authority, created on this machine the first time and
+kept in `scripts/signing-identity/`. All reports signed on this machine use
+that one authority, so one `ca_cert.pem` checks all of them. Send `ca_cert.pem`
+together with the PDF.
+
+Check a signed report (use the file name the run printed):
+
+```bash
+cd $HOME/workspace/conformance_test_toolkit
+scripts/.venv/bin/python scripts/pdf_verify.py \
+  ctt-runner/reports/device-supplier/conformance-report_<timestamp>_signed.pdf \
+  ctt-runner/reports/device-supplier/ca_cert.pem
+```
+
+Expected:
+
+```
+Unchanged since signing : yes
+Signer chains to ctt-runner/reports/device-supplier/ca_cert.pem : yes
+RESULT    : signature OK
+```
+
+Options, set in front of the run command:
+
+| To do this | Run |
+|------------|-----|
+| Skip the signed PDF | `CTT_SIGN_REPORT=no bash ctt-runner/ctt-start.sh` |
+| Sign with your own certificate (a `.p12` file) | `CTT_SIGN_CERT=/path/to/signer.p12 CTT_SIGN_PASSPHRASE=secret bash ctt-runner/ctt-start.sh` |
+| Sign an older HTML report by hand | `bash scripts/pdf_ops.sh ctt-runner/reports/device-supplier/name-of-report.html` (the PDF goes to `./generatedReport/`) |
+
+If the signed PDF cannot be created, the run says so and the reason is in
+`ctt-runner/reports/device-supplier/report-signing.log`. The test result and the
+HTML report are not affected.
+
+A step shown as `NOT RUN` was not judged because its precondition is missing
+(for example no SVID was rotated, or the device does not declare that role) —
+it is neither a pass nor a failure.
 
 ---
 
@@ -488,12 +556,12 @@ about 12 minutes with the sandbox device-agent (it reads its desired state every
 | A deployment is added and withdrawn | report status for the new deployment, then `removing` or `removed` after it is withdrawn |
 | Manifest version does not increase | not act on it, and keep its previous state |
 | Unsupported digest algorithm (`sha512`) | not act on it, not fetch anything it names, and keep its previous state |
-| Bundle / deployment file does not match its digest | not act on it — judged only if the device downloaded that content, otherwise SKIP "not applicable" |
+| Bundle / deployment file does not match its digest | not act on it — judged only if the device downloaded that content, otherwise NOT RUN "not applicable" |
 | Wrong `sizeBytes`, correct digests | accept the manifest and report status for its new deployment |
 | A WFM the MIS did not certify | send no request while the mock WFM presents a certificate the MIS did not issue (50 seconds), then continue |
 | State survives a restart | after a restart, still send the ETag of the adopted manifest and still reject a lower manifest version |
 | SVID rotation | keep working with a re-issued SVID for the same SPIFFE ID |
-| Observability | push telemetry to the CTT (SKIP when no collector is pointed at the CTT) |
+| Observability | push telemetry to the CTT (NOT RUN when no collector is pointed at the CTT) |
 
 **The one thing you do during the run:** when this line appears, restart the
 device (you have 3 minutes):
@@ -503,8 +571,8 @@ device (you have 3 minutes):
 ```
 
 If the device is not restarted, the "State survives a restart" steps are
-reported as SKIP. If its SVID is not replaced, "SVID rotation" is reported as
-SKIP. To replace it, issue the device a new SVID exactly as in Step 1 (same WFM
+reported as NOT RUN. If its SVID is not replaced, "SVID rotation" is reported as
+NOT RUN. To replace it, issue the device a new SVID exactly as in Step 1 (same WFM
 ID and client ID) and install it on the device before starting it again.
 
 How to read the result:
@@ -517,7 +585,7 @@ How to read the result:
 - **"it does not send the ETag of the rejected manifest back"** fails when the
   device answers the next poll with `If-None-Match` of a manifest it had to
   reject: it has stored that manifest as its state.
-- **SKIP "not applicable"** means the check could not be judged on this device
+- **NOT RUN "not applicable"** means the check could not be judged on this device
   or in this run; the reason is given.
 - The deployments added during the run point at the same placeholder package as
   the first one, so a device reports them as `failed` unless
@@ -527,7 +595,8 @@ The mock WFM keeps everything it received since it was started, and a device
 keeps the manifest version it adopted. For a clean run, stop and start the mock
 WFM (options 4 and 2) and start the device with empty state.
 
-The report is written to `ctt-runner/reports/device-supplier/` with the
+The report and its signed PDF are written to `ctt-runner/reports/device-supplier/`
+(see [The report and its signed PDF](#the-report-and-its-signed-pdf)) with the
 requirement IDs next to each step. Which requirement is judged by which step,
 and which requirements cannot be judged, is listed in
 `docs/device-supplier-requirements-coverage.md`.
@@ -669,16 +738,16 @@ You have 3 minutes from the moment the line appears; have the commands ready.
 
 A `core` run takes about 12 minutes. With the sandbox device-agent tested with
 this guide (October 2026, restarted with a re-issued SVID when asked) it ends
-with **53 passed, 3 failed, 5 skipped**:
+with **53 passed, 3 failed, 5 not run**:
 
 | Result | Step | Why |
 |---|---|---|
 | FAIL | "does not fetch anything by a digest of the unsupported algorithm" | on a `sha512` manifest the device-agent still asks for `.../sha512:...` |
 | FAIL | "keeps its previous state" (unsupported digest algorithm) | it stores the ETag of the manifest it had to reject |
 | FAIL | "keeps its previous state" (deployment file does not match its digest) | it stores the ETag of the manifest it had to reject |
-| SKIP | standalone cluster role | the device-agent declares Compose, not Helm |
-| SKIP | bundle does not match its digest (2 steps) | this device-agent fetches the deployment files, not the bundle |
-| SKIP | observability (2 steps) | no OpenTelemetry collector is pointed at the CTT |
+| NOT RUN | standalone cluster role | the device-agent declares Compose, not Helm |
+| NOT RUN | bundle does not match its digest (2 steps) | this device-agent fetches the deployment files, not the bundle |
+| NOT RUN | observability (2 steps) | no OpenTelemetry collector is pointed at the CTT |
 
 These are findings about that device-agent build, not problems of your setup.
 
@@ -779,6 +848,7 @@ Testing a real device (this is the conformance result)
   □ tail -f /tmp/wfm-server.log → capabilities 201, deployments 200, deployment fetch 200, status 200, later polls 304
   □ ctt-start.sh → 2) Device Supplier → 3) Run Tests → core → Enter, Enter; restart the device when asked
   □ Open report: ctt-runner/reports/device-supplier/conformance-report-<ts>.html
+  □ Signed PDF:  ctt-runner/reports/device-supplier/conformance-report-<ts>_signed.pdf (+ ca_cert.pem)
 
 Sandbox device-agent (the demo device) — see "Testing the Margo sandbox device-agent"
   □ ~/certs/compose-identity/payload-cert.pem + payload-key.pem, ~/certs/https-ca.crt, ~/certs/harbor.crt
@@ -787,5 +857,5 @@ Sandbox device-agent (the demo device) — see "Testing the Margo sandbox device
   □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker install
   □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker → 11 → Enter → 1 → spiffe://margo.org/margo/wfm/ctt-mock-wfm → 2 → Enter → 12
   □ sudo -E bash ~/sandbox/scripts/device-agent.sh docker start-docker
-  □ core: 53 passed, 3 failed, 5 skipped with the sandbox device-agent of October 2026
+  □ core: 53 passed, 3 failed, 5 not run with the sandbox device-agent of October 2026
 ```

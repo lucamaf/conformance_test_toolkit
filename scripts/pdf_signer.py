@@ -72,6 +72,12 @@ SIG_CONTACT     = CERT_EMAIL           # Contact info embedded in the signature
 # Output file name defaults
 # ---------------------------------------------------------------------------
 OUTPUT_CA_CERT_FILE  = "ca_cert.pem"   # Exported CA certificate (PEM)
+
+# Self-signed mode keeps ONE Root CA here and reuses it for every report, so
+# all reports signed on this machine verify against the same ca_cert.pem.
+DEFAULT_IDENTITY_DIR = Path(__file__).parent / "signing-identity"
+IDENTITY_CA_KEY_FILE  = "ca_key.pem"
+IDENTITY_CA_CERT_FILE = "ca_cert.pem"
 OUTPUT_SIGNED_SUFFIX = "_signed"       # Appended to the base PDF name
 
 
@@ -152,6 +158,43 @@ def generate_self_signed_ca():
     )
 
     logger.info("Root CA certificate generated (CN=%s).", CA_COMMON_NAME)
+    return ca_key, ca_cert
+
+
+def load_or_create_ca(identity_dir: Path):
+    """
+    Return the Root CA kept in identity_dir, creating it on first use.
+
+    A new CA per run would make every earlier signed report unverifiable with
+    the exported ca_cert.pem, so the CA key and certificate are stored once
+    (key readable by the owner only) and reused.
+
+    Returns:
+        tuple: (ca_key, ca_cert)
+    """
+    key_path = identity_dir / IDENTITY_CA_KEY_FILE
+    cert_path = identity_dir / IDENTITY_CA_CERT_FILE
+    if key_path.is_file() and cert_path.is_file():
+        ca_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+        ca_cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        not_after = getattr(ca_cert, "not_valid_after_utc", None) \
+            or ca_cert.not_valid_after.replace(tzinfo=timezone.utc)
+        if not_after > datetime.now(timezone.utc) + timedelta(days=CERT_VALIDITY_DAYS):
+            logger.info("Reusing Root CA from: %s", identity_dir)
+            return ca_key, ca_cert
+        logger.warning("Root CA in %s expires too soon; creating a new one.", identity_dir)
+
+    ca_key, ca_cert = generate_self_signed_ca()
+    identity_dir.mkdir(parents=True, exist_ok=True)
+    key_path.touch(mode=0o600, exist_ok=True)
+    key_path.chmod(0o600)
+    key_path.write_bytes(ca_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ))
+    cert_path.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
+    logger.info("Root CA saved to: %s", identity_dir)
     return ca_key, ca_cert
 
 
@@ -423,6 +466,13 @@ Examples:
         metavar="DIR",
         help="Directory for output files (defaults to the HTML file's directory).",
     )
+    parser.add_argument(
+        "--identity-dir",
+        type=Path,
+        default=DEFAULT_IDENTITY_DIR,
+        metavar="DIR",
+        help="Where the self-signed Root CA is kept and reused (ignored with --cert).",
+    )
     return parser.parse_args()
 
 
@@ -465,7 +515,7 @@ def main() -> None:
     if self_signed_mode:
         # Generate Root CA, then issue an end-entity cert from it
         try:
-            ca_key, ca_cert = generate_self_signed_ca()
+            ca_key, ca_cert = load_or_create_ca(args.identity_dir.resolve())
             private_key, cert = generate_end_entity_cert(ca_key, ca_cert)
             chain = [ca_cert]  # Embed CA cert in the PDF signature
         except Exception as exc:
@@ -515,7 +565,7 @@ def main() -> None:
         logger.info("  CA Cert    : %s", ca_cert_out)
         logger.info("")
         logger.warning(
-            "IMPORTANT: A self-signed CA was generated. "
+            "IMPORTANT: The report is signed with this machine's self-signed CA. "
             "To verify the PDF signature, the verifier must import '%s' "
             "as a trusted root certificate authority.",
             ca_cert_out.name,

@@ -509,24 +509,86 @@ you do not enter it.
 
 After provisioning, the runner proceeds into the scenario execution loop.
 
-### The HTML report
+### The report and its signed PDF
 
-The report is written to:
+The report is written to `ctt-runner/reports/wfm-supplier/`. Every run leaves
+three files there:
 
 ```
-ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>.html
+wfm-scenario-report-core_<timestamp>.html          the report, open it in any browser
+wfm-scenario-report-core_<timestamp>_signed.pdf    the same report as a digitally signed PDF
+ca_cert.pem                           the certificate needed to check the signature
 ```
 
-Open it in any browser. It contains:
-- A conformance requirement coverage table (green = at least one passing step covers the CR-ID, red = all steps for that CR-ID failed, grey = its steps were not run)
-- A scenario-level summary table
-- A full step-detail table with status, method, endpoint, expected/actual HTTP code, and failure reason
+The WFM Supplier and the Device Supplier reports use the same layout:
+
+| Part | What it shows |
+|------|---------------|
+| Header | Persona, group, claimed version, CTT Margo version, system under test (the WFM URL), run time |
+| Result line | Steps passed, failed, not run, total |
+| Requirements Coverage | One row per requirement ID: `PASS`, `FAIL` or `NOT RUN`, and the steps that check it |
+| Scenario Summary | Passed, failed and not run steps per scenario |
+| Step Details | Every step: requirement IDs, method, endpoint, expected and actual HTTP code, result, reason |
+
+A requirement is `FAIL` when any step that checks it failed, `PASS` when at
+least one of its steps passed and none failed, and `NOT RUN` when none of its
+steps ran.
+
+#### The signed PDF
+
+The signed PDF is created automatically at the end of every run; there is no
+extra command. The run prints:
+
+```
+🔏 Creating the signed PDF report (the first time this installs the PDF tools and may ask for sudo)...
+✅ Signed report: .../ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf
+ℹ️  Signer CA certificate (send it with the report): .../ctt-runner/reports/wfm-supplier/ca_cert.pem
+```
+
+The first run installs the PDF tools (needs sudo and internet, about one
+minute). Later runs take about 15 seconds.
+
+The signature shows that the PDF was not changed after the run. The CTT signs
+with its own certificate authority, created on this machine the first time and
+kept in `scripts/signing-identity/`. All reports signed on this machine use
+that one authority, so one `ca_cert.pem` checks all of them. Send `ca_cert.pem`
+together with the PDF.
+
+Check a signed report (use the file name the run printed):
+
+```bash
+cd $HOME/workspace/conformance_test_toolkit
+scripts/.venv/bin/python scripts/pdf_verify.py \
+  ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf \
+  ctt-runner/reports/wfm-supplier/ca_cert.pem
+```
+
+Expected:
+
+```
+Unchanged since signing : yes
+Signer chains to ctt-runner/reports/wfm-supplier/ca_cert.pem : yes
+RESULT    : signature OK
+```
+
+Options, set in front of the run command:
+
+| To do this | Run |
+|------------|-----|
+| Skip the signed PDF | `CTT_SIGN_REPORT=no bash ctt-runner/ctt-start.sh` |
+| Sign with your own certificate (a `.p12` file) | `CTT_SIGN_CERT=/path/to/signer.p12 CTT_SIGN_PASSPHRASE=secret bash ctt-runner/ctt-start.sh` |
+| Sign an older HTML report by hand | `bash scripts/pdf_ops.sh ctt-runner/reports/wfm-supplier/name-of-report.html` (the PDF goes to `./generatedReport/`) |
+
+If the signed PDF cannot be created, the run says so and the reason is in
+`ctt-runner/reports/wfm-supplier/report-signing.log`. The test result and the
+HTML report are not affected.
 
 A step shown as `NOT RUN` was not sent because its precondition is missing —
 it is neither a pass nor a failure. Today this applies to the SVID Rotation
 scenario (below).
 
-This report is the artifact you submit as evidence of conformance.
+The signed PDF, together with `ca_cert.pem`, is the artifact you submit as
+evidence of conformance.
 
 ### What to expect on the sandbox Symphony
 
@@ -671,5 +733,6 @@ Phase 2 — Run (repeat for each test run)
        assign a two-component deployment to device multi-component-test-device)
   □ Wait for run to complete (under a minute once the deployment is assigned; up to ~5 min while polling)
   □ Open report: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>.html
+  □ Signed PDF:  ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>_signed.pdf (+ ca_cert.pem)
       (sandbox Symphony: 32 passed, 11 failed, 2 not run — see "What to expect on the sandbox Symphony")
 ```

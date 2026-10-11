@@ -304,7 +304,21 @@ This is what lets a vendor, or a spec reviewer, go from a single failing row
 straight to the specific clause of the spec it violates — rather than a suite
 that only reports an aggregate pass/fail. A check that could not be run
 (for example an SVID rotation test when no SVID was rotated) is reported as
-NOT RUN or SKIP with the reason, not as a pass.
+NOT RUN with the reason, not as a pass.
+
+Both runners write the same report template — header (persona, group,
+versions, system under test, run time), result line, Requirements Coverage,
+Scenario Summary, Step Details — so a WFM report and a device report read the
+same way. A requirement is FAIL when any step that checks it failed, PASS when
+at least one passed and none failed, NOT RUN when none of its steps ran.
+
+**Signed report.** At the end of every run `ctt-runner/ctt-start.sh` calls
+`scripts/pdf_ops.sh`, which converts the HTML report to PDF and signs it
+(`scripts/pdf_signer.py`). The signed PDF and the signer's CA certificate
+(`ca_cert.pem`) are written next to the HTML report; `scripts/pdf_verify.py`
+checks the signature. The default signer is a certificate authority the CTT
+creates once per machine (`scripts/signing-identity/`); `CTT_SIGN_CERT` signs
+with a supplied `.p12` instead, and `CTT_SIGN_REPORT=no` skips signing.
 
 ---
 

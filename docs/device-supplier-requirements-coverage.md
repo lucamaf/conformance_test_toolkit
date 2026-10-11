@@ -41,9 +41,9 @@ Notes:
 
 - `APPLICATIONDESCRIPTION-001` to `-003` are judged by what the device declares in its capabilities (memory, storage, CPUs), not by measuring a running application.
 - `DEPLOYMENT-006`/`-007` (standalone cluster) and `DEPLOYMENT-008`/`-009` (standalone device) are judged for the role the device declares; the steps of the other role are reported as SKIP "not applicable".
-- `MANAGEMENTINTERFACE-017` and the restart part of `-015` are judged when the operator restarts the device during the run; otherwise SKIP.
+- `MANAGEMENTINTERFACE-017` and the restart part of `-015` are judged when the operator restarts the device during the run; otherwise NOT RUN.
 - `MANAGEMENTINTERFACE-006`/`-009`/`-019` with tampered content are judged only if the device downloaded that content; a device that used the bundle is not judged on the single deployment file, and the other way round.
-- `OBSERVABILITY-006`/`-010`/`-023` are judged when the device's collector is pointed at the CTT; otherwise SKIP.
+- `OBSERVABILITY-006`/`-010`/`-023` are judged when the device's collector is pointed at the CTT; otherwise NOT RUN.
 
 ## Requirements the suite adds (6)
 

@@ -16,7 +16,8 @@ REQUIRED_PYTHON_MAJOR=3
 REQUIRED_PYTHON_MINOR=8
 DEPENDENCIES=("weasyprint" "pyhanko" "cryptography" "pikepdf")
 LOG_FILE="${SCRIPT_DIR}/pdf_signer.log"
-OUTPUT_DIR=$(pwd)/generatedReport
+# Output folder: ./generatedReport, or PDF_OUTPUT_DIR when set (used by ctt-runner/ctt-start.sh)
+OUTPUT_DIR="${PDF_OUTPUT_DIR:-$(pwd)/generatedReport}"
 PYTHON_CMD=""
 VENV_DIR="${SCRIPT_DIR}/.venv"
 # Native system libraries required by WeasyPrint, grouped by package manager
@@ -303,7 +304,12 @@ install_system_deps() {
 
 setup_emoji_font() {
     log_info "Checking Noto Emoji font..."
-    sudo apt-get install fonts-noto-color-emoji -y
+    # Installed already (or no apt-get): nothing to do, and no sudo prompt.
+    if fc-list 2>/dev/null | grep -qi "Noto Color Emoji" || ! command -v apt-get &>/dev/null; then
+        return 0
+    fi
+    sudo apt-get install -y fonts-noto-color-emoji >> "${LOG_FILE}" 2>&1 \
+        || log_warn "Could not install fonts-noto-color-emoji; the pass/fail icons may be missing in the PDF."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -336,7 +342,7 @@ install_dependencies() {
     log_info "Checking and installing required dependencies..."
 
     # Upgrade pip inside venv first
-    "${PYTHON_CMD}" -m pip install --upgrade pip >> "${LOG_FILE}" 2>&1
+    "${PYTHON_CMD}" -m pip install --upgrade pip >> "${LOG_FILE}" 2>&1 || log_warn "pip upgrade skipped (no network?)"
 
     for dep in "${DEPENDENCIES[@]}"; do
         if "${PYTHON_CMD}" -m pip show "${dep}" &>/dev/null; then

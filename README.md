@@ -108,7 +108,9 @@ bash ctt-runner/ctt-start.sh application               # Application Supplier
 bash ctt-runner/ctt-start.sh help
 ```
 
-Reports land in `ctt-runner/reports/<persona>/`.
+Reports land in `ctt-runner/reports/<persona>/`: the HTML report and, created
+automatically at the end of the run, the same report as a signed PDF with the
+signer's `ca_cert.pem`. Both personas use the same report layout.
 
 **Identity:** every run needs an X.509-SVID. Issue it with your MIS (for the
 sandbox: `mis.sh generate-svid`) and give the folder to the runner once:

@@ -46,3 +46,9 @@ ctt-runner/wfm-supplier/utils/fixtures/miaf/real/previous-client-svid-key.pem
 ctt-runner/reports/
 ctt-runner/wfm-supplier/utils/fixtures/miaf/real/*.pem
 ctt-runner/wfm-supplier/utils/fixtures/miaf/real/*.json
+
+# Report signing tool: local venv, log, output and this machine's signing CA (private key)
+scripts/.venv/
+scripts/pdf_signer.log
+scripts/generatedReport/
+scripts/signing-identity/

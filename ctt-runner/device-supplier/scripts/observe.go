@@ -181,6 +181,7 @@ func deviceEntries(entries []map[string]interface{}, ctx *TestContext) []map[str
 		if device == "" {
 			device = client
 			ctx.Data["deviceClient"] = client
+			ObservedDevice = client
 		}
 		if client == device {
 			if addr == "" {

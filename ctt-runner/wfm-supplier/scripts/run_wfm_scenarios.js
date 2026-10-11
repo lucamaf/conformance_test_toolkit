@@ -1711,64 +1711,18 @@ function htmlEscape(value) {
 }
 
 // writeReport() builds one self-contained HTML file (inline CSS, no external
-// assets) summarizing the whole run, and writes it to `reportFile`. It reads
-// from two module-level arrays that runStep()/the main loop have been
-// appending to throughout the run:
-//   - `results`: one entry per step (pass/fail, method, endpoint, CR-IDs, …)
-//   - `scenarioResults`: one entry per scenario (how many of its steps passed)
-// There's no separate "build a data model, then render it" split — the HTML
-// is assembled directly as a handful of template-literal strings (`rows`,
-// `scenarioRows`, then the page itself), each just `.map()`-ing one of those
-// arrays into a row of a table. The only non-trivial piece is the CR-ID
-// coverage section: it walks every result once to build two sets — every
-// CR-ID seen at all (`all`) and every CR-ID seen on a step that PASSED
-// (`covered`) — then colors each CR-ID chip green/red depending on whether
-// it made it into `covered`. A CR-ID counts as "exercised" the moment any
-// step tags it, but only counts as "passing" if every such step passed.
-function writeReport() {
-  const passed = results.filter((r) => r.passed).length;
-  const skipped = results.filter((r) => r.skipped).length;
-  const failed = results.length - passed - skipped;
-  const grpLabel = groupName ? htmlEscape(groupName) : 'WFM Scenario';
-
-  const rows = results
-    .map(
-      (r) => `
-    <tr class="${r.passed ? 'pass' : r.skipped ? 'skip' : 'fail'}">
-      <td>${htmlEscape(r.scenarioName || r.scenario)}</td>
-      <td>${htmlEscape(r.step)}</td>
-      <td>${htmlEscape(r.name)}</td>
-      <td>${htmlEscape(r.method)}</td>
-      <td>${htmlEscape(r.endpoint)}</td>
-      <td>${htmlEscape(r.expected)}</td>
-      <td>${htmlEscape(r.actual)}</td>
-      <td>${htmlEscape(r.passed ? 'PASS' : r.skipped ? 'NOT RUN' : 'FAIL')}</td>
-      <td>${htmlEscape(r.reason)}</td>
-    </tr>`
-    )
-    .join('\n');
-
-  // Per-scenario summary rows for HTML
-  const scenarioRows = scenarioResults
-    .map((s) => {
-      const f = s.total - s.passed - s.skipped;
-      return `
-    <tr class="${f === 0 ? 'pass' : 'fail'}">
-      <td>${htmlEscape(s.name)}</td>
-      <td>${s.total}</td>
-      <td>${s.passed}</td>
-      <td>${f}</td>
-      <td>${s.skipped}</td>
-    </tr>`;
-    })
-    .join('\n');
-
-  const html = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>WFM Conformance Report — ${grpLabel}</title>
-  <style>
+// assets) from `results` (one entry per step) and `scenarioResults`.
+// The report template is shared with the device-supplier runner
+// (generateHTMLReport in ctt-runner/device-supplier/scripts/run_tests.go):
+// same title, header fields, sections, columns, wording and CSS. Change both
+// together. The CLI turns this HTML into the signed PDF (scripts/pdf_ops.sh).
+//
+// Sections: header (persona, group, versions, system under test, run time),
+// result line, Requirements Coverage, Scenario Summary, Step Details.
+// A requirement is FAIL when any step that cites it failed, PASS when at
+// least one such step passed and none failed, NOT RUN when none of them ran.
+const REPORT_CSS = `
+    @page { size: A4 landscape; margin: 12mm 12mm 20mm 12mm; } /* bottom: room for the signature stamp */
     body { font-family: Arial, sans-serif; margin: 24px; color: #1f2933; }
     h1 { font-size: 22px; margin-bottom: 4px; }
     h2 { font-size: 16px; margin: 24px 0 8px; }
@@ -1779,72 +1733,134 @@ function writeReport() {
     table { border-collapse: collapse; width: 100%; font-size: 13px; margin-bottom: 24px; }
     th, td { border: 1px solid #d7dde5; padding: 7px 9px; text-align: left; vertical-align: top; }
     th { background: #eef2f7; }
-    tr.pass td:nth-child(8) { color: #166534; font-weight: 700; }
-    tr.fail td:nth-child(8), tr.fail td:last-child { color: #b91c1c; font-weight: 700; }
-    tr.skip td:nth-child(8), tr.skip td:last-child { color: #6b7280; font-weight: 700; }
-    .scenario-summary td:nth-child(4) { color: #b91c1c; }
-    tr.pass.scenario-summary td:nth-child(4) { color: inherit; }
+    td.wrap { overflow-wrap: anywhere; }
+    td.id, td.pass, td.fail, td.skip { white-space: nowrap; }
+    td.pass { color: #166534; font-weight: 700; }
+    td.fail, tr.fail td.reason { color: #b91c1c; font-weight: 700; }
+    td.skip, tr.skip td.reason { color: #6b7280; font-weight: 700; }
     .version-warning { margin-bottom: 14px; padding: 10px 14px; border-radius: 4px; background: #dcfce7; color: #166534; border: 1px solid #86efac; font-size: 13px; font-weight: bold; }
-  </style>
+  `;
+
+const NO_REQUIREMENTS_NOTE = 'The tests of this group carry no requirement IDs.';
+
+function writeReport() {
+  const passed = results.filter((r) => r.passed).length;
+  const skipped = results.filter((r) => r.skipped).length;
+  const failed = results.length - passed - skipped;
+  const persona = 'WFM Supplier';
+  const grpLabel = htmlEscape(groupName || 'unknown');
+  const state = (r) => (r.passed ? 'pass' : r.skipped ? 'skip' : 'fail');
+  const word = { pass: 'PASS', fail: 'FAIL', skip: 'NOT RUN' };
+
+  // Requirement → steps that cite it, in first-seen order.
+  const reqs = new Map();
+  for (const r of results) {
+    for (const c of r.crIds || []) {
+      if (!reqs.has(c)) reqs.set(c, []);
+      reqs.get(c).push(r);
+    }
+  }
+  const reqState = (steps) =>
+    steps.some((r) => state(r) === 'fail') ? 'fail' : steps.some((r) => r.passed) ? 'pass' : 'skip';
+  const reqIds = [...reqs.keys()].sort();
+  const reqCount = { pass: 0, fail: 0, skip: 0 };
+  const reqRows = reqIds
+    .map((id) => {
+      const s = reqState(reqs.get(id));
+      reqCount[s]++;
+      return `
+    <tr class="${s}">
+      <td class="id">${htmlEscape(id)}</td>
+      <td class="${s}">${word[s]}</td>
+      <td class="wrap">${htmlEscape(reqs.get(id).map((r) => r.step).join(', '))}</td>
+    </tr>`;
+    })
+    .join('\n');
+
+  const scenarioRows = scenarioResults
+    .map((s) => {
+      const f = s.total - s.passed - s.skipped;
+      return `
+    <tr class="${f > 0 ? 'fail' : s.skipped > 0 ? 'skip' : 'pass'}">
+      <td>${htmlEscape(s.name)}</td>
+      <td>${s.total}</td>
+      <td>${s.passed}</td>
+      <td${f > 0 ? ' class="fail"' : ''}>${f}</td>
+      <td>${s.skipped}</td>
+    </tr>`;
+    })
+    .join('\n');
+
+  const rows = results
+    .map(
+      (r) => `
+    <tr class="${state(r)}">
+      <td>${htmlEscape(r.scenarioName || r.scenario)}</td>
+      <td>${htmlEscape(r.step)}</td>
+      <td>${htmlEscape(r.name)}</td>
+      <td class="wrap">${htmlEscape((r.crIds || []).join(', '))}</td>
+      <td>${htmlEscape(r.method)}</td>
+      <td class="wrap">${htmlEscape(r.endpoint)}</td>
+      <td>${htmlEscape(r.expected)}</td>
+      <td>${htmlEscape(r.actual)}</td>
+      <td class="${state(r)}">${word[state(r)]}</td>
+      <td class="reason">${htmlEscape(r.reason)}</td>
+    </tr>`
+    )
+    .join('\n');
+
+  const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Margo Conformance Report — ${persona} — ${grpLabel}</title>
+  <style>${REPORT_CSS}</style>
 </head>
 <body>
-  <h1>Margo WFM Conformance Report</h1>
+  <h1>Margo Conformance Report</h1>
   <div class="meta">
+    Persona: <strong>${persona}</strong> &nbsp;|&nbsp;
     Group: <strong>${grpLabel}</strong> &nbsp;|&nbsp;
     Claimed App Version: <strong>${htmlEscape(groupVersion || 'unknown')}</strong> &nbsp;|&nbsp;
     CTT Margo Version: <strong>${htmlEscape(cttMargoVersion)}</strong> &nbsp;|&nbsp;
-    WFM: <strong>${htmlEscape(baseUrl)}</strong> &nbsp;|&nbsp;
-    Run: <strong>${new Date().toISOString()}</strong>
+    System under test: <strong>${htmlEscape(`WFM ${miafUrl}`)}</strong> &nbsp;|&nbsp;
+    Run: <strong>${new Date().toISOString().replace(/\.\d+Z$/, 'Z')}</strong>
   </div>
   ${
     groupVersion && groupVersion !== cttMargoVersion
       ? `<div class="version-warning">⚠ Version Mismatch: Claimed App Version (${htmlEscape(groupVersion)}) differs from CTT Margo Version (${htmlEscape(cttMargoVersion)})</div>`
       : ''
   }
-  <div class="summary ${failed === 0 ? 'all-pass' : 'has-fail'}">
-    ${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed${skipped > 0 ? `, ${skipped} not run` : ''}, ${results.length} total
-  </div>
+  <div class="summary ${failed === 0 ? 'all-pass' : 'has-fail'}">${failed === 0 ? '✅' : '❌'} ${passed} passed, ${failed} failed, ${skipped} not run, ${results.length} total</div>
 
-  ${(() => {
-    const all = new Set();
-    const covered = new Set();
-    const executed = new Set();
-    for (const r of results) {
-      for (const c of r.crIds || []) {
-        all.add(c);
-        if (r.passed) covered.add(c);
-        if (!r.skipped) executed.add(c);
-      }
-    }
-    if (all.size === 0) return '';
-    // green = a passing step covers it, grey = every step for it was not run, red = failing
-    const chip = (c) => (covered.has(c) ? ['#dcfce7', '#166534'] : !executed.has(c) ? ['#f3f4f6', '#6b7280'] : ['#fee2e2', '#b91c1c']);
-    const list = [...all].sort().map((c) =>
-      `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 6px;border-radius:3px;font-size:12px;background:${chip(c)[0]};color:${chip(c)[1]}">${htmlEscape(c)}</span>`
-    ).join('');
-    return `<div class="meta">Conformance requirements exercised: <strong>${covered.size} / ${all.size}</strong> passing</div><div style="margin-bottom:18px">${list}</div>`;
-  })()}
+  <h2>Requirements Coverage</h2>
+  ${
+    reqIds.length === 0
+      ? `<div class="meta">${NO_REQUIREMENTS_NOTE}</div>`
+      : `<div class="meta">${reqCount.pass} of ${reqIds.length} requirements passing &nbsp;|&nbsp; ${reqCount.fail} failing &nbsp;|&nbsp; ${reqCount.skip} not run</div>
+  <table>
+    <thead><tr><th>Requirement ID</th><th>Result</th><th>Checked by steps</th></tr></thead>
+    <tbody>${reqRows}</tbody>
+  </table>`
+  }
 
   <h2>Scenario Summary</h2>
   <table>
-    <thead>
-      <tr><th>Scenario</th><th>Total</th><th>Passed</th><th>Failed</th><th>Not run</th></tr>
-    </thead>
-    <tbody class="scenario-summary">${scenarioRows}</tbody>
+    <thead><tr><th>Scenario</th><th>Total</th><th>Passed</th><th>Failed</th><th>Not run</th></tr></thead>
+    <tbody>${scenarioRows}</tbody>
   </table>
 
   <h2>Step Details</h2>
   <table>
-    <thead>
-      <tr>
-        <th>Scenario</th><th>Step</th><th>Name</th>
-        <th>Method</th><th>Endpoint</th><th>Expected</th><th>Actual</th><th>Status</th><th>Failure Reason</th>
-      </tr>
-    </thead>
+    <thead><tr>
+      <th>Scenario</th><th>Step</th><th>Name</th><th>Requirement IDs</th>
+      <th>Method</th><th>Endpoint</th><th>Expected</th><th>Actual</th><th>Result</th><th>Reason</th>
+    </tr></thead>
     <tbody>${rows}</tbody>
   </table>
 </body>
-</html>`;
+</html>
+`;
 
   fs.writeFileSync(reportFile, html);
 }

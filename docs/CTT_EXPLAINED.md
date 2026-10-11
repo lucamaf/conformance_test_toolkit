@@ -167,7 +167,7 @@ explain:
 | Record a request | `journaled`, `handleTestRequests` in `journal.go` | who sent what, what was answered, the verdicts |
 | Serve something wrong on purpose | `applyNegativeFixture`, `tamper` in `negative_fixtures.go`; `handleTestServerIdentity` | wrong digest algorithm, lower version, wrong size, tampered content, an untrusted WFM certificate |
 | Run a group | `device_run_tests` / `execute_device_tests` → `bin/run_tests` | `runStep` either sends a request (`executeStep`) or judges what the device sent (`runObserve` in `observe.go`) |
-| Report | `generateHTMLReport` | HTML with PASS / FAIL / SKIP and requirement IDs |
+| Report | `generateHTMLReport` | HTML with PASS / FAIL / NOT RUN and requirement IDs (same template as the WFM report) |
 
 Two kinds of device groups exist:
 
@@ -236,7 +236,7 @@ Results are from the full run of 11 October 2026 on a freshly built sandbox.
 | 4 | WFM: full run on Symphony | → `core` | 45 steps: 32 passed, 11 failed, 2 not run (about 1 minute) |
 | 5 | Device: identity, mock WFM, self-check | Device Supplier → 1, 2, 3 → `self-check` | 90 of 90 |
 | 6 | Device: the sandbox device connects | `device-agent.sh docker start-docker`, `tail -f /tmp/wfm-server.log` | capabilities 201, deployments 200, status 200 |
-| 7 | Device: full run on the sandbox device | → `core`, restart the device when asked | 53 passed, 3 failed, 5 skipped (about 12 minutes) |
+| 7 | Device: full run on the sandbox device | → `core`, restart the device when asked | 53 passed, 3 failed, 5 not run (about 12 minutes) |
 | 8 | A test author adds a group | `ctt-creator` → folder → `group.json` | the group appears in the runner's list |
 
 The failures are the interesting part of the demo: they are real differences
@@ -269,7 +269,7 @@ On a `sha512` manifest it still tries to fetch by that digest, and after
 manifests it had to reject it sends their ETag back, which means it stored
 them as its state.
 
-**Why is a step SKIP or NOT RUN, and not PASS or FAIL?**
+**Why is a step NOT RUN, and not PASS or FAIL?**
 Its precondition was missing: no SVID was rotated, the device was not
 restarted, the device does not declare that role, or it never downloaded the
 content the check is about. The reason is printed.
@@ -300,8 +300,27 @@ No. It uses SVIDs issued by the MIS of the trust domain; in the sandbox that
 is `mis.sh`. For the plugfest one central MIS issues all of them.
 
 **Is the report signed?**
-Not by the runner. `scripts/pdf_signer.py` can turn a report into a signed
-PDF; it is a separate tool and is not part of the run.
+Yes. At the end of every run, for both personas, `ctt-runner/ctt-start.sh`
+calls `scripts/pdf_ops.sh`, which turns the HTML report into a PDF and signs it
+(`scripts/pdf_signer.py`: WeasyPrint for the PDF, pyHanko for the signature).
+The files `..._signed.pdf` and `ca_cert.pem` appear next to the HTML report.
+`scripts/pdf_verify.py` checks a signed report.
+
+**What does the signature prove?**
+That the PDF was not changed after the CTT wrote it, and that it was signed by
+the certificate authority in `ca_cert.pem`. By default that authority is
+created by the CTT on the machine that ran the tests (kept in
+`scripts/signing-identity/`, the same one for every report of that machine).
+So it proves integrity, not who ran the tests: whoever runs the CTT holds the
+signing key. For a result that Margo itself vouches for, the run is signed with
+a certificate Margo issues (`CTT_SIGN_CERT`, a `.p12` file).
+
+**Do both personas produce the same report?**
+Yes. `writeReport` in `run_wfm_scenarios.js` and `generateHTMLReport` in
+`run_tests.go` write the same template: header (persona, group, versions,
+system under test, run time), result line, Requirements Coverage, Scenario
+Summary, Step Details. A requirement is FAIL when any step that checks it
+failed, PASS when at least one passed and none failed, NOT RUN otherwise.
 
 **Why is unregistering a device not in `core`?**
 The sandbox Symphony stops when it receives that request. It is in its own
