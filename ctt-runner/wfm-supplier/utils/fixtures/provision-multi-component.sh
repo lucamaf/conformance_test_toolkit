@@ -1,35 +1,32 @@
 #!/usr/bin/env bash
-# Provisions a multi-component ApplicationDeployment in the WFM so the
-# wfm-multi-component-deployment scenario can run without manual operator
-# intervention.
+# SANDBOX SYMPHONY HELPER — not part of the conformance run.
+#
+# The deployment scenario (wfm-multi-component-deployment) needs an application
+# deployment assigned to the CTT's client. Assigning one is an operator action
+# in the WFM and is outside the Margo specification, so the CTT run never does
+# it. This helper does it for the sandbox Symphony, through Symphony's own
+# operator API (NBI, port 8082) — the same API the sandbox's wfm-cli.sh uses.
+# For any other WFM, assign the deployment with that WFM's own console or API.
 #
 # WHAT THIS DOES
-#   1. Authenticates with the WFM management API (NBI) and gets a JWT token.
-#   2. Registers a Margo app package from the specified OCI registry.
+#   1. Logs in to Symphony's NBI and gets a token.
+#   2. Registers the CTT's test app package from the sandbox Harbor.
 #   3. Creates an ApplicationDeployment with two components
-#      (one wait:true, one wait:false) assigned to the specified device SPIFFE ID.
+#      (one wait:true, one wait:false) assigned to the CTT's client SPIFFE ID.
 #
-# USAGE
-#   bash provision-multi-component.sh [OPTIONS]
+# USAGE (sandbox Symphony, no arguments needed; run it before the CTT run)
+#   bash provision-multi-component.sh
 #
 # OPTIONS
-#   --nbi-url URL         WFM NBI base URL  (default: https://localhost:8082/v1alpha2)
+#   --nbi-url URL         Symphony NBI base URL (default: https://localhost:8082/v1alpha2)
 #   --nbi-user USER       NBI username      (default: admin)
 #   --nbi-pass PASS       NBI password      (default: empty string — Symphony test-user default)
 #   --registry-url URL    OCI registry host (default: harbor.machine:8443)
 #   --registry-repo REPO  OCI repository    (default: library/margo-ctt-hello-world)
 #   --registry-tag TAG    OCI tag           (default: 1.0.0)
-#   --device-id ID        Device SPIFFE ID  (default: spiffe://margo.org/margo/wfm/symphony-1/client/margo-ctt)
+#   --device-id ID        Client SPIFFE ID  (default: read from the client SVID installed by
+#                         ctt-runner "Setup MIAF Identity")
 #   --compose-image REF   oci:// ref for compose components (default: oci://harbor.machine:8443/library/nextcloud-compose-archive)
-#
-# SYMPHONY SANDBOX QUICKSTART (no args needed)
-#   bash provision-multi-component.sh
-#
-# VENDOR ADAPTATION
-#   Adjust --nbi-url, --nbi-user, --nbi-pass to match your WFM's operator API.
-#   Adjust --registry-url and --registry-repo to point at your app package.
-#   Adjust --device-id to match the SPIFFE ID your CTT will present.
-#   Adjust --compose-image to a real compose OCI image in your registry.
 #
 # CLEANUP
 #   Pass --cleanup to delete the provisioned package and deployment (idempotent).
@@ -43,7 +40,7 @@ NBI_PASS=""
 REGISTRY_URL="harbor.machine:8443"
 REGISTRY_REPO="library/margo-ctt-hello-world"
 REGISTRY_TAG="1.0.0"
-DEVICE_ID="spiffe://margo.org/margo/wfm/symphony-1/client/margo-ctt"
+DEVICE_ID=""   # default: the SPIFFE ID of the installed client SVID (see below)
 COMPOSE_IMAGE="oci://harbor.machine:8443/library/nextcloud-compose-archive"
 CLEANUP=false
 PKG_NAME="ctt-multi-component-app"
@@ -64,6 +61,22 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+
+# The deployment is assigned to the identity the CTT presents: read it from the
+# client SVID that "Setup MIAF Identity" installed, unless --device-id was given.
+if [[ -z "$DEVICE_ID" && "$CLEANUP" != "true" ]]; then
+  SVID_CERT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/miaf/real/client-svid-cert.pem"
+  if [[ -f "$SVID_CERT" ]]; then
+    DEVICE_ID=$(openssl x509 -in "$SVID_CERT" -text -noout 2>/dev/null \
+      | grep -oE 'URI:spiffe://[^[:space:]]+' | head -1 | sed 's/URI://' || true)
+  fi
+  if [[ -z "$DEVICE_ID" ]]; then
+    echo "ERROR: no client SVID installed yet. Run ctt-runner/ctt-start.sh → WFM Supplier → Setup MIAF Identity first,"
+    echo "       or pass --device-id with the client SPIFFE ID."
+    exit 1
+  fi
+fi
+echo "Client SPIFFE ID: ${DEVICE_ID:-(not needed for cleanup)}"
 
 PKGS_URL="$NBI_URL/margo/nbi/v1/app-packages"
 DEPS_URL="$NBI_URL/margo/nbi/v1/app-deployments"

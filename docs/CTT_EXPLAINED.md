@@ -146,7 +146,7 @@ explain:
 |---|---|---|
 | Setup MIAF Identity | `wfm_setup_miaf_identity`, `_wfm_miaf_vendor` in `ctt-start.sh` | copies the client SVID, its key and the MIS CA from the folder you name; checks the chain and that it is a client SVID; keeps the SVID it replaces for the rotation test |
 | Pick a group | `select_wfm_group` | lists groups with their descriptions |
-| Start a run | `execute_wfm_tests_with_group` → `run_wfm_scenario_group` | installs the identity for the run (`wfm_install_run_identity`), selects the group's tests (`build_device_group_scenarios`), for the deployment scenario asks Symphony to create a deployment (`provision-multi-component.sh`) |
+| Start a run | `execute_wfm_tests_with_group` → `run_wfm_scenario_group` | installs the identity for the run (`wfm_install_run_identity`), selects the group's tests (`build_device_group_scenarios`), for the deployment scenario prints which client needs a deployment assigned in the WFM (the run does not call any WFM operator API) |
 | Run the tests | `run_wfm_scenarios.js`: `runStep` → `performHTTPStep` → `request` | sends each step over mTLS with the client SVID |
 | Check the WFM's identity | `recognizeWfm` | on every connection: certificate from the MIS CA, SPIFFE ID is the WFM this client belongs to |
 | Check the answer | `runValidations` → `validate` | status code, then each validation (headers, body fields, digests) |
@@ -232,8 +232,8 @@ Results are from the full run of 11 October 2026 on a freshly built sandbox.
 |---|---|---|---|
 | 1 | Identities come from one MIS | `mis.sh generate-svid` | folders `x509svid-…` in `~/mis-deployment` |
 | 2 | WFM: identity setup | WFM Supplier → 1 | "Identity setup complete" |
-| 3 | WFM: quick check | WFM Supplier → 2 → `quick-check` | 4 of 4 |
-| 4 | WFM: full run on Symphony | → `core` | 52 steps: 39 passed, 11 failed, 2 not run (about 1 minute) |
+| 3 | WFM: quick check | WFM Supplier → 2 → `quick-check` | 5 of 6 (Symphony marks the manifest `immutable`) |
+| 4 | WFM: full run on Symphony | `provision-multi-component.sh` once (assigns the test deployment), then → `core` | 52 steps: 39 passed, 11 failed, 2 not run (about 1 minute) |
 | 5 | Device: identity, mock WFM, self-check | Device Supplier → 1, 2, 3 → `self-check` | 90 of 90 |
 | 6 | Device: the sandbox device connects | `device-agent.sh docker start-docker`, `tail -f /tmp/wfm-server.log` | capabilities 201, deployments 200, status 200 |
 | 7 | Device: full run on the sandbox device | → `core`, restart the device when asked | 53 passed, 3 failed, 5 not run (about 12 minutes) |
@@ -298,6 +298,17 @@ details.
 **Does the CTT run its own MIS?**
 No. It uses SVIDs issued by the MIS of the trust domain; in the sandbox that
 is `mis.sh`. For the plugfest one central MIS issues all of them.
+
+**Does the CTT use the WFM's northbound API (NBI)?**
+No. The NBI is outside the Margo specification and outside the CTT. Every check
+runs on the Management Interface over mTLS. The deployment scenario needs a
+deployment assigned to the CTT's client; that is an operator action, so the run
+only says which client needs it and waits for the deployment to appear. For the
+sandbox Symphony there is a separate helper,
+`ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh`, run by
+hand before the run. It uses Symphony's operator API on port 8082, exactly as
+the sandbox `wfm-cli.sh` (Upload Application Package, Deploy Instance) does
+through the `maestro` CLI. Other WFMs assign the deployment in their own way.
 
 **Is the report signed?**
 Yes. At the end of every run, for both personas, `ctt-runner/ctt-start.sh`

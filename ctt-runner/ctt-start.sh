@@ -822,52 +822,29 @@ run_wfm_scenario_group() {
 
     confirm_version_mismatch "$claimed_app_version"
 
-    # ── Multi-component pre-seeding ──────────────────────────────────────────
-    # When the group includes wfm-multi-component-deployment, run the provision
-    # script now so the deployment exists before run_wfm_scenarios.js starts
-    # polling for it.  The provision script is idempotent and exits quickly when
-    # an active deployment is already present.
-    local provision_script="$CONFORMANCE_DIR/wfm-supplier/utils/fixtures/provision-multi-component.sh"
-    if [[ -f "$provision_script" ]] && \
-       jq -r '.testCases[]?' "$group_path/group.json" 2>/dev/null \
+    # ── Deployment scenario: a deployment must be assigned to the CTT's client ──
+    # Assigning a deployment is an operator action in the WFM (its console or
+    # its own northbound API). That is outside the Margo specification, so the
+    # CTT does not do it: it says what is needed and the scenario's poll step
+    # waits for the deployment to appear on the Management Interface.
+    if jq -r '.testCases[]?' "$group_path/group.json" 2>/dev/null \
            | grep -q "^wfm-multi-component-deployment$"; then
-
-        # Pull the SPIFFE ID directly out of the SVID cert we just copied, so
-        # the deployment targets exactly the identity the runner will present.
-        local device_spiffe_id=""
+        local client_spiffe_id=""
         if [[ -f "$cert_dir/svid-cert.pem" ]]; then
-            device_spiffe_id=$(openssl x509 -in "$cert_dir/svid-cert.pem" -text -noout 2>/dev/null \
+            client_spiffe_id=$(openssl x509 -in "$cert_dir/svid-cert.pem" -text -noout 2>/dev/null \
                 | grep -oE 'URI:spiffe://[^[:space:]]+' | head -1 | sed 's/URI://')
         fi
-
         echo ""
         echo "────────────────────────────────────────────────────────────────"
-        info "Group includes 'wfm-multi-component-deployment'"
-        info "Pre-seeding a multi-component ApplicationDeployment via the WFM NBI..."
-        [[ -n "$device_spiffe_id" ]] && info "  Detected device SPIFFE ID: $device_spiffe_id"
-        echo ""
-        read -p "  WFM NBI base URL [https://localhost:8082/v1alpha2]: " mc_nbi_url < /dev/tty
-        mc_nbi_url="${mc_nbi_url:-https://localhost:8082/v1alpha2}"
-        read -p "  NBI username [admin]: " mc_nbi_user < /dev/tty
-        mc_nbi_user="${mc_nbi_user:-admin}"
-        read -s -p "  NBI password (leave empty for Symphony default — empty password): " mc_nbi_pass < /dev/tty
-        echo ""
+        info "This group tests deployment delivery. The WFM must have an application"
+        info "deployment assigned to the CTT's client:"
+        info "    ${client_spiffe_id:-the client SPIFFE ID shown by Setup MIAF Identity}"
+        info "with two components, one 'wait: true' and one 'wait: false'."
+        info "Assign it in your WFM (console or operator API). If it is not there yet,"
+        info "the run waits up to 5 minutes for it when it reaches that scenario."
+        info "Sandbox Symphony: run this once before the run (or now, in a second terminal):"
+        info "    bash $CONFORMANCE_DIR/wfm-supplier/utils/fixtures/provision-multi-component.sh"
         echo "────────────────────────────────────────────────────────────────"
-        echo ""
-
-        local provision_args=(
-            "--nbi-url"  "$mc_nbi_url"
-            "--nbi-user" "$mc_nbi_user"
-            "--nbi-pass" "$mc_nbi_pass"
-        )
-        [[ -n "$device_spiffe_id" ]] && provision_args+=("--device-id" "$device_spiffe_id")
-
-        if bash "$provision_script" "${provision_args[@]}"; then
-            info "Multi-component deployment provisioned — runner will poll for it"
-        else
-            warn "Provision script failed — the multi-component poll step may time out"
-            warn "To provision manually: bash $provision_script"
-        fi
         echo ""
     fi
 

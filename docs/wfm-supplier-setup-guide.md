@@ -464,50 +464,57 @@ Press Enter to use the same URL — the first URL is already the mTLS port. Only
 enter a different URL if your WFM serves mTLS on another port than the URL you
 gave first. For Symphony sandbox: press Enter.
 
-### Multi-component deployment
+### Deployment scenario: assign a deployment to the CTT's client
 
-If the selected group includes the `wfm-multi-component-deployment` scenario,
-the runner detects it and, for Symphony, provisions the deployment automatically:
+The groups `core` and `deployment-delivery` contain the scenario
+`wfm-multi-component-deployment`. It checks how the WFM delivers a deployment
+(manifest, deployment file, bundle), so the WFM must have an application
+deployment assigned to the CTT's client.
+
+Assigning a deployment is an operator action in the WFM. The Margo
+specification does not define it, so the CTT does not do it and does not ask
+for your WFM's operator (northbound) API. The run only says what is needed:
 
 ```
 ────────────────────────────────────────────────────────────────
-[INFO] Group includes 'wfm-multi-component-deployment'
-[INFO] Pre-seeding a multi-component ApplicationDeployment via the WFM NBI...
-[INFO]   Detected device SPIFFE ID: spiffe://your-domain.com/.../margo-ctt
-
-  WFM NBI base URL [https://localhost:8082/v1alpha2]:
-  NBI username [admin]:
-  NBI password (leave empty for Symphony default — empty password):
+ℹ️  This group tests deployment delivery. The WFM must have an application
+ℹ️  deployment assigned to the CTT's client:
+ℹ️      spiffe://margo.org/margo/wfm/wfm/client/ctt-client
+ℹ️  with two components, one 'wait: true' and one 'wait: false'.
+ℹ️  Assign it in your WFM (console or operator API). If it is not there yet,
+ℹ️  the run waits up to 5 minutes for it when it reaches that scenario.
 ────────────────────────────────────────────────────────────────
 ```
 
-This scenario requires a deployment to be assigned to the CTT's client. The
-CTT then polls the WFM for it (up to 300 seconds).
+The SPIFFE ID shown is read from the client SVID installed in Phase 1.
 
-**Symphony sandbox:** press Enter at all three prompts. The CTT creates the
-deployment through Symphony's NBI, so you do not need to create it in the WFM
-console. It uses the package you pushed in Phase 1, Step 10.
+**Symphony sandbox:** run this helper once, before you start the run:
 
-**Your own WFM:** the automatic provisioning speaks Symphony's NBI and will
-report `Provision script failed` — press Enter at the three prompts and let the
-run continue. When it reaches this scenario it registers a device named
-`multi-component-test-device` and then prints, every 10 seconds:
+```bash
+cd $HOME/workspace/conformance_test_toolkit
+bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
+```
+
+It ends with `Done. Multi-component deployment provisioned`. The helper is not
+part of the conformance run: it uses Symphony's own operator API (port 8082,
+the same one the sandbox `wfm-cli.sh` uses) to register the package you pushed
+in Phase 1, Step 10 and to assign a deployment to the CTT's client. Running it
+again does nothing when the deployment is already there.
+
+**Your own WFM:** use your WFM's own console or operator API to assign a
+deployment to the client shown above. The deployment needs **two components,
+one with `wait: true` and one with `wait: false`**; what it must contain is
+described in
+`ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`.
+You can do this before the run, or while the run prints, every 10 seconds:
 
 ```
 ⏳ [poll attempt 1] not ready yet (deployments expected length >= 1, got 0) — retrying in 10s...
 ```
 
-While it is printing that (you have 5 minutes), use your WFM's own console to
-assign a deployment to `multi-component-test-device` — the device of client
-`.../client/ctt-client`. The deployment needs **two components, one with
-`wait: true` and one with `wait: false`**. As soon as your WFM lists it, the
-run continues by itself. What the deployment must contain is described in
-`ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`.
-
-The SPIFFE ID is read automatically from the client SVID installed in Phase 1 —
-you do not enter it.
-
-After provisioning, the runner proceeds into the scenario execution loop.
+As soon as your WFM lists the deployment, the run continues by itself. After 5
+minutes without a deployment the step fails and the rest of the scenario is
+judged against an empty manifest.
 
 ### The report and its signed PDF
 
@@ -666,8 +673,8 @@ first thing to check.
 | `certificate has expired` | Client SVID or WFM SVID past its TTL | Generate new SVIDs and re-run Setup MIAF Identity |
 | Application Registry steps fail | `oras` not installed, not logged in, or the package is not in the registry | Install `oras`, `oras login <registry>`; Symphony sandbox: run `push.sh` (see Phase 2); own WFM: set `REGISTRY_REF` |
 | Application Registry steps fail with `tls: failed to verify certificate` | The CTT machine does not trust the registry's certificate | Add the registry's CA to the machine's trust store (see Testing a vendor WFM, Step 4) |
-| Multi-component poll times out (300s) | No deployment was assigned to the CTT's client | Symphony: check the NBI URL / credentials you entered, or run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` by hand to see the error. Own WFM: assign the deployment in your console |
-| `ERROR: failed to get auth token` from provision script | NBI credentials wrong, or the WFM is not Symphony | Symphony: verify username/password. Own WFM: expected — assign the deployment in your console |
+| Multi-component poll times out (300s) | No deployment was assigned to the CTT's client | Symphony: run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` and start the run again. Own WFM: assign the deployment in your WFM, to the client SPIFFE ID the run printed |
+| `ERROR: failed to get auth token` from the Symphony helper | Symphony is not running, or its operator API is not on `https://localhost:8082/v1alpha2` with user `admin` | Start Symphony (`wfm.sh` option 3), or pass `--nbi-url`, `--nbi-user`, `--nbi-pass` to the helper. The helper works only with Symphony |
 | Steps fail with unexpected 500 | WFM internal error | This is a WFM implementation gap — note the CR-ID in the report and report to your WFM vendor |
 | `Cache-Control: immutable` failure on manifest endpoint | WFM sets immutable on a mutable resource | WFM implementation gap — the manifest changes when deployments are added/removed (MI-035) |
 
@@ -675,22 +682,14 @@ first thing to check.
 
 ## Cleanup after a test run
 
-The provision script creates a deployment with a timestamp-based name
-(`ctt-multi-component-<timestamp>`) so re-runs never collide with leftovers.
-To clean up all CTT-created deployments from your WFM after testing:
+**Symphony sandbox:** remove the package and the deployments the helper created:
 
 ```bash
-bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh \
-    --nbi-url <your-nbi-url> \
-    --nbi-user <your-username> \
-    --cleanup
-```
-
-For Symphony sandbox (no args):
-
-```bash
+cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh --cleanup
 ```
+
+**Your own WFM:** remove the test deployment the same way you assigned it.
 
 ---
 
@@ -716,6 +715,7 @@ Phase 1 — Identity (once per WFM, re-run only if cert expires)
       (Enter for ~/mis-deployment, then pick the client SVID)
   □ sudo -E bash ~/sandbox/scripts/wfm.sh → 3) Symphony: Start   (then 8)
   □ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
+  □ bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh   (assigns the test deployment in Symphony)
 
   Your own WFM (same sandbox MIS):
   □ cd ~/mis-deployment && sudo -E bash ~/sandbox/scripts/mis.sh generate-svid
