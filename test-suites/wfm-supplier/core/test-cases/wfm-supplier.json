@@ -678,7 +678,7 @@
       },
       {
         "id": "efd8ad9d-1a6f-4b12-bf9d-040f11eddec6",
-        "name": "Wait For The Multi-Component Deployment To Be Assigned (poll — assign it via the WFM console now)",
+        "name": "Wait For The Multi-Component Deployment To Be Assigned To The CTT's Client",
         "method": "GET",
         "endpoint": "/api/v1/deployments",
         "mtls": true,
@@ -695,7 +695,18 @@
               "operation": "array_length_gte",
               "value": 1
             }
-          ]
+          ],
+          "instruct": [
+            "The WFM lists no deployment for the CTT's client yet: {cttClientSpiffeId}",
+            "The steps of this scenario need one. Assign it now, in a second terminal or in your WFM's console; the run continues by itself:",
+            "  - Sandbox Symphony:  bash {fixturesDir}/provision-multi-component.sh",
+            "  - Your own WFM:      in its console or operator API, assign an application deployment to that client.",
+            "                       It needs two components, one 'wait: true' and one 'wait: false'",
+            "                       (see {fixturesDir}/multi-component-app-deployment.yaml).",
+            "If nothing is assigned in time, the steps of this scenario are reported as NOT RUN."
+          ],
+          "on_timeout": "skip_scenario",
+          "skip_reason": "no application deployment for the CTT's client ({cttClientSpiffeId}) appeared within 5 minutes, so deployment delivery was not judged. Assign one in the WFM and run the group again (sandbox Symphony: provision-multi-component.sh). If one was assigned, the WFM does not list it in GET /api/v1/deployments."
         },
         "validations": [
           {

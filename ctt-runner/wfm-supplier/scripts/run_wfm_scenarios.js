@@ -567,6 +567,9 @@ const scenarios = isPostmanCollection(rawData) ? parsePostmanCollection(rawData)
 let context = {};
 const results = [];
 const scenarioResults = [];
+// scenario id → reason: set when a precondition of the scenario was not met
+// (poll.on_timeout "skip_scenario"); its remaining steps are reported NOT RUN.
+const scenarioBlockers = new Map();
 
 function regenerateCertificate() {
   const { execSync } = require('child_process');
@@ -1527,8 +1530,15 @@ function runValidations(responseSource, validations) {
 // for the final summary + HTML report) and printed immediately via
 // printStepResult(), so failures are visible in the console output as soon
 // as they happen rather than only in a report generated at the very end.
+// Fills the two values a poll.instruct / poll.skip_reason text may refer to.
+function fillInstruct(text) {
+  return String(text)
+    .replace(/\{cttClientSpiffeId\}/g, ownSpiffeId || "the CTT's client SPIFFE ID")
+    .replace(/\{fixturesDir\}/g, path.resolve(__dirname, '..', 'utils', 'fixtures'));
+}
+
 async function runStep(scenario, step) {
-  const blocker = step.not_run_reason || svidSourceBlocker(step);
+  const blocker = step.not_run_reason || scenarioBlockers.get(scenario.id) || svidSourceBlocker(step);
   if (blocker) {
     const resultEntry = {
       scenario: scenario.id,
@@ -1592,6 +1602,13 @@ async function runStep(scenario, step) {
     // timeout elapses — mirrors a real device-agent's state-seeking loop, and
     // lets a scenario wait on an operator making a change via the WFM's own
     // console mid-test (e.g. assigning or removing an app).
+    //   poll.instruct   lines printed once while waiting: what the user has to
+    //                   do in the WFM. {cttClientSpiffeId} and {fixturesDir}
+    //                   are filled in.
+    //   poll.on_timeout "skip_scenario": the wait is for a precondition the
+    //                   user sets up, not for the WFM's own behaviour — on
+    //                   timeout this step and the rest of the scenario are
+    //                   NOT RUN (poll.skip_reason), not FAIL.
     if (step.poll) {
       const intervalSeconds = step.poll.interval_seconds ?? 5;
       const timeoutSeconds  = step.poll.timeout_seconds ?? 120;
@@ -1614,10 +1631,42 @@ async function runStep(scenario, step) {
           break;
         }
 
+        if (pollAttempts === 1 && Array.isArray(step.poll.instruct)) {
+          console.log('');
+          console.log(`  [${step.id}]  ${step.name}`);
+          for (const line of step.poll.instruct) console.log(`    👉 ${fillInstruct(line)}`);
+          console.log('');
+        }
+        const secondsLeft = Math.max(0, Math.round((deadline - Date.now()) / 1000));
         console.log(
-          `    ⏳ [poll attempt ${pollAttempts}] not ready yet (${pollFailures.join('; ')}) — retrying in ${intervalSeconds}s...`
+          `    ⏳ [poll attempt ${pollAttempts}] not ready yet (${pollFailures.join('; ')}) — retrying in ${intervalSeconds}s (waiting up to ${secondsLeft}s more)...`
         );
         await sleep(intervalSeconds * 1000);
+      }
+
+      if (pollTimedOut && step.poll.on_timeout === 'skip_scenario') {
+        const reason = fillInstruct(
+          step.poll.skip_reason || `precondition not met within ${timeoutSeconds}s — this scenario was not judged`
+        );
+        scenarioBlockers.set(scenario.id, reason);
+        results.push({
+          scenario: scenario.id,
+          scenarioName: scenario.name,
+          step: step.id,
+          name: step.name,
+          crIds: step.crIds || [],
+          method,
+          endpoint,
+          expected: step.expected_status,
+          actual: '-',
+          passed: false,
+          skipped: true,
+          reason,
+        });
+        console.log('');
+        console.log(`  [${step.id}]  ${step.name}`);
+        console.log(`   ⏭  NOT RUN  ${reason}`);
+        return 'skipped';
       }
     } else {
       ({ method, endpoint, bodyText, response, responseSource } = await performStep(step));

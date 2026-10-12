@@ -319,6 +319,23 @@ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
 If it fails with `~/.docker/config.json: permission denied`, run
 `sudo chown -R $USER:$USER ~/.docker` and repeat.
 
+**Step 11 — Assign the CTT's test deployment in Symphony:**
+
+The `core` and `deployment-delivery` groups test how the WFM delivers a
+deployment, so Symphony needs one assigned to the CTT's client. Do it once,
+after Step 7 (identity), Step 9 (Symphony running) and Step 10 (package pushed):
+
+```bash
+cd $HOME/workspace/conformance_test_toolkit
+bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
+# → Done. Multi-component deployment provisioned:
+```
+
+Repeat it after you install a different client SVID or rebuild Symphony. If you
+skip it, the run shows this same command when it reaches the deployment
+scenario and waits 5 minutes for you to run it in a second terminal. Details:
+[Deployment scenario](#deployment-scenario-assign-a-deployment-to-the-ctts-client).
+
 ### Testing a vendor WFM
 
 Use this instead of the Symphony steps above when the WFM under test is your
@@ -488,7 +505,7 @@ for your WFM's operator (northbound) API. The run only says what is needed:
 
 The SPIFFE ID shown is read from the client SVID installed in Phase 1.
 
-**Symphony sandbox:** run this helper once, before you start the run:
+**Symphony sandbox:** run this helper once, before you start the run (Phase 1, Step 11):
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
@@ -506,15 +523,29 @@ deployment to the client shown above. The deployment needs **two components,
 one with `wait: true` and one with `wait: false`**; what it must contain is
 described in
 `ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`.
-You can do this before the run, or while the run prints, every 10 seconds:
+You can do this before the run, or while the run waits.
+
+**If no deployment is assigned when the run reaches the scenario**, the run
+tells you what to do and waits up to 5 minutes:
 
 ```
-⏳ [poll attempt 1] not ready yet (deployments expected length >= 1, got 0) — retrying in 10s...
+  [efd8ad9d-...]  Wait For The Multi-Component Deployment To Be Assigned To The CTT's Client
+    👉 The WFM lists no deployment for the CTT's client yet: spiffe://margo.org/margo/wfm/wfm/client/ctt-client
+    👉 The steps of this scenario need one. Assign it now, in a second terminal or in your WFM's console; the run continues by itself:
+    👉   - Sandbox Symphony:  bash .../ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
+    👉   - Your own WFM:      in its console or operator API, assign an application deployment to that client.
+    👉                        It needs two components, one 'wait: true' and one 'wait: false'
+    👉                        (see .../ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml).
+    👉 If nothing is assigned in time, the steps of this scenario are reported as NOT RUN.
+
+    ⏳ [poll attempt 1] not ready yet (deployments expected length >= 1, got 0) — retrying in 10s (waiting up to 299s more)...
 ```
 
-As soon as your WFM lists the deployment, the run continues by itself. After 5
-minutes without a deployment the step fails and the rest of the scenario is
-judged against an empty manifest.
+As soon as the WFM lists the deployment, the run continues by itself. After 5
+minutes without a deployment, the wait step and the steps after it in this
+scenario are reported as `NOT RUN` with the reason — they are not failures,
+because the WFM was not judged on them. Assign the deployment and run the group
+again to get a result for them.
 
 ### The report and its signed PDF
 
@@ -675,7 +706,7 @@ first thing to check.
 | Application Registry steps fail with `tls: failed to verify certificate` | The CTT machine does not trust the registry's certificate | Add the registry's CA to the machine's trust store (see Testing a vendor WFM, Step 4) |
 | Setup MIAF Identity says `No known layout found` and asks for three files | The folder you gave holds neither `x509svid-*` folders nor the flat file set | Give the folder you ran `mis.sh` from (it holds the `x509svid-*` folders and `certs/ca.crt`), or the client's own `x509svid-*` folder. Press Ctrl+C and run the step again |
 | `Signed PDF not created` at the end of a run | Shown on screen under the message. Usual causes: the repository folder is owned by root (cloned or run with `sudo`), or no internet for the first-time tool install | Fix the cause shown (for ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `PDF_OUTPUT_DIR=... bash .../scripts/pdf_ops.sh ...` command the run printed. The test result and the HTML report are not affected |
-| Multi-component poll times out (300s) | No deployment was assigned to the CTT's client | Symphony: run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` and start the run again. Own WFM: assign the deployment in your WFM, to the client SPIFFE ID the run printed |
+| The deployment scenario's steps are `NOT RUN` ("no application deployment ... appeared within 5 minutes") | No deployment was assigned to the CTT's client | Symphony: run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` and start the run again. Own WFM: assign the deployment in your WFM, to the client SPIFFE ID the run printed. If you did assign one, your WFM does not list it in `GET /api/v1/deployments` |
 | `ERROR: failed to get auth token` from the Symphony helper | Symphony is not running, or its operator API is not on `https://localhost:8082/v1alpha2` with user `admin` | Start Symphony (`wfm.sh` option 3), or pass `--nbi-url`, `--nbi-user`, `--nbi-pass` to the helper. The helper works only with Symphony |
 | Steps fail with unexpected 500 | WFM internal error | This is a WFM implementation gap — note the CR-ID in the report and report to your WFM vendor |
 | `Cache-Control: immutable` failure on manifest endpoint | WFM sets immutable on a mutable resource | WFM implementation gap — the manifest changes when deployments are added/removed (MI-035) |
