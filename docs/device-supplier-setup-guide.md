@@ -66,6 +66,23 @@ There are two kinds of test groups:
 | bash | 4+ | |
 | OS | Linux | tested on Ubuntu 24.04; macOS is not supported |
 
+### Network: what must be open between the machines
+
+When the MIS, the CTT and the device run on different machines (the plugfest
+setup: one central MIS), ask the network team to open these ports **before**
+the test day. A machine that answers on SSH can still have the other ports
+closed.
+
+| From | To | Port | Needed for |
+|---|---|---|---|
+| Device | CTT machine | 3003 | every device test (the mock WFM's Management Interface) |
+| Device | MIS machine | 9443 | a device that takes its trust from the MIS (the sandbox device-agent does). Not needed when the device is given the CA file `ca.crt` |
+| Device | CTT machine | 4318 and 9090 | the `observability` group only |
+| CTT machine | MIS machine | none | the CTT only needs files copied from the MIS machine |
+
+On the device machine, `mis.margo.org` in `/etc/hosts` must be the MIS
+machine's address.
+
 **1. Clone the CTT repo:**
 
 ```bash
@@ -593,7 +610,10 @@ How to read the result:
 
 The mock WFM keeps everything it received since it was started, and a device
 keeps the manifest version it adopted. For a clean run, stop and start the mock
-WFM (options 4 and 2) and start the device with empty state.
+WFM (options 4 and 2) and start the device with empty state. The sandbox
+device-agent keeps its state in `~/sandbox/docker-compose/data`:
+`device-agent.sh docker stop-docker` asks
+`Do you want to delete data folder ...? (y/n)` — answer `y`, then start it again.
 
 The report and its signed PDF are written to `ctt-runner/reports/device-supplier/`
 (see [The report and its signed PDF](#the-report-and-its-signed-pdf)) with the
@@ -627,15 +647,29 @@ The sandbox device-agent takes its files from `~/certs`:
 
 ```bash
 mkdir -p $HOME/certs/compose-identity
-cp ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-cert.pem $HOME/certs/compose-identity/
-cp ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-key.pem  $HOME/certs/compose-identity/
-cp ~/mis-deployment/certs/https-ca.crt                                     $HOME/certs/
+cp -f ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-cert.pem $HOME/certs/compose-identity/
+cp -f ~/mis-deployment/x509svid-ctt-mock-wfm-vendor-device-1/payload-key.pem  $HOME/certs/compose-identity/
+cp -f ~/mis-deployment/certs/https-ca.crt                                     $HOME/certs/
 sudo cp ~/sandbox/scripts/harbor/certs/harbor.crt                          $HOME/certs/
 sudo chown -R $USER:$USER $HOME/certs
 ```
 
 On a separate device machine, create `~/certs/compose-identity` there and copy
 the same four files from the MIS / WFM machine with `scp`.
+
+`device-agent.sh docker install` (Step 5) copies these files into the agent's
+own folder, `~/sandbox/poc/device/agent/config/`. If you change a file in
+`~/certs` **after** the install — a re-issued SVID, or the `https-ca.crt` of a
+different MIS — the agent does not see it. Copy it there as well, then stop and
+start the agent:
+
+```bash
+sudo cp -f $HOME/certs/compose-identity/payload-*.pem $HOME/sandbox/poc/device/agent/config/compose-identity/
+sudo cp -f $HOME/certs/https-ca.crt                   $HOME/sandbox/poc/device/agent/config/mis/
+```
+
+An agent that still has the wrong `https-ca.crt` restarts in a loop with
+`failed to retrieve margo spiffe trust bundle ... certificate signed by unknown authority`.
 
 #### Step 3 — Make the MIS reachable by name
 
