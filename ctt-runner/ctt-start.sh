@@ -1660,7 +1660,7 @@ _wfm_miaf_vendor() {
     echo "    • MIS output folder (e.g. ~/mis-deployment from the sandbox mis.sh):"
     echo "        x509svid-*/payload-cert.pem, x509svid-*/payload-key.pem, certs/ca.crt"
     echo "    • A flat folder with:"
-    echo "        client-svid-cert.pem, client-svid-key.pem, trust-bundle-ca.pem"
+    echo "        client-svid-cert.pem, client-svid-key.pem, trust-bundle-ca.pem (or mis-ca.crt)"
     echo ""
     echo "  The folder may be owned by root — sudo is used only when needed to read it."
     echo ""
@@ -1685,7 +1685,7 @@ _wfm_miaf_vendor() {
     if _device_identity_file_exists "$src_dir/client-svid-cert.pem"; then
         cert_path="$src_dir/client-svid-cert.pem"
         key_path="$src_dir/client-svid-key.pem"
-        ca_path="$src_dir/trust-bundle-ca.pem"
+        ca_path="$(_identity_ca_file "$src_dir")"
     elif [[ -n "$picked_svid" ]]; then
         cert_path="$picked_svid/payload-cert.pem"
         key_path="$picked_svid/payload-key.pem"
@@ -1911,6 +1911,19 @@ _device_identity_file_exists() {
     sudo test -f "$1"
 }
 
+# The MIS CA in a flat identity folder: the same folder can serve both personas,
+# so any of the names the guides use is accepted.
+_identity_ca_file() {
+    local name
+    for name in trust-bundle-ca.pem mis-ca.crt ca.crt; do
+        if _device_identity_file_exists "$1/$name"; then
+            echo "$1/$name"
+            return 0
+        fi
+    done
+    echo "$1/mis-ca.crt"
+}
+
 # Copies one identity file so the current user owns it; uses sudo only when the source is not readable.
 _device_copy_identity_file() {
     local src="$1" dst="$2" mode="$3"
@@ -1955,7 +1968,7 @@ device_generate_certs() {
     echo "        x509svid-*/payload-cert.pem, x509svid-*/payload-key.pem, certs/ca.crt"
     echo "    • A flat folder with:"
     echo "        wfm-svid-cert.pem, wfm-svid-key.pem,"
-    echo "        client-svid-cert.pem, client-svid-key.pem, mis-ca.crt"
+    echo "        client-svid-cert.pem, client-svid-key.pem, mis-ca.crt (or trust-bundle-ca.pem)"
     echo ""
     echo "  The folder may be owned by root — sudo is used only when needed to read it."
     echo "  ⚠  The CA used here MUST match the CA trusted by the vendor's device."
@@ -1983,7 +1996,7 @@ device_generate_certs() {
         wfm_key="$src_dir/wfm-svid-key.pem"
         client_cert="$src_dir/client-svid-cert.pem"
         client_key="$src_dir/client-svid-key.pem"
-        ca_cert="$src_dir/mis-ca.crt"
+        ca_cert="$(_identity_ca_file "$src_dir")"
     else
         local find_cmd=(find "$src_dir" -mindepth 1 -maxdepth 1 -type d -name 'x509svid-*')
         [[ -r "$src_dir" && -x "$src_dir" ]] || find_cmd=(sudo "${find_cmd[@]}")

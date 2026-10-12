@@ -48,6 +48,24 @@ CTT (mock device)                Your WFM (demo: Symphony)
 | OS | Linux | tested on Ubuntu 24.04; macOS is not supported |
 | oras | 1.x | used by the Application Registry scenario of the `core` group; [oras.land](https://oras.land/docs/installation). Run `oras login <registry>` once if the registry needs credentials. |
 
+### Network: what must be open between the machines
+
+When the MIS, the WFM and the CTT run on different machines (the plugfest
+setup: one central MIS), ask the network team to open these ports **before**
+the test day. A machine that answers on SSH can still have the other ports
+closed.
+
+| From | To | Port | Needed for |
+|---|---|---|---|
+| CTT machine | WFM machine | the WFM's Management Interface port (Symphony: 8084) | every WFM test |
+| WFM machine | MIS machine | 9443 | a WFM that takes its trust from the MIS while it runs (Symphony does). Not needed when the WFM is given the CA file `ca.crt` |
+| CTT machine | Application Registry | the registry's port (sandbox Harbor: 8443) | the Application Registry checks |
+| CTT machine | MIS machine | none | the CTT only needs files copied from the MIS machine |
+
+On the WFM machine, `mis.margo.org` in `/etc/hosts` must be the MIS machine's
+address. Check the MIS port from the WFM machine with the command under
+[Testing a vendor WFM](#testing-a-vendor-wfm), Step 3.
+
 Clone the repo and check out the conformance branch:
 
 ```bash
@@ -215,12 +233,18 @@ sudo cp ~/mis-deployment/certs/https-ca.crt  $HOME/symphony/api/mis/
 sudo chown $USER:$USER $HOME/symphony/api/mis/https-ca.crt
 ```
 
-**Step 5 — Point mis.margo.org at this machine in /etc/hosts:**
+**Step 5 — Point mis.margo.org at the MIS machine in /etc/hosts:**
 
 Symphony, and any device-agent you run later, reach the MIS by this hostname.
-The entry must be this machine's own network address — not `127.0.0.1`, which
-a device-agent running in a container cannot use, and not a public address,
-which times out.
+With the MIS on this same machine, the entry must be this machine's own network
+address — not `127.0.0.1`, which a device-agent running in a container cannot
+use, and not a public address, which times out. The commands below write that.
+
+With the MIS on **another machine**, write that machine's address instead
+(`echo "10.139.2.60 mis.margo.org" | sudo tee -a /etc/hosts`, with your MIS
+machine's address), make sure port 9443 to it is open, and take the files of
+Step 3 and Step 4 (the WFM's `x509svid-*` folder and `certs/https-ca.crt`) from
+the MIS machine with `scp` first.
 
 ```bash
 sudo sed -i '/mis\.margo\.org/d' /etc/hosts
@@ -380,6 +404,37 @@ bash ctt-runner/ctt-start.sh
 
 It must end with `Identity setup complete` and print
 `CTT client SVID : spiffe://margo.org/margo/wfm/acme-wfm/client/ctt-client`.
+
+**If the MIS runs on a different machine than the CTT:** on the MIS machine,
+put the three files the CTT needs into one folder and copy that folder to the
+CTT machine. The `x509svid-*` folders are in the folder `mis.sh` was run from;
+`ca.crt` is always in the MIS deployment folder.
+
+```bash
+# On the MIS machine, in the folder that holds the x509svid-* folders
+mkdir -p ~/ctt-certs
+cp x509svid-acme-wfm-ctt-client/payload-cert.pem ~/ctt-certs/client-svid-cert.pem
+cp x509svid-acme-wfm-ctt-client/payload-key.pem  ~/ctt-certs/client-svid-key.pem
+cp ~/mis-deployment/certs/ca.crt                 ~/ctt-certs/mis-ca.crt
+
+# Copy the folder to the home directory of the CTT machine
+scp -r ~/ctt-certs ctt-user@ctt-machine:~/
+```
+
+Then run the same CLI step on the CTT machine and answer
+`Folder containing the client SVID` with `~/ctt-certs`. The same folder also
+works for the Device Supplier setup when it holds the mock WFM's SVID as
+`wfm-svid-cert.pem` and `wfm-svid-key.pem`.
+
+**If the WFM takes its trust from the MIS (port 9443):** the WFM machine must
+reach the MIS machine on port 9443, and `mis.margo.org` in its `/etc/hosts`
+must point at the MIS machine's address. Check it from the WFM machine, with
+the MIS's `https-ca.crt` copied there:
+
+```bash
+curl --cacert https-ca.crt https://mis.margo.org:9443/.well-known/spiffe/bundle.json
+# → a JSON document with "keys"; an error here means the WFM cannot fetch its trust from the MIS
+```
 
 **Step 4 — Point the Application Registry checks at the vendor's registry:**
 
