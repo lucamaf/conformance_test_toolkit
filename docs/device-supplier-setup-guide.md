@@ -815,6 +815,7 @@ openssl x509 -in ctt-runner/device-supplier/certs/svid-cert.pem \
 | Sandbox device-agent refuses the mock WFM | Mock WFM's SPIFFE ID not on the device's allowlist | `device-agent.sh` → 11) Manage SPIFFE ID allowlist |
 | `container 'margo-identity-service' is not running` from `mis.sh` | MIS not installed/started, or `mis.sh` run without `sudo` | `sudo -E bash ~/sandbox/scripts/mis.sh` → 4) Margo Identity Service: Install |
 | `~/mis-deployment/` owned by root | `mis.sh` runs as root | `sudo chown -R $USER:$USER ~/mis-deployment` (optional — Setup Identity can read root-owned folders) |
+| `Signed PDF not created` at the end of a run | Shown on screen under the message. Usual causes: the repository folder is owned by root (cloned or run with `sudo`), or no internet for the first-time tool install | Fix the cause shown (for ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `PDF_OUTPUT_DIR=... bash .../scripts/pdf_ops.sh ...` command the run printed. The test result and the HTML report are not affected |
 | Report not generated | Test runner stopped early | Check `ctt-runner/reports/device-supplier/test-execution.log` |
 
 ---

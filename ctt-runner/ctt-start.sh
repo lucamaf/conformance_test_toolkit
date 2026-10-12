@@ -696,7 +696,10 @@ sign_report() {
             info "Signer CA certificate (send it with the report): $out_dir/ca_cert.pem"
         fi
     else
-        warn "Signed PDF not created — see $out_dir/report-signing.log (the HTML report is not affected)"
+        warn "Signed PDF not created (the HTML report is not affected). Last lines of $out_dir/report-signing.log:"
+        tail -n 6 "$out_dir/report-signing.log" 2>/dev/null | sed 's/^/      /' >&2
+        warn "After fixing the cause, sign this report with:"
+        echo "      PDF_OUTPUT_DIR=$out_dir bash $signer $html" >&2
     fi
     return 0
 }
@@ -1662,10 +1665,19 @@ _wfm_miaf_vendor() {
     echo ""
 
     _device_read_dir "Folder containing the client SVID" "$HOME/mis-deployment"
-    local src_dir="$REPLY"
+    local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
         return 1
+    fi
+
+    # The answer may be the client SVID's own folder (x509svid-…) instead of the
+    # MIS output folder that holds it: use it, and take the CA from next to it.
+    local picked_svid=""
+    if _device_identity_file_exists "$src_dir/payload-cert.pem"; then
+        picked_svid="$src_dir"
+        src_dir="$(dirname "$picked_svid")"
+        info "Using ${picked_svid##*/} as the client SVID (MIS output folder: $src_dir)"
     fi
 
     local cert_path key_path ca_path
@@ -1673,6 +1685,10 @@ _wfm_miaf_vendor() {
         cert_path="$src_dir/client-svid-cert.pem"
         key_path="$src_dir/client-svid-key.pem"
         ca_path="$src_dir/trust-bundle-ca.pem"
+    elif [[ -n "$picked_svid" ]]; then
+        cert_path="$picked_svid/payload-cert.pem"
+        key_path="$picked_svid/payload-key.pem"
+        ca_path="$src_dir/certs/ca.crt"
     else
         local find_cmd=(find "$src_dir" -mindepth 1 -maxdepth 1 -type d -name 'x509svid-*')
         [[ -r "$src_dir" && -x "$src_dir" ]] || find_cmd=(sudo "${find_cmd[@]}")
@@ -1708,6 +1724,14 @@ _wfm_miaf_vendor() {
             key_path="${key_path/#\~/$HOME}"
             ca_path="${ca_path/#\~/$HOME}"
         fi
+    fi
+
+    # MIS layout, but the CA is not where the MIS puts it (certs/ca.crt): ask for it.
+    if [[ "$ca_path" == "$src_dir/certs/ca.crt" ]] && ! _device_identity_file_exists "$ca_path"; then
+        echo ""
+        echo "  MIS CA certificate not found at $ca_path"
+        read -r -p "  Path to MIS CA cert (ca.crt of your MIS): " ca_path < /dev/tty
+        ca_path="${ca_path/#\~/$HOME}"
     fi
 
     mkdir -p "$real_dir" 2>/dev/null || sudo mkdir -p "$real_dir" || return 1
@@ -1938,10 +1962,17 @@ device_generate_certs() {
     echo ""
 
     _device_read_dir "Folder containing the SVIDs" "$HOME/mis-deployment"
-    local src_dir="$REPLY"
+    local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
         return 1
+    fi
+
+    # The answer may be one SVID's own folder (x509svid-…): two SVIDs are needed,
+    # so continue with the MIS output folder that holds it.
+    if _device_identity_file_exists "$src_dir/payload-cert.pem"; then
+        info "${src_dir##*/} is one SVID folder — using the folder that holds it: $(dirname "$src_dir")"
+        src_dir="$(dirname "$src_dir")"
     fi
 
     local wfm_cert wfm_key client_cert client_key ca_cert

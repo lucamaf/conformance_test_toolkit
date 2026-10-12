@@ -22,6 +22,7 @@ PYTHON_CMD=""
 VENV_DIR="${SCRIPT_DIR}/.venv"
 # Native system libraries required by WeasyPrint, grouped by package manager
 WEASYPRINT_APT_DEPS=(
+    python3-venv
     libpango-1.0-0
     libpangocairo-1.0-0
     libcairo2
@@ -318,11 +319,18 @@ setup_emoji_font() {
 setup_venv() {
     log_info "Setting up virtual environment at: ${VENV_DIR}"
 
+    # A venv left half-made by an earlier failed run cannot be reused.
+    if [[ -d "${VENV_DIR}" ]] && ! "${VENV_DIR}/bin/python" -m pip --version &>/dev/null; then
+        log_warn "Existing virtual environment is not usable, creating it again."
+        rm -rf "${VENV_DIR}"
+    fi
+
     if [[ ! -d "${VENV_DIR}" ]]; then
         log_info "Creating new virtual environment..."
         if ! "${PYTHON_CMD}" -m venv "${VENV_DIR}" >> "${LOG_FILE}" 2>&1; then
+            rm -rf "${VENV_DIR}"
             log_error "Failed to create virtual environment."
-            log_error "Ensure python3-full is installed: sudo apt install python3-full"
+            log_error "Install the Python venv module and run again: sudo apt-get install -y python3-venv"
             exit 1
         fi
         log_info "Virtual environment created successfully."
@@ -330,14 +338,10 @@ setup_venv() {
         log_info "Virtual environment already exists, reusing it."
     fi
 
-    # Switch PYTHON_CMD to the venv's Python
     PYTHON_CMD="${VENV_DIR}/bin/python"
     log_info "Using venv Python: ${PYTHON_CMD}"
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 7: Install dependencies (unchanged signature, now runs inside venv)
-# ─────────────────────────────────────────────────────────────────────────────
 install_dependencies() {
     log_info "Checking and installing required dependencies..."
 
@@ -397,6 +401,16 @@ run_pdf_signer() {
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
 main() {
+    # The log, the virtual environment and the signing identity live in this folder.
+    if [[ ! -w "${SCRIPT_DIR}" ]]; then
+        echo "[ERROR] ${SCRIPT_DIR} is not writable by $(id -un) (was the repository cloned or run with sudo?)." >&2
+        echo "[ERROR] Fix it with: sudo chown -R $(id -un):$(id -gn) $(dirname "${SCRIPT_DIR}")" >&2
+        exit 1
+    fi
+    if [[ -e "${LOG_FILE}" && ! -w "${LOG_FILE}" ]]; then
+        echo "[ERROR] ${LOG_FILE} is not writable by $(id -un). Fix it with: sudo chown $(id -un):$(id -gn) ${LOG_FILE}" >&2
+        exit 1
+    fi
     log_info "========================================"
     log_info "PDF Signer Wrapper Script Started"
     log_info "========================================"
@@ -408,9 +422,9 @@ main() {
     local passphrase="${3:-}"
 
     check_python
-    check_pip "${PYTHON_CMD}"
     install_system_deps
     setup_venv
+    check_pip "${PYTHON_CMD}"   # pip of the venv; the system Python needs no pip
     install_dependencies
     check_python_script
     setup_emoji_font
