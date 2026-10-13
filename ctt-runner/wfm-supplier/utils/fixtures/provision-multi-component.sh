@@ -26,6 +26,8 @@
 #   --registry-tag TAG    OCI tag           (default: 1.0.0)
 #   --device-id ID        Client SPIFFE ID  (default: read from the client SVID installed by
 #                         ctt-runner "Setup MIAF Identity")
+#   --mi-url URL          Symphony Management Interface URL, used for the check at the end
+#                         (default: https://localhost:8084/v1alpha2/margo)
 #   --compose-image REF   oci:// ref for compose components (default: oci://harbor.machine:8443/library/nextcloud-compose-archive)
 #
 # CLEANUP
@@ -46,6 +48,9 @@ CLEANUP=false
 PKG_NAME="ctt-multi-component-app"
 DEPLOY_NAME="ctt-multi-component-deployment"
 
+ORIG_ARGS=("$@")
+MI_URL="https://localhost:8084/v1alpha2/margo"   # Symphony's Management Interface, for the check at the end
+
 # ── Argument parsing ─────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -57,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --registry-tag) REGISTRY_TAG="$2";  shift 2 ;;
     --device-id)    DEVICE_ID="$2";     shift 2 ;;
     --compose-image)COMPOSE_IMAGE="$2"; shift 2 ;;
+    --mi-url)       MI_URL="$2";        shift 2 ;;
     --cleanup)      CLEANUP=true;       shift   ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
@@ -243,6 +249,56 @@ print(d.get('id',''))
     exit 1
   fi
   echo "  Deployment created: $DEP_ID"
+fi
+
+# ── Check: does Symphony deliver the deployment on the Management Interface? ──
+# After a reboot or a re-created Symphony container the deployment can exist on
+# the NBI while the Management Interface lists none, or its bundle download
+# fails (the bundle file was lost). The CTT run would then wait or fail. So ask
+# the Management Interface with the CTT's own client SVID, and repair once or
+# twice by deleting and creating the deployment again.
+SVID_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/miaf/real"
+mi_state() {
+  python3 - "$MI_URL" "$SVID_DIR/client-svid-cert.pem" "$SVID_DIR/client-svid-key.pem" <<'PY'
+import json, subprocess, sys
+url, cert, key = sys.argv[1:4]
+def get(path, accept, out):
+    return subprocess.run(["curl", "-sk", "-m", "10", "--cert", cert, "--key", key,
+        "-H", "Accept: " + accept, "-o", out, "-w", "%{http_code}", url + path],
+        capture_output=True, text=True).stdout.strip()
+code = get("/api/v1/deployments", "application/vnd.margo.manifest.v1+json", "/tmp/.ctt-provision-manifest.json")
+if code != "200":
+    print("unreachable (HTTP %s)" % (code or "none")); sys.exit(0)
+m = json.load(open("/tmp/.ctt-provision-manifest.json"))
+if not m.get("deployments"):
+    print("not-listed"); sys.exit(0)
+digest = (m.get("bundle") or {}).get("digest", "")
+code = get("/api/v1/bundles/" + digest, "application/vnd.margo.bundle.v1+tar+gzip", "/dev/null")
+print("ok" if code == "200" else "bundle-broken (HTTP %s)" % code)
+PY
+}
+if [[ -f "$SVID_DIR/client-svid-cert.pem" && -f "$SVID_DIR/client-svid-key.pem" ]]; then
+  STATE="not-listed"
+  for _ in 1 2 3 4 5; do
+    STATE="$(mi_state)"
+    [[ "$STATE" == "not-listed" ]] || break
+    sleep 2
+  done
+  echo "Check on the Management Interface ($MI_URL): $STATE"
+  if [[ "$STATE" == not-listed || "$STATE" == bundle-broken* ]]; then
+    ATTEMPT="${CTT_PROVISION_ATTEMPT:-1}"
+    if (( ATTEMPT >= 3 )); then
+      echo "ERROR: Symphony still does not deliver the deployment after $ATTEMPT attempts."
+      echo "       Restart Symphony (wfm.sh options 4 and 3) and run this helper again."
+      exit 1
+    fi
+    echo "Symphony does not deliver the deployment correctly (usual after a reboot or a Symphony restart)."
+    echo "Deleting it and creating it again (attempt $((ATTEMPT + 1)) of 3)..."
+    CTT_PROVISION_ATTEMPT=$((ATTEMPT + 1)) bash "${BASH_SOURCE[0]}" "${ORIG_ARGS[@]}" --cleanup
+    CTT_PROVISION_ATTEMPT=$((ATTEMPT + 1)) exec bash "${BASH_SOURCE[0]}" "${ORIG_ARGS[@]}"
+  elif [[ "$STATE" != ok ]]; then
+    echo "WARNING: could not check the Management Interface ($STATE). Is --mi-url right, and is the CTT's client on Symphony's allowlist?"
+  fi
 fi
 
 echo ""

@@ -355,7 +355,11 @@ bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
 # → Done. Multi-component deployment provisioned:
 ```
 
-Repeat it after you install a different client SVID or rebuild Symphony. If you
+The helper ends with a check on Symphony's Management Interface
+(`Check on the Management Interface (...): ok`). Run it again after you install
+a different client SVID, after a reboot of the machine, and after Symphony was
+restarted or rebuilt: Symphony then often lists no deployment or fails the
+bundle download, and the helper sees that and creates the deployment again. If you
 skip it, the run shows this same command when it reaches the deployment
 scenario and waits 5 minutes for you to run it in a second terminal. Details:
 [Deployment scenario](#deployment-scenario-assign-a-deployment-to-the-ctts-client).
@@ -761,6 +765,7 @@ first thing to check.
 | Application Registry steps fail with `tls: failed to verify certificate` | The CTT machine does not trust the registry's certificate | Add the registry's CA to the machine's trust store (see Testing a vendor WFM, Step 4) |
 | Setup MIAF Identity says `No known layout found` and asks for three files | The folder you gave holds neither `x509svid-*` folders nor the flat file set | Give the folder you ran `mis.sh` from (it holds the `x509svid-*` folders and `certs/ca.crt`), or the client's own `x509svid-*` folder. Press Ctrl+C and run the step again |
 | `Signed PDF not created` at the end of a run | Shown on screen under the message. Usual causes: the repository folder is owned by root (cloned or run with `sudo`), or no internet for the first-time tool install | Fix the cause shown (for ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `PDF_OUTPUT_DIR=... bash .../scripts/pdf_ops.sh ...` command the run printed. The test result and the HTML report are not affected |
+| `wfm-mc-bundle-fetch` and `wfm-mc-bundle-contents` fail with HTTP 500 on Symphony | The machine was rebooted or Symphony was restarted; Symphony lost the bundle file | Run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` again — it detects this and creates the deployment again — then start the run again |
 | The deployment scenario's steps are `NOT RUN` ("no application deployment ... appeared within 5 minutes") | No deployment was assigned to the CTT's client | Symphony: run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` and start the run again. Own WFM: assign the deployment in your WFM, to the client SPIFFE ID the run printed. If you did assign one, your WFM does not list it in `GET /api/v1/deployments` |
 | `ERROR: failed to get auth token` from the Symphony helper | Symphony is not running, or its operator API is not on `https://localhost:8082/v1alpha2` with user `admin` | Start Symphony (`wfm.sh` option 3), or pass `--nbi-url`, `--nbi-user`, `--nbi-pass` to the helper. The helper works only with Symphony |
 | Steps fail with unexpected 500 | WFM internal error | This is a WFM implementation gap — note the CR-ID in the report and report to your WFM vendor |

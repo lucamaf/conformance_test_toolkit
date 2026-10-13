@@ -1783,6 +1783,10 @@ const REPORT_CSS = `
     th, td { border: 1px solid #d7dde5; padding: 7px 9px; text-align: left; vertical-align: top; }
     th { background: #eef2f7; }
     td.wrap { overflow-wrap: anywhere; }
+    /* Step Details: fixed column widths so all ten columns fit the page width in the PDF. */
+    table.steps { table-layout: fixed; font-size: 11px; }
+    table.steps th, table.steps td { padding: 5px 6px; }
+    table.steps td { overflow-wrap: anywhere; }
     td.id, td.pass, td.fail, td.skip { white-space: nowrap; }
     td.pass { color: #166534; font-weight: 700; }
     td.fail, tr.fail td.reason { color: #b91c1c; font-weight: 700; }
@@ -1900,7 +1904,11 @@ function writeReport() {
   </table>
 
   <h2>Step Details</h2>
-  <table>
+  <table class="steps">
+    <colgroup>
+      <col style="width:10%"><col style="width:11%"><col style="width:14%"><col style="width:13%"><col style="width:6%">
+      <col style="width:11.5%"><col style="width:6.5%"><col style="width:5.5%"><col style="width:7%"><col style="width:15.5%">
+    </colgroup>
     <thead><tr>
       <th>Scenario</th><th>Step</th><th>Name</th><th>Requirement IDs</th>
       <th>Method</th><th>Endpoint</th><th>Expected</th><th>Actual</th><th>Result</th><th>Reason</th>
