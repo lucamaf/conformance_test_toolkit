@@ -1,84 +1,104 @@
 # WFM Supplier Conformance — Setup and Execution Guide
 
-**Persona:** WFM Supplier  
-**Spec baseline:** Margo `1.0.0-rc.3` (MIAF / mTLS authentication)  
-**Audience:** WFM vendors, Margo adopters, integration engineers
+**Persona:** WFM Supplier (Margo persona: Fleet Management Supplier)  
+**Specification baseline:** Margo `1.0.0-rc.3`  
+**Audience:** WFM suppliers, Margo adopters, integration engineers
 
-This guide walks you from a clean checkout to a conformance report,
-step by step. Follow it once and you will understand every moving part; on
-subsequent runs only the identity setup (Phase 1) needs attention if certs
-have expired.
+This guide describes how to verify a Workload Fleet Manager (WFM) for
+conformance with the Margo specification using the Margo Conformance Test
+Toolkit (CTT). It covers the prerequisites, identity provisioning, test
+execution and the conformance report.
+
+Terms are used as defined by Margo:
+[Technical Lexicon](https://docs.margo.org/personas-and-definitions/technical-lexicon),
+[Margo Identity and Authorization Framework](https://docs.margo.org/specification/identity/identity-framework),
+[WFM Identity Profile](https://docs.margo.org/specification/identity/wfm-identity-profile)
+and the Margo Management Interface
+([API Requirements and Security](https://docs.margo.org/specification/margo-management-interface/api-requirements-and-security),
+[Device Capabilities](https://docs.margo.org/specification/margo-management-interface/device-capabilities),
+[Desired State](https://docs.margo.org/specification/margo-management-interface/desired-state),
+[Deployment Status](https://docs.margo.org/specification/margo-management-interface/deployment-status)).
 
 ---
 
-## What CTT does in this persona
+## Overview
 
-Your WFM is the system under test and the CTT acts as a **mock device** (a WFM
-Client). It fires real HTTPS requests at your WFM, checks the responses against
-the Margo spec, and generates an HTML report where every test row is traced to
-a specific requirement ID. For the demo the WFM is the sandbox Symphony; a
-vendor uses their own WFM.
+In this persona the WFM is the system under test. The CTT acts as a Workload
+Fleet Management Client (WFM Client): it accesses the Margo Management
+Interface exposed by the WFM and checks each response for conformance with the
+specification. Every check is traced to a conformance requirement ID in the
+report.
 
-Authentication is **mutual TLS (MIAF)**: the CTT presents an X.509-SVID
-(a SPIFFE-based certificate) that your WFM's MIS issued, and your WFM
-presents its own. No username/password, no API keys.
+For demonstration, the Symphony WFM of the Margo sandbox is used. A WFM
+supplier is expected to bring their own WFM, against which conformance is
+checked.
+
+The CTT implements Margo `1.0.0-rc.3` and therefore the Margo Identity and
+Authorization Framework (MIAF). The WFM and the CTT authenticate each other by
+mutual TLS with X.509-SVIDs, and each side authorizes its peer locally, based
+on the peer's verified SPIFFE ID. This has two consequences for the setup:
+
+- A Margo Identity Service (MIS) must exist for the Trust Domain. It issues the
+  X.509-SVID of the WFM and the X.509-SVID the CTT presents as a WFM Client,
+  and it publishes the Trust Bundle of the Trust Domain.
+- The WFM must authorize the SPIFFE ID of the CTT in its local authorization
+  policy.
 
 ```
-CTT (mock device)                Your WFM (demo: Symphony)
-  svid-cert.pem  ──mTLS──►  validates against trust-bundle-ca.pem
-                 ◄──mTLS──  validates CTT trusts WFM's own cert
-        ▼
-  run_wfm_scenarios.js
-  fires scenario steps
+CTT (WFM Client)                              WFM under test (demo: Symphony)
+  presents its X.509-SVID      ── mTLS ──►    validates it against the Trust Bundle,
+                                              authorizes the SPIFFE ID by local policy
+  validates the WFM's X.509-SVID  ◄── mTLS ── presents its X.509-SVID
+  against the Trust Bundle
+        │
+        ▼  requests on the Margo Management Interface, checked against the specification
         ▼
   ctt-runner/reports/wfm-supplier/
-  wfm-scenario-report-core_<timestamp>.html
+  wfm-scenario-report-core_<timestamp>.html  and  ..._signed.pdf
 ```
 
 ---
 
 ## Prerequisites
 
-| Tool | Version | Notes |
+### Tools on the CTT host
+
+| Tool | Version | Purpose |
 |---|---|---|
-| Node.js | 18 or newer | drives `run_wfm_scenarios.js`; no `npm install` needed |
-| OpenSSL | 1.1+ | certificate inspection; usually pre-installed |
-| jq | any | group file parsing; `apt install jq` |
-| bash | 4+ | |
-| OS | Linux | tested on Ubuntu 24.04; macOS is not supported |
-| oras | 1.x | used by the Application Registry scenario of the `core` group; [oras.land](https://oras.land/docs/installation). Run `oras login <registry>` once if the registry needs credentials. |
+| Node.js | 18 or later | Runs the test runner (`run_wfm_scenarios.js`); no `npm install` is required |
+| OpenSSL | 1.1 or later | Certificate inspection |
+| jq | any | Reads the test group files |
+| bash | 4 or later | Runs the CLI |
+| oras | 1.x | Application Registry checks of the `core` group ([installation](https://oras.land/docs/installation)) |
+| Operating system | Linux | Verified on Ubuntu 24.04 |
 
-### Network: what must be open between the machines
+### Network connectivity
 
-When the MIS, the WFM and the CTT run on different machines (the plugfest
-setup: one central MIS), ask the network team to open these ports **before**
-the test day. A machine that answers on SSH can still have the other ports
-closed.
+When the MIS, the WFM and the CTT run on different hosts, the following
+connections must be permitted before testing. A host that is reachable over SSH
+can still have these ports closed.
 
-| From | To | Port | Needed for |
+| From | To | Port | Purpose |
 |---|---|---|---|
-| CTT machine | WFM machine | the WFM's Management Interface port (Symphony: 8084) | every WFM test |
-| WFM machine | MIS machine | 9443 | a WFM that takes its trust from the MIS while it runs (Symphony does). Not needed when the WFM is given the CA file `ca.crt` |
-| CTT machine | Application Registry | the registry's port (sandbox Harbor: 8443) | the Application Registry checks |
-| CTT machine | MIS machine | none | the CTT only needs files copied from the MIS machine |
+| CTT host | WFM host | Margo Management Interface exposed by the WFM (Symphony: 8084) | All WFM conformance tests |
+| WFM host | MIS host | MIS trust endpoints (sandbox MIS: 9443) | The WFM connects to the MIS for discovery and to obtain the Trust Bundle. Not required when the operator provides the Trust Bundle and the Trust Domain to the WFM by configuration (out-of-band delivery) |
+| CTT host | Application Registry | Registry port (sandbox Harbor: 8443) | Application Registry checks |
+| CTT host | MIS host | none | The CTT receives its identity and trust material out of band (see [Phase 1](#phase-1--identity-provisioning-miaf)) and does not connect to the MIS |
 
-On the WFM machine, `mis.margo.org` in `/etc/hosts` must be the MIS machine's
-address. Check the MIS port from the WFM machine with the command under
-[Testing a vendor WFM](#testing-a-vendor-wfm), Step 3.
+The host name under which the MIS is reachable is a configuration value, not a
+fixed name. In the Margo sandbox it is `EXPOSED_MIS_HOST` in `mis.env`
+(default `mis.margo.org`), and every host that connects to the MIS must resolve
+that name to the MIS host. The CTT has no MIS host name configured.
 
-Clone the repo and check out the conformance branch:
+### CTT repository
 
 ```bash
-mkdir -p ~/workspace && cd ~/workspace
+mkdir -p $HOME/workspace && cd $HOME/workspace
 git clone https://github.com/margo/conformance_test_toolkit.git
 cd conformance_test_toolkit
 git checkout feature/multi-persona-conformance
-```
 
-Then verify tooling:
-
-```bash
-node --version     # v18 or newer
+node --version     # v18 or later
 openssl version
 jq --version
 oras version
@@ -86,253 +106,101 @@ oras version
 
 ---
 
-## Phase 1 — Identity Setup
+## Phase 1 — Identity provisioning (MIAF)
 
-The CTT needs a client SVID issued by the MIS of the WFM under test, for that
-WFM's ID: `<WFM SPIFFE ID>/client/<client-id>`. The CTT verifies the WFM's
-certificate against the MIS CA and checks that the WFM presents exactly
-`<WFM SPIFFE ID>`; the WFM must have the CTT's client SPIFFE ID on its
-accepted-client list.
+### Identities
 
-One MIS — the Margo sandbox MIS — issues both: the WFM's own SVID and the CTT's
-client SVID. That is what makes them trust each other.
-
-- Testing **Symphony in the sandbox** — follow the steps below.
-- Testing **your own WFM** — skip to [Testing a vendor WFM](#testing-a-vendor-wfm).
-
-### Sandbox MIS as Centralized SVID Authority (Symphony)
-
-The Margo sandbox MIS (`mis.sh`) acts as the centralized SVID authority for
-all CTT identity setup. Use this path when testing the CTT against Symphony
-(WFM) in a local or sandbox environment.
-
-**Before you start — the sandbox itself.** Clone the Margo sandbox to
-`~/sandbox` and set its environment as the sandbox setup guide describes
-(`~/sandbox/docs/setup-guide.md`, Steps 1 and 2: the `.env` files in
-`~/sandbox/scripts/` and the `symphony.machine` / `harbor.machine` entries in
-`/etc/hosts`):
-
-```bash
-git clone https://github.com/margo/sandbox.git ~/sandbox
-```
-
-**Install the sandbox WFM prerequisites (once per machine):**
-
-```bash
-sudo -E bash ~/sandbox/scripts/wfm.sh
-# → 1) PreRequisites: Setup
-# When it ends with "Press Enter to continue...": press Enter, then 8 to exit
-```
-
-This is the sandbox's own installation of everything Symphony needs: Docker,
-Go, k3s, Redis, ORAS, the Harbor registry, the Symphony sources and its sample
-packages. It takes 3 to 15 minutes.
-
-> **Run it only once.** On a machine where Symphony is already set up, skip it:
-> running it again empties Symphony's accepted-client list and rebuilds Harbor
-> with a new certificate.
-
-It runs as root and leaves the Docker settings of your user owned by root, which
-later stops `oras` from reaching the registry. Give them back to your user:
-
-```bash
-sudo chown -R $USER:$USER ~/.docker
-```
-
-Note:
-    > **If `$HOME/symphony/` does not exist after prerequisites:** wfm.sh may have
-    > installed symphony to `/root/symphony/` (happens if the `-E` flag was not
-    > passed or was dropped internally). Fix it with:
-    > ```bash
-    > sudo mv /root/symphony $HOME/symphony
-    > sudo chown -R $USER:$USER $HOME/symphony
-    > ```
-
-After prerequisites, Symphony prints the three steps that must be completed
-before starting it:
-
-```
-1. Place your WFM SVID & Key in:   $HOME/symphony/api/certificates/
-2. Place the MIS HTTPS CA cert in: $HOME/symphony/api/mis/https-ca.crt
-3. Register SPIFFE IDs of WFM Clients via menu option 7
-Then: Start Symphony via menu option 3
-```
-
-The steps below do exactly that.
-
-**Step 1 — Generate identity via sandbox mis.sh:**
-
-If the sandbox MIS is not installed on this machine yet, install it first. Run
-the menu three times, with options 1, 3 and 4 in this order; each time press
-Enter at "Press Enter to continue..." and then `7` to exit:
-
-```bash
-sudo -E bash ~/sandbox/scripts/mis.sh     # → 1) PreRequisites: Setup
-sudo -E bash ~/sandbox/scripts/mis.sh     # → 3) Factory Bootstrap: Generate Root CAs
-sudo -E bash ~/sandbox/scripts/mis.sh     # → 4) Margo Identity Service: Install
-```
-
-> Option 3 creates new CAs. Do not run it again on a MIS that has already
-> issued SVIDs: every SVID issued before stops being trusted.
-
-Then generate the two SVIDs. Run the command from inside `~/mis-deployment` —
-`mis.sh` writes each SVID folder into the directory you run it from:
-
-```bash
-cd ~/mis-deployment
-sudo -E bash ~/sandbox/scripts/mis.sh generate-svid     # run 1: Symphony (the WFM)
-sudo -E bash ~/sandbox/scripts/mis.sh generate-svid     # run 2: the CTT (a client of that WFM)
-
-# the folders are created with root ownership — fix it:
-sudo chown -R $USER:$USER ~/mis-deployment
-```
-
-Answer the prompts like this:
-
-| Prompt | Run 1 — Symphony | Run 2 — CTT |
+| Principal | SPIFFE ID | X.509-SVID held by |
 |---|---|---|
-| `Enter Trust Domain [default: margo.org]:` | press Enter | press Enter |
-| `Enter choice [1/2]:` | `1` | `2` |
-| `Enter WFM ID:` | `wfm` | `wfm` |
-| `Enter WFM Client ID:` | (not asked) | `ctt-client` |
-| `Enter TTL in seconds [default: 7776000]:` | press Enter | press Enter |
-| `DNS SANs:` | press Enter | press Enter |
-| `Proceed? [Y/n]:` | press Enter | press Enter |
+| WFM | `spiffe://<trust-domain>/margo/wfm/<wfm-id>` | The WFM under test |
+| WFM Client | `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>` | The CTT |
 
-The WFM ID must be the same in both runs.
+Both X.509-SVIDs are issued by the MIS of the Trust Domain. Each side validates
+the X.509-SVID of its peer against the Trust Bundle of the Trust Domain and
+then authorizes the peer by its SPIFFE ID:
 
-**Step 2 — Check what was generated:**
+- The **WFM** obtains the Trust Bundle from the MIS (discovery document and
+  Trust Bundle retrieval endpoint) or from operator-provided configuration. Its
+  local authorization policy must contain the WFM Client SPIFFE ID of the CTT.
+- The **CTT** receives its trust material out of band, together with its
+  X.509-SVID: the SVID Root CA certificate of the MIS (`ca.crt` in the sandbox),
+  which is the X.509 trust anchor the Trust Bundle publishes. The CTT validates
+  the X.509-SVID of the WFM against this trust anchor and additionally verifies
+  that the WFM presents exactly the WFM SPIFFE ID its own WFM Client SPIFFE ID
+  is derived from.
 
-```bash
-ls ~/mis-deployment/ | grep x509svid
-# x509svid-wfm              ← Symphony's WFM SVID (server identity)
-# x509svid-wfm-ctt-client   ← the CTT's client SVID
+The HTTPS CA of the MIS (`https-ca.crt` in the sandbox) has a different role:
+it authenticates the TLS connection to the MIS trust endpoints (initial trust
+bootstrap). Only components that retrieve the Trust Bundle from the MIS need it.
+It is not used to validate X.509-SVIDs.
 
-WFM_SVID_DIR=~/mis-deployment/x509svid-wfm     # change "wfm" if you entered a different WFM ID
-```
+Two setups are described:
 
-**Step 3 — Place WFM SVID & key in Symphony's certificates directory:**
+- [Margo sandbox (Symphony)](#margo-sandbox-symphony) — the demonstration setup.
+- [WFM of a supplier](#wfm-of-a-supplier) — the conformance setup.
 
-```bash
-sudo cp ${WFM_SVID_DIR}/payload-cert.pem  $HOME/symphony/api/certificates/
-sudo cp ${WFM_SVID_DIR}/payload-key.pem   $HOME/symphony/api/certificates/
-sudo chown $USER:$USER \
-    $HOME/symphony/api/certificates/payload-cert.pem \
-    $HOME/symphony/api/certificates/payload-key.pem
+### Margo sandbox (Symphony)
 
-# Verify the cert and key match (public keys must be identical):
-openssl x509 -in $HOME/symphony/api/certificates/payload-cert.pem -noout -pubkey | openssl md5
-openssl ec  -in $HOME/symphony/api/certificates/payload-key.pem  -pubout 2>/dev/null | openssl md5
-# Both lines must print the same MD5 hash — if they differ, re-run mis.sh
-```
+The MIS and Symphony are installed as described in the Margo sandbox
+[Setup Guide](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md).
+That guide is the reference for those steps and they are not repeated here.
+The sandbox scripts obtain the sandbox and Symphony sources themselves; no
+additional clone is required. In the sandbox, the MIS is a container
+(`margo-identity-service`) that mints the X.509-SVIDs; `mis.sh` installs it and
+provides the SVID generation helper.
 
-**Step 4 — Place MIS HTTPS CA in Symphony's mis directory:**
+Follow the sections of the sandbox Setup Guide in its order — the MIS is built
+before the WFM, because the WFM configuration requires the HTTPS CA of the MIS —
+and apply the following CTT-specific inputs:
 
-```bash
-sudo cp ~/mis-deployment/certs/https-ca.crt  $HOME/symphony/api/mis/
-sudo chown $USER:$USER $HOME/symphony/api/mis/https-ca.crt
-```
-
-**Step 5 — Point mis.margo.org at the MIS machine in /etc/hosts:**
-
-Symphony, and any device-agent you run later, reach the MIS by this hostname.
-With the MIS on this same machine, the entry must be this machine's own network
-address — not `127.0.0.1`, which a device-agent running in a container cannot
-use, and not a public address, which times out. The commands below write that.
-
-With the MIS on **another machine**, write that machine's address instead
-(`echo "10.139.2.60 mis.margo.org" | sudo tee -a /etc/hosts`, with your MIS
-machine's address), make sure port 9443 to it is open, and take the files of
-Step 3 and Step 4 (the WFM's `x509svid-*` folder and `certs/https-ca.crt`) from
-the MIS machine with `scp` first.
-
-```bash
-sudo sed -i '/mis\.margo\.org/d' /etc/hosts
-echo "$(hostname -I | awk '{print $1}') mis.margo.org" | sudo tee -a /etc/hosts
-
-# Verify — prints this machine's address followed by mis.margo.org:
-grep "mis.margo.org" /etc/hosts
-```
-
-**Step 6 — Register the CTT's client SPIFFE ID (wfm.sh option 7):**
-
-```bash
-sudo -E bash ~/sandbox/scripts/wfm.sh
-```
-
-Answer the prompts like this:
-
-| Prompt | Answer |
+| Section of the sandbox Setup Guide | CTT-specific input |
 |---|---|
-| `Enter choice [1-8]:` | `7` |
-| `Use default path? [Y/n]:` | press Enter |
-| `Enter choice [1-3]:` | `1` (Add SPIFFE IDs) |
-| `>` | `spiffe://margo.org/margo/wfm/wfm/client/ctt-client` |
-| `Enter choice [1-3]:` | `3` (Back) |
-| `Press Enter to continue...` | press Enter |
-| `Enter choice [1-8]:` | `8` (Exit) |
+| [Step 1: Get the Setup Files](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#step-1-get-the-setup-files), [Step 2: Set Up Environment](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#step-2-set-up-environment) | None |
+| [Build and Run MIS](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#build-and-run-mis) | None |
+| [Generate X.509-SVIDs for WFM and WFM client](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#generate-x509-svids-for-wfm-and-wfm-client) | In addition to the WFM SVID, generate one WFM Client SVID for the CTT: principal `2`, the WFM ID of Symphony (`wfm`), WFM Client ID `ctt-client`. Result: `$HOME/workspace/sandbox/scripts/x509svid-wfm-ctt-client` |
+| [Build and Run WFM (Symphony)](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#build-and-run-wfmsymphony), step "Add WFM Client SPIFFE IDs as authorised clients" | Add the WFM Client SPIFFE ID of the CTT: `spiffe://margo.org/margo/wfm/wfm/client/ctt-client` |
+| "On Each Device VM" and later sections | Not required for this persona |
 
-The ID is the CTT's client SPIFFE ID that `mis.sh` printed in run 2.
+Notes on the sandbox installation:
 
-**Step 7 — Copy the MIS-generated client SVID into the CTT (via the CLI):**
+- Run the sandbox scripts with `sudo -E`, as the sandbox Setup Guide specifies.
+- `PreRequisites: Setup` of `wfm.sh` is intended to run once per host. To set
+  the WFM up again, first follow
+  [Cleaning Up (Starting Fresh)](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#cleaning-up-starting-fresh)
+  in the sandbox Setup Guide, then repeat the installation.
+- `Factory Bootstrap: Generate Root CAs` of `mis.sh` generates the factory PKI
+  of the MIS. Running it again regenerates the CA certificates, which
+  invalidates every previously issued X.509-SVID and the HTTPS CA of the MIS
+  trust endpoints. Do not run it more than once, unless the intention is to
+  revoke all previously issued principal identities and start again.
+- The sandbox scripts run as root and leave `$HOME/.docker` owned by root. The
+  CTT uses `oras` as the current user; restore the ownership once:
+  `sudo chown -R $USER:$USER $HOME/.docker`
+
+After the sandbox is running, complete the following CTT steps.
+
+**Step 1 — Install the identity of the CTT**
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
 # Select: 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
 #
-# When prompted:
-#   Folder containing the client SVID [~/mis-deployment]:   press Enter
-#   Which one is the CTT's client SVID? [2]:   the number of x509svid-wfm-ctt-client
-#
-# The CLI lists every SVID folder it finds. Type the number shown next to
-# x509svid-wfm-ctt-client. With only the two folders above it is 2, the default;
-# with more folders (for example after the Device Supplier setup) it is not.
+# Folder containing the client SVID:   $HOME/workspace/sandbox/scripts/x509svid-wfm-ctt-client
 ```
 
-The CLI copies the client SVID, its key and the MIS CA into
-`ctt-runner/wfm-supplier/utils/fixtures/miaf/real/`, after checking that the
-SVID was issued by that CA and is a client SVID. It reads root-owned folders
-with `sudo` when needed, and prints the client SPIFFE ID — the same one you
-registered in Step 6.
+The CLI installs the X.509-SVID, its private key and the SVID Root CA
+certificate (`$HOME/mis-deployment/certs/ca.crt`) into
+`ctt-runner/wfm-supplier/utils/fixtures/miaf/real/`. It first verifies that the
+X.509-SVID chains to that trust anchor and carries a WFM Client SPIFFE ID.
+Folders owned by root are read with `sudo`. The step ends with
+`Identity setup complete` and prints
+`CTT client SVID : spiffe://margo.org/margo/wfm/wfm/client/ctt-client`.
 
-**Step 8 — Verify certs before starting Symphony:**
+**Step 2 — Publish the CTT test Application Package to the Application Registry**
 
-```bash
-# 1. CTT SVID cert chains to the trust bundle CA (the CLI already checked this in Step 7):
-openssl verify \
-    -CAfile ctt-runner/wfm-supplier/utils/fixtures/miaf/real/trust-bundle-ca.pem \
-    ctt-runner/wfm-supplier/utils/fixtures/miaf/real/client-svid-cert.pem
-# → client-svid-cert.pem: OK
-
-# 2. MIS HTTPS server cert is reachable and chains to the MIS HTTPS CA:
-echo | openssl s_client \
-    -connect 127.0.0.1:9443 \
-    -CAfile ~/mis-deployment/certs/https-ca.crt 2>&1 | grep "Verify return code"
-# → Verify return code: 0 (ok)  (if non-zero, re-run mis.sh to regenerate certs)
-```
-
-**Step 9 — Start Symphony:**
-
-```bash
-sudo -E bash ~/sandbox/scripts/wfm.sh
-# → 3) Symphony: Start
-# When it ends with "Press Enter to continue...": press Enter, then 8 to exit
-```
-
-After a few seconds, verify it stays running:
-
-```bash
-sudo docker ps --filter name=symphony-api-container --format "{{.Names}}\t{{.Status}}"
-# Should show: symphony-api-container   Up N seconds
-# If it shows "Exited", check: sudo docker logs symphony-api-container 2>&1 | tail -20
-```
-
-**Step 10 — Put the CTT's test package into the sandbox Harbor:**
-
-The `core` group uses one Application Package in the registry, for the
-Application Registry checks and for the deployment it asks Symphony to deliver.
-Push it once:
+The `core` group uses one Application Package in the sandbox Harbor registry,
+for the Application Registry checks and for the deployment the WFM delivers as Desired State.
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
@@ -340,495 +208,388 @@ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
 # → Pushed [registry] harbor.machine:8443/library/margo-ctt-hello-world:1.0.0
 ```
 
-If it fails with `~/.docker/config.json: permission denied`, run
-`sudo chown -R $USER:$USER ~/.docker` and repeat.
+**Step 3 — Assign the test deployment to the CTT**
 
-**Step 11 — Assign the CTT's test deployment in Symphony:**
-
-The `core` and `deployment-delivery` groups test how the WFM delivers a
-deployment, so Symphony needs one assigned to the CTT's client. Do it once,
-after Step 7 (identity), Step 9 (Symphony running) and Step 10 (package pushed):
+The `core` and `deployment-delivery` groups verify how the WFM delivers a
+deployment. A deployment must therefore be assigned to the WFM Client identity
+of the CTT. For the sandbox Symphony a helper performs this assignment; it
+requires Step 1 and Step 2:
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
+# → Check on the Management Interface (...): ok
 # → Done. Multi-component deployment provisioned:
 ```
 
-The helper ends with a check on Symphony's Management Interface
-(`Check on the Management Interface (...): ok`). Run it again after you install
-a different client SVID, after a reboot of the machine, and after Symphony was
-restarted or rebuilt: Symphony then often lists no deployment or fails the
-bundle download, and the helper sees that and creates the deployment again. If you
-skip it, the run shows this same command when it reaches the deployment
-scenario and waits 5 minutes for you to run it in a second terminal. Details:
+Run the helper again after a different WFM Client SVID is installed, after a
+reboot of the host, and after Symphony is restarted or rebuilt. In those cases
+Symphony may list no deployment in the State Manifest or fail the Deployment Bundle download; the helper detects
+this and assigns the deployment again. Details are given in
 [Deployment scenario](#deployment-scenario-assign-a-deployment-to-the-ctts-client).
 
-### Testing a vendor WFM
+### WFM of a supplier
 
-Use this instead of the Symphony steps above when the WFM under test is your
-own. The same sandbox MIS issues the SVID your WFM presents and the SVID the
-CTT presents. The examples use the WFM ID `acme-wfm` — use one name per WFM.
+The WFM under test and the CTT must belong to the same Trust Domain. Its MIS
+issues both X.509-SVIDs. The examples use the sandbox MIS and the WFM ID
+`acme-wfm`; the WFM ID is assigned by the operator of the Trust Domain.
 
-**Step 1 — On the MIS machine, generate the two SVIDs:**
+**Step 1 — Issue the X.509-SVIDs**
+
+On the MIS host, generate the SVIDs as described in
+[Generate X.509-SVIDs for WFM and WFM client](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#generate-x509-svids-for-wfm-and-wfm-client)
+of the sandbox Setup Guide, with these inputs:
+
+| Prompt | WFM under test | CTT |
+|---|---|---|
+| Principal | `1` (WFM) | `2` (WFM Client) |
+| WFM ID | `acme-wfm` | `acme-wfm` |
+| WFM Client ID | not asked | `ctt-client` |
+
+**Step 2 — Provide the WFM with its identity and trust material**
+
+| Item | Source in the sandbox MIS |
+|---|---|
+| X.509-SVID and private key of the WFM, served on its mTLS endpoint | `x509svid-acme-wfm/payload-cert.pem`, `payload-key.pem` |
+| Trust Bundle of the Trust Domain | Retrieved from the MIS: `https://mis.margo.org:9443`, authenticated with the HTTPS CA `$HOME/mis-deployment/certs/https-ca.crt` — or provided by configuration: the SVID Root CA certificate `$HOME/mis-deployment/certs/ca.crt` |
+| WFM Client SPIFFE ID to authorize in the local authorization policy | `spiffe://margo.org/margo/wfm/acme-wfm/client/ctt-client` |
+
+When the WFM retrieves the Trust Bundle from the MIS, verify from the WFM host
+that the Trust Bundle retrieval endpoint is reachable:
 
 ```bash
-cd ~/mis-deployment
-sudo -E bash ~/sandbox/scripts/mis.sh generate-svid     # run 1: the vendor's WFM
-sudo -E bash ~/sandbox/scripts/mis.sh generate-svid     # run 2: the CTT (a client of that WFM)
-sudo chown -R $USER:$USER ~/mis-deployment
+curl --cacert https-ca.crt https://mis.margo.org:9443/.well-known/spiffe/bundle.json
+# → a SPIFFE bundle (JSON document with "keys")
 ```
 
-| Prompt | Run 1 — vendor's WFM | Run 2 — CTT |
-|---|---|---|
-| `Enter choice [1/2]:` | `1` | `2` |
-| `Enter WFM ID:` | `acme-wfm` | `acme-wfm` |
-| `Enter WFM Client ID:` | (not asked) | `ctt-client` |
-| every other prompt | press Enter | press Enter |
-
-**Step 2 — Give the WFM's owner these three things:**
-
-| What | Where it comes from |
-|---|---|
-| The WFM's SVID and key, to serve on its mTLS port | `~/mis-deployment/x509svid-acme-wfm/payload-cert.pem` and `payload-key.pem` |
-| What to trust client SVIDs with | the CA file `~/mis-deployment/certs/ca.crt` — or the MIS itself: `https://mis.margo.org:9443`, its HTTPS CA `~/mis-deployment/certs/https-ca.crt`, and a hosts entry `<MIS-machine-IP> mis.margo.org` |
-| The client to accept | `spiffe://margo.org/margo/wfm/acme-wfm/client/ctt-client` |
-
-**Step 3 — Install the CTT's client SVID through the CLI:**
+**Step 3 — Install the identity of the CTT**
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
 # Select: 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
 #
-# When prompted:
-#   Folder containing the client SVID [~/mis-deployment]:   press Enter
-#   Which one is the CTT's client SVID?:   the number of x509svid-acme-wfm-ctt-client
+# Folder containing the client SVID:   the folder x509svid-acme-wfm-ctt-client
 ```
 
-It must end with `Identity setup complete` and print
+The step ends with `Identity setup complete` and prints
 `CTT client SVID : spiffe://margo.org/margo/wfm/acme-wfm/client/ctt-client`.
 
-**If the MIS runs on a different machine than the CTT:** on the MIS machine,
-put the three files the CTT needs into one folder and copy that folder to the
-CTT machine. The `x509svid-*` folders are in the folder `mis.sh` was run from;
-`ca.crt` is always in the MIS deployment folder.
+When the MIS runs on a different host than the CTT, transfer the three files
+the CTT requires and provide the folder to the same CLI step:
 
 ```bash
-# On the MIS machine, in the folder that holds the x509svid-* folders
+# On the MIS host, in the folder that contains the x509svid-* folders
 mkdir -p ~/ctt-certs
 cp x509svid-acme-wfm-ctt-client/payload-cert.pem ~/ctt-certs/client-svid-cert.pem
 cp x509svid-acme-wfm-ctt-client/payload-key.pem  ~/ctt-certs/client-svid-key.pem
 cp ~/mis-deployment/certs/ca.crt                 ~/ctt-certs/mis-ca.crt
 
-# Copy the folder to the home directory of the CTT machine
-scp -r ~/ctt-certs ctt-user@ctt-machine:~/
+# Transfer the folder to the home directory of the CTT host
+scp -r ~/ctt-certs ctt-user@ctt-host:~/
 ```
 
-Then run the same CLI step on the CTT machine and answer
-`Folder containing the client SVID` with `~/ctt-certs`. The same folder also
-works for the Device Supplier setup when it holds the mock WFM's SVID as
-`wfm-svid-cert.pem` and `wfm-svid-key.pem`.
+The same folder serves the Device Supplier setup when it also contains the
+X.509-SVID of the mock WFM as `wfm-svid-cert.pem` and `wfm-svid-key.pem`.
 
-**If the WFM takes its trust from the MIS (port 9443):** the WFM machine must
-reach the MIS machine on port 9443, and `mis.margo.org` in its `/etc/hosts`
-must point at the MIS machine's address. Check it from the WFM machine, with
-the MIS's `https-ca.crt` copied there:
+**Step 4 — Select the Application Package for the Application Registry checks**
 
-```bash
-curl --cacert https-ca.crt https://mis.margo.org:9443/.well-known/spiffe/bundle.json
-# → a JSON document with "keys"; an error here means the WFM cannot fetch its trust from the MIS
-```
-
-**Step 4 — Point the Application Registry checks at the vendor's registry:**
-
-The `core` group also checks the Application Registry. Before starting the CLI
-in Phase 2, name one Application Package in that registry:
+The `core` group also verifies the Application Registry. Before the CLI is
+started in Phase 2, name one Application Package in the registry of the
+supplier:
 
 ```bash
-oras login <registry-host>                          # only if it needs credentials
+oras login <registry-host>                          # only if the registry requires credentials
 export REGISTRY_REF=<registry-host>/<repository>:<tag>
 ```
 
-The CTT machine must trust the registry's TLS certificate. If the registry uses
-its own CA, add that CA to the machine's trust store first
+The CTT host must trust the TLS certificate of the registry. If the registry
+uses a private CA, add that CA to the trust store of the host first
 (`sudo cp registry-ca.crt /usr/local/share/ca-certificates/ && sudo update-ca-certificates`).
+
+**Step 5 — Assign a deployment to the CTT**
+
+In the WFM, assign an application deployment to the WFM Client identity of the
+CTT. The requirements for that deployment are given in
+[Deployment scenario](#deployment-scenario-assign-a-deployment-to-the-ctts-client).
 
 ---
 
-## Phase 2 — Run the conformance suite
+## Phase 2 — Test execution
 
-Once the identity from Phase 1 is in place, everything else is driven by the
-CLI prompts.
-
-### Launch the runner
+### Start the CLI and select a test group
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
+# Select: 1) WFM Supplier → 2) Functional tests (Group-based test management) → the group
 ```
 
-You will see an interactive menu. Select:
+A group is a named set of tests of the suite. The report states the group that
+was executed.
 
-```
-1) WFM Supplier
-```
-
-Then:
-
-```
-2) Functional tests   (Group-based test management)
-```
-
-Then select the group. A group is a named set of tests from the suite, so you
-can run one area at a time and the report states which set was run:
-
-| Group | What it checks | When to run it |
+| Group | Scope | Typical use |
 |---|---|---|
-| `quick-check` | Identity accepted over mTLS, a device registered, manifest served, conditional request answered (6 steps) | First, to confirm the URL and the identity setup |
-| `management-interface` | The Management Interface API: capabilities, desired state, content negotiation, status, ETag and cache headers | While working on the API |
-| `deployment-delivery` | A multi-component deployment: manifest URLs, deployment YAML, bundle archive and their digests | While working on deployment delivery |
-| `identity` | mTLS handshake, trust bundle, refused clients, SVID rotation | While working on MIAF |
-| `application-registry` | The OCI Application Registry: manifest, media types, pulls, tags | While working on the registry |
-| `observability` | A device reporting an OpenTelemetry collector is accepted | While working on observability |
-| `device-unregister` | `DELETE /api/v1/capabilities/{deviceId}` | Against your own WFM, as a separate run |
-| `postman-lifecycle`, `postman-error-handling` | Positive and negative requests written in Postman | As examples for adding your own tests from Postman |
-| `core` | Everything above except `device-unregister` | For the conformance result |
+| `core` | All groups below except `device-unregister` | Conformance result |
+| `quick-check` | mTLS authentication, Device Capabilities, Desired State, conditional request (6 steps) | Verification of the URL and the identity setup |
+| `management-interface` | Margo Management Interface: Device Capabilities, Desired State, content negotiation, Deployment Status, ETag and cache headers | Work on the Management Interface |
+| `deployment-delivery` | Delivery of a multi-component deployment: State Manifest URLs, ApplicationDeployment YAML, Deployment Bundle and their digests | Work on deployment delivery |
+| `identity` | MIAF: mTLS handshake, rejected clients, SVID rotation | Work on MIAF |
+| `application-registry` | Application Registry (OCI): manifest, media types, pulls, tags | Work on the registry |
+| `observability` | A device that declares an OpenTelemetry collector is accepted | Work on observability |
+| `device-unregister` | `DELETE /api/v1/capabilities/{deviceId}` | Separate run against the WFM of a supplier |
+| `postman-lifecycle`, `postman-error-handling` | Positive and negative requests authored in Postman | Examples for tests authored in Postman |
 
-For the full WFM conformance test set:
+The `device-unregister` group is separate from `core` because the sandbox
+Symphony build stops responding when it receives this request (its service
+restarts after about one minute). The format of the Postman groups is described
+in `docs/MARGO_Conformance _Approach.md`, section "Postman Template for
+Expressing sequences of API exchanges".
 
-```
-2) core            (v1.0.0-rc.3)
-```
-
-Enter the number shown next to `core` in the list.
-
-`core` does not include the `DELETE /api/v1/capabilities/{deviceId}` check
-(unregister a device). That one is in its own group, `device-unregister`, so it
-is only sent when you choose to: the Symphony sandbox build stopped responding
-when it received this request (its service restarts by itself after about a
-minute). Run `device-unregister` against your own WFM as a separate run.
-
-The two Postman groups, `postman-lifecycle` (10 requests) and
-`postman-error-handling` (7 requests), run the same way as `core`. The format is
-described in `docs/MARGO_Conformance _Approach.md`, section "Postman Template
-for Expressing sequences of API exchanges".
-
-### Enter your WFM endpoints
-
-The runner will prompt for two URLs:
+### Provide the Margo Management Interface URL
 
 ```
-  The WFM SBI URL is everything before /api/v1 — the CTT adds /api/v1/... itself.
+  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1.
     Symphony sandbox : https://localhost:8084/v1alpha2/margo
     Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)
-Enter WFM SBI URL:
+Enter Margo Management Interface URL:
 ```
 
-This is the **SBI (South-Bound Interface)** — the port the WFM exposes for
-device agents. It is the mTLS port. Enter the address up to, but not including,
-`/api/v1`:
+Enter the address up to, but not including, `/api/v1`; the CTT appends the API
+paths. Examples:
 
-- Symphony sandbox: `https://localhost:8084/v1alpha2/margo`
+- Sandbox Symphony: `https://localhost:8084/v1alpha2/margo`
 - A WFM that serves `https://wfm.example.com/api/v1/deployments`: `https://wfm.example.com`
 
 ```
 Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, ...]:
 ```
 
-Press Enter to use the same URL — the first URL is already the mTLS port. Only
-enter a different URL if your WFM serves mTLS on another port than the URL you
-gave first. For Symphony sandbox: press Enter.
+Press Enter. A different URL is required only when the WFM serves its mTLS
+endpoint on another port than the URL entered first.
 
 ### Deployment scenario: assign a deployment to the CTT's client
 
 The groups `core` and `deployment-delivery` contain the scenario
-`wfm-multi-component-deployment`. It checks how the WFM delivers a deployment
-(manifest, deployment file, bundle), so the WFM must have an application
-deployment assigned to the CTT's client.
+`wfm-multi-component-deployment`. It verifies how the WFM delivers a deployment
+(State Manifest, ApplicationDeployment YAML, Deployment Bundle). The WFM must therefore have
+an application deployment assigned to the WFM Client identity of the CTT.
 
-Assigning a deployment is an operator action in the WFM. The Margo
-specification does not define it, so the CTT does not do it and does not ask
-for your WFM's operator (northbound) API. The run only says what is needed:
+Assigning a deployment is an operator action in the WFM. It is not defined by
+the Margo specification; the CTT therefore does not perform it and does not use
+any operator (northbound) API of the WFM. The run states what is required:
 
 ```
-────────────────────────────────────────────────────────────────
 ℹ️  This group tests deployment delivery. The WFM must have an application
 ℹ️  deployment assigned to the CTT's client:
 ℹ️      spiffe://margo.org/margo/wfm/wfm/client/ctt-client
 ℹ️  with two components, one 'wait: true' and one 'wait: false'.
-ℹ️  Assign it in your WFM (console or operator API). If it is not there yet,
-ℹ️  the run waits up to 5 minutes for it when it reaches that scenario.
-────────────────────────────────────────────────────────────────
 ```
 
-The SPIFFE ID shown is read from the client SVID installed in Phase 1.
+- **Sandbox Symphony:** run the helper of
+  [Phase 1, Step 3](#margo-sandbox-symphony) before the run. The helper is not
+  part of the conformance run: it uses the operator API of Symphony, as the
+  sandbox `wfm-cli.sh` does.
+- **WFM of a supplier:** in the WFM, assign an application deployment to the
+  WFM Client SPIFFE ID shown. The deployment must have two components, one with
+  `wait: true` and one with `wait: false`; its required content is described in
+  `ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`.
 
-**Symphony sandbox:** run this helper once, before you start the run (Phase 1, Step 11):
-
-```bash
-cd $HOME/workspace/conformance_test_toolkit
-bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
-```
-
-It ends with `Done. Multi-component deployment provisioned`. The helper is not
-part of the conformance run: it uses Symphony's own operator API (port 8082,
-the same one the sandbox `wfm-cli.sh` uses) to register the package you pushed
-in Phase 1, Step 10 and to assign a deployment to the CTT's client. Running it
-again does nothing when the deployment is already there.
-
-**Your own WFM:** use your WFM's own console or operator API to assign a
-deployment to the client shown above. The deployment needs **two components,
-one with `wait: true` and one with `wait: false`**; what it must contain is
-described in
-`ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`.
-You can do this before the run, or while the run waits.
-
-**If no deployment is assigned when the run reaches the scenario**, the run
-tells you what to do and waits up to 5 minutes:
+When no deployment is assigned at the time the run reaches the scenario, the
+run prints the instructions again and waits up to 5 minutes:
 
 ```
   [efd8ad9d-...]  Wait For The Multi-Component Deployment To Be Assigned To The CTT's Client
     👉 The WFM lists no deployment for the CTT's client yet: spiffe://margo.org/margo/wfm/wfm/client/ctt-client
-    👉 The steps of this scenario need one. Assign it now, in a second terminal or in your WFM's console; the run continues by itself:
-    👉   - Sandbox Symphony:  bash .../ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
-    👉   - Your own WFM:      in its console or operator API, assign an application deployment to that client.
-    👉                        It needs two components, one 'wait: true' and one 'wait: false'
-    👉                        (see .../ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml).
-    👉 If nothing is assigned in time, the steps of this scenario are reported as NOT RUN.
-
+    ...
     ⏳ [poll attempt 1] not ready yet (deployments expected length >= 1, got 0) — retrying in 10s (waiting up to 299s more)...
 ```
 
-As soon as the WFM lists the deployment, the run continues by itself. After 5
-minutes without a deployment, the wait step and the steps after it in this
-scenario are reported as `NOT RUN` with the reason — they are not failures,
-because the WFM was not judged on them. Assign the deployment and run the group
-again to get a result for them.
+The run continues as soon as the State Manifest lists the deployment. If none is listed
+within 5 minutes, the waiting step and the following steps of the scenario are
+reported as `NOT RUN` with the reason. They are not failures, because the WFM
+was not assessed on them. Assign the deployment and execute the group again to
+obtain a result for these steps.
 
-### The report and its signed PDF
+### Conformance report and signed PDF
 
-The report is written to `ctt-runner/reports/wfm-supplier/`. Every run leaves
-three files there:
+Each run writes three files to `ctt-runner/reports/wfm-supplier/`:
 
 ```
-wfm-scenario-report-core_<timestamp>.html          the report, open it in any browser
+wfm-scenario-report-core_<timestamp>.html          conformance report
 wfm-scenario-report-core_<timestamp>_signed.pdf    the same report as a digitally signed PDF
-ca_cert.pem                           the certificate needed to check the signature
+ca_cert.pem                                        certificate required to verify the signature
 ```
 
-The WFM Supplier and the Device Supplier reports use the same layout:
+The WFM Supplier and Device Supplier reports use the same layout:
 
-| Part | What it shows |
-|------|---------------|
-| Header | Persona, group, claimed version, CTT Margo version, system under test (the WFM URL), run time |
+| Part | Content |
+|---|---|
+| Header | Persona, group, claimed version, CTT Margo version, system under test, time of the run |
 | Result line | Steps passed, failed, not run, total |
-| Requirements Coverage | One row per requirement ID: `PASS`, `FAIL` or `NOT RUN`, and the steps that check it |
+| Requirements Coverage | One row per requirement ID: `PASS`, `FAIL` or `NOT RUN`, and the steps that verify it |
 | Scenario Summary | Passed, failed and not run steps per scenario |
-| Step Details | Every step: requirement IDs, method, endpoint, expected and actual HTTP code, result, reason |
+| Step Details | Every step: requirement IDs, method, endpoint, expected and actual HTTP status, result, reason |
 
-A requirement is `FAIL` when any step that checks it failed, `PASS` when at
+A requirement is `FAIL` when any step that verifies it failed, `PASS` when at
 least one of its steps passed and none failed, and `NOT RUN` when none of its
-steps ran.
+steps was executed. A step is `NOT RUN` when its precondition is absent; it is
+neither a pass nor a failure.
 
-#### The signed PDF
+**Signed PDF.** The signed PDF is created automatically at the end of every
+run. The first run installs the PDF tools (requires `sudo` and internet access,
+about one minute); later runs take about 15 seconds. The signature proves that
+the PDF was not modified after the run. By default the CTT signs with its own
+certificate authority, created on the host at first use and kept in
+`scripts/signing-identity/`; all reports signed on that host verify against the
+same `ca_cert.pem`. Submit the signed PDF together with `ca_cert.pem` as the
+evidence of the conformance run.
 
-The signed PDF is created automatically at the end of every run; there is no
-extra command. The run prints:
-
-```
-🔏 Creating the signed PDF report (the first time this installs the PDF tools and may ask for sudo)...
-✅ Signed report: .../ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf
-ℹ️  Signer CA certificate (send it with the report): .../ctt-runner/reports/wfm-supplier/ca_cert.pem
-```
-
-The first run installs the PDF tools (needs sudo and internet, about one
-minute). Later runs take about 15 seconds.
-
-The signature shows that the PDF was not changed after the run. The CTT signs
-with its own certificate authority, created on this machine the first time and
-kept in `scripts/signing-identity/`. All reports signed on this machine use
-that one authority, so one `ca_cert.pem` checks all of them. Send `ca_cert.pem`
-together with the PDF.
-
-Check a signed report (use the file name the run printed):
+Verify a signed report:
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 scripts/.venv/bin/python scripts/pdf_verify.py \
   ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf \
   ctt-runner/reports/wfm-supplier/ca_cert.pem
+# Unchanged since signing : yes
+# Signer chains to ctt-runner/reports/wfm-supplier/ca_cert.pem : yes
+# RESULT    : signature OK
 ```
 
-Expected:
-
-```
-Unchanged since signing : yes
-Signer chains to ctt-runner/reports/wfm-supplier/ca_cert.pem : yes
-RESULT    : signature OK
-```
-
-Options, set in front of the run command:
-
-| To do this | Run |
-|------------|-----|
+| Option | Command |
+|---|---|
 | Skip the signed PDF | `CTT_SIGN_REPORT=no bash ctt-runner/ctt-start.sh` |
-| Sign with your own certificate (a `.p12` file) | `CTT_SIGN_CERT=/path/to/signer.p12 CTT_SIGN_PASSPHRASE=secret bash ctt-runner/ctt-start.sh` |
-| Sign an older HTML report by hand | `bash scripts/pdf_ops.sh ctt-runner/reports/wfm-supplier/name-of-report.html` (the PDF goes to `./generatedReport/`) |
+| Sign with a provided certificate (`.p12`) | `CTT_SIGN_CERT=/path/to/signer.p12 CTT_SIGN_PASSPHRASE=secret bash ctt-runner/ctt-start.sh` |
+| Sign an existing HTML report | `bash scripts/pdf_ops.sh ctt-runner/reports/wfm-supplier/name-of-report.html` (output in `./generatedReport/`) |
 
-If the signed PDF cannot be created, the run says so and the reason is in
-`ctt-runner/reports/wfm-supplier/report-signing.log`. The test result and the
-HTML report are not affected.
+If the signed PDF cannot be created, the run reports the cause; the test result
+and the HTML report are not affected.
 
-A step shown as `NOT RUN` was not sent because its precondition is missing —
-it is neither a pass nor a failure. Today this applies to the SVID Rotation
-scenario (below).
+### Reference result: sandbox Symphony
 
-The signed PDF, together with `ca_cert.pem`, is the artifact you submit as
-evidence of conformance.
+A `core` run takes about one minute. Against the sandbox Symphony build
+verified with this guide (October 2026) the result is **52 steps: 39 passed,
+11 failed, 2 not run**, and **28 of 36 requirements passing, 7 failing,
+1 not run**. The failures are deviations of that Symphony build from Margo
+`1.0.0-rc.3`; they do not indicate a setup error:
 
-### What to expect on the sandbox Symphony
-
-A `core` run takes about one minute. Against the sandbox Symphony build tested
-with this guide (October 2026) it ends with **52 steps: 39 passed, 11 failed,
-2 not run**, and **28 of 36 requirements passing, 7 failing, 1 not run**. The failures are places where that Symphony build differs from
-Margo 1.0.0-rc.3; they are not a problem of your setup:
-
-| Failing step | What Symphony does | Requirement shown as FAIL |
+| Failing step | Behaviour of Symphony | Requirement reported as FAIL |
 |---|---|---|
-| `wfm-core-cap-3`, `wfm-core-cap-4`, `wfm-core-cap-5` | accepts capabilities with an invalid deployment type, an invalid runtime, or without `vendor` (201 instead of 422) | MANAGEMENTINTERFACE-023 |
-| `wfm-core-cn-1` | answers an unsupported `Accept` with 400 instead of 406 | MANAGEMENTINTERFACE-008 |
-| `wfm-core-ds-2` | answers a request without `Accept` with 400 instead of the manifest | MANAGEMENTINTERFACE-007 |
-| `wfm-core-ds-not-immutable`, `wfm-mc-manifest-not-immutable` | marks the manifest `Cache-Control: ... immutable` | MANAGEMENTINTERFACE-035 |
-| `wfm-core-status-1` | answers a status report for an unknown deployment with 500 | MANAGEMENTINTERFACE-023 |
-| `step-wfm-hi-1.3` | the manifest `ETag` is not the digest of the response body | MANAGEMENTINTERFACE-015, -036 |
-| `wfm-mc-manifest-urls` | manifest URLs have the form `/api/v1/clients/<spiffe-id>/...` | MANAGEMENTINTERFACE-023 |
-| `wfm-mc-bundle-cache` | the bundle's `Cache-Control` is `public` instead of `private` | MANAGEMENTINTERFACE-038 |
+| `wfm-core-cap-3`, `wfm-core-cap-4`, `wfm-core-cap-5` | Accepts Device Capabilities with an invalid deployment type, an invalid runtime, or without `vendor` (201 instead of 422) | MANAGEMENTINTERFACE-023 |
+| `wfm-core-cn-1` | Answers an unsupported `Accept` header with 400 instead of 406 | MANAGEMENTINTERFACE-008 |
+| `wfm-core-ds-2` | Answers a request without `Accept` header with 400 instead of the State Manifest | MANAGEMENTINTERFACE-007 |
+| `wfm-core-ds-not-immutable`, `wfm-mc-manifest-not-immutable` | Marks the State Manifest `Cache-Control: ... immutable` | MANAGEMENTINTERFACE-035 |
+| `wfm-core-status-1` | Answers a Deployment Status report for an unknown deployment with 500 | MANAGEMENTINTERFACE-023 |
+| `step-wfm-hi-1.3` | The `ETag` of the State Manifest is not the digest of the response body | MANAGEMENTINTERFACE-015, -036 |
+| `wfm-mc-manifest-urls` | URLs in the State Manifest have the form `/api/v1/clients/<spiffe-id>/...` | MANAGEMENTINTERFACE-023 |
+| `wfm-mc-bundle-cache` | `Cache-Control` of the Deployment Bundle is `public` instead of `private` | MANAGEMENTINTERFACE-038 |
 
-Each step carries only the requirement IDs that its own checks judge, so one
-difference turns only its own requirement to FAIL.
+Each step carries only the requirement IDs its own checks verify; one deviation
+therefore affects only its own requirement. The 2 steps not run belong to the
+SVID rotation scenario described below.
 
-The 2 steps not run are the SVID Rotation scenario; they run and pass after the
-steps in the next section.
+### SVID rotation scenario
 
-### SVID Rotation scenario
+This scenario verifies that the WFM continues to accept the CTT after its
+X.509-SVID is reissued for the same SPIFFE ID, without any change to the local
+authorization policy. It requires two X.509-SVIDs for the same SPIFFE ID and is
+therefore `NOT RUN` after the initial setup. To execute it:
 
-This scenario checks that the WFM keeps accepting the CTT after its client SVID
-is re-issued, without the client being registered again. It needs two SVIDs for
-the same SPIFFE ID, so it is `NOT RUN` on a first setup. To run it:
-
-1. Complete Phase 1 and run the suite once with the first SVID.
-2. Re-issue the client SVID for the **same** WFM ID and client ID
-   (sandbox: `cd ~/mis-deployment`, then `sudo -E bash ~/sandbox/scripts/mis.sh`
-   → 6) Generate SVID → principal 2, same IDs).
-3. Run Setup MIAF Identity again (Phase 1, Step 7). The CLI installs the new
-   SVID and keeps the one it replaces, and says so.
-4. Run the suite again (the group `identity` is enough to see this scenario).
-   It now sends one request with the earlier SVID and one with the new SVID;
-   both must succeed.
+1. Complete Phase 1 and run a group once with the first X.509-SVID.
+2. Reissue the WFM Client SVID of the CTT with the same WFM ID and WFM Client
+   ID, as described in
+   [Renewal and Reissuance](https://github.com/margo/sandbox/blob/main/docs/identity-lifecycle.md#renewal-and-reissuance)
+   of the sandbox Identity Lifecycle guide.
+3. Repeat the identity installation of Phase 1 (`Setup MIAF Identity`). The
+   CLI installs the new X.509-SVID, retains the one it replaces and reports
+   this.
+4. Run the group `identity`. It sends one request with the previous X.509-SVID
+   and one with the new one; both must succeed.
 
 ---
 
-## Certificate expiry and renewal
+## Certificate validity and renewal
 
-| File | TTL | What to do when expired |
+| File in `ctt-runner/wfm-supplier/utils/fixtures/miaf/real/` | Validity | Action on expiry |
 |---|---|---|
-| `miaf/real/client-svid-cert.pem` | ~90 days (MIS-issued) | Generate a new client SVID and re-run Setup MIAF Identity (Phase 1) |
-| `miaf/real/trust-bundle-ca.pem` | Matches the MIS CA lifetime | Re-run Setup MIAF Identity (Phase 1) |
-
-Check expiry any time:
+| `client-svid-cert.pem` — X.509-SVID of the CTT | About 90 days (sandbox MIS default) | Reissue the WFM Client SVID and repeat `Setup MIAF Identity` |
+| `trust-bundle-ca.pem` — SVID Root CA certificate (trust anchor) | Lifetime of the Root CA of the MIS | Repeat `Setup MIAF Identity` after the Root CA is replaced |
 
 ```bash
-openssl x509 -in ctt-runner/wfm-supplier/utils/fixtures/miaf/real/client-svid-cert.pem \
-    -noout -enddate
+openssl x509 -in ctt-runner/wfm-supplier/utils/fixtures/miaf/real/client-svid-cert.pem -noout -enddate
 ```
 
-If you see TLS handshake errors (`certificate required`, `unknown CA`,
-`certificate has expired`) during a test run, the SVID or trust bundle is the
-first thing to check.
+TLS handshake errors during a run (`certificate required`, `unknown CA`,
+`certificate has expired`) indicate that the X.509-SVID or the trust anchor
+must be checked first.
 
 ---
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
+| Symptom | Cause | Resolution |
 |---|---|---|
-| Setup MIAF Identity: `The client SVID was not issued by the given MIS CA` | SVID and CA come from different MIS setups | Give the folder (or CA file) of the MIS that issued the SVID; nothing was changed |
-| Setup MIAF Identity: `That is not a client SVID` | The WFM's own SVID folder was picked | Run it again and pick the client SVID (`.../client/<client-id>`) |
-| `MIAF cert validation failed` when a run starts | Identity files replaced by hand with a mismatched cert / key / CA | Re-run Setup MIAF Identity (Phase 1) |
-| Every step: `unable to verify the first certificate` | The WFM's certificate was not issued by the MIS CA in `trust-bundle-ca.pem` — Phase 1 was skipped, the wrong MIS was used, or `git checkout` / `git pull` put the repository's sample certs back | Re-run Setup MIAF Identity with the folder of the MIS that issued the WFM's SVID |
-| Every step: `WFM presented ..., expected ...` | The WFM's SVID is not the WFM the CTT's client SVID belongs to | Issue the CTT a client SVID for this WFM's ID (`<WFM SPIFFE ID>/client/<client-id>`) |
-| Every step: `certificate required` / `bad certificate` / `403` | The WFM does not accept the CTT's client SVID | Add the client SPIFFE ID printed by Setup MIAF Identity to the WFM's accepted-client list (Symphony: `wfm.sh` → 7) |
-| Every step: `ECONNREFUSED` / `could not reach the WFM` | Wrong SBI URL, or the WFM is not running | Check the URL and port (Symphony: `https://localhost:8084/v1alpha2/margo`) |
-| `certificate has expired` | Client SVID or WFM SVID past its TTL | Generate new SVIDs and re-run Setup MIAF Identity |
-| Application Registry steps fail | `oras` not installed, not logged in, or the package is not in the registry | Install `oras`, `oras login <registry>`; Symphony sandbox: run `push.sh` (see Phase 2); own WFM: set `REGISTRY_REF` |
-| Application Registry steps fail with `tls: failed to verify certificate` | The CTT machine does not trust the registry's certificate | Add the registry's CA to the machine's trust store (see Testing a vendor WFM, Step 4) |
-| Setup MIAF Identity says `No known layout found` and asks for three files | The folder you gave holds neither `x509svid-*` folders nor the flat file set | Give the folder you ran `mis.sh` from (it holds the `x509svid-*` folders and `certs/ca.crt`), or the client's own `x509svid-*` folder. Press Ctrl+C and run the step again |
-| `Signed PDF not created` at the end of a run | Shown on screen under the message. Usual causes: the repository folder is owned by root (cloned or run with `sudo`), or no internet for the first-time tool install | Fix the cause shown (for ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `PDF_OUTPUT_DIR=... bash .../scripts/pdf_ops.sh ...` command the run printed. The test result and the HTML report are not affected |
-| `wfm-mc-bundle-fetch` and `wfm-mc-bundle-contents` fail with HTTP 500 on Symphony | The machine was rebooted or Symphony was restarted; Symphony lost the bundle file | Run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` again — it detects this and creates the deployment again — then start the run again |
-| The deployment scenario's steps are `NOT RUN` ("no application deployment ... appeared within 5 minutes") | No deployment was assigned to the CTT's client | Symphony: run `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh` and start the run again. Own WFM: assign the deployment in your WFM, to the client SPIFFE ID the run printed. If you did assign one, your WFM does not list it in `GET /api/v1/deployments` |
-| `ERROR: failed to get auth token` from the Symphony helper | Symphony is not running, or its operator API is not on `https://localhost:8082/v1alpha2` with user `admin` | Start Symphony (`wfm.sh` option 3), or pass `--nbi-url`, `--nbi-user`, `--nbi-pass` to the helper. The helper works only with Symphony |
-| Steps fail with unexpected 500 | WFM internal error | This is a WFM implementation gap — note the CR-ID in the report and report to your WFM vendor |
-| `Cache-Control: immutable` failure on manifest endpoint | WFM sets immutable on a mutable resource | WFM implementation gap — the manifest changes when deployments are added/removed (MI-035) |
+| `Setup MIAF Identity`: `The client X.509-SVID does not chain to the given SVID Root CA` | The X.509-SVID and the Root CA certificate originate from different MIS installations | Provide the folder (or Root CA certificate) of the MIS that issued the X.509-SVID. No file is changed by the failed attempt |
+| `Setup MIAF Identity`: `That is not a client SVID` | The SVID folder of the WFM was selected | Repeat the step and select the WFM Client SVID (`.../client/<wfm-client-id>`) |
+| `Setup MIAF Identity`: `No known layout found` | The folder contains neither `x509svid-*` folders nor the flat file set | Provide the SVID folder of the CTT (`x509svid-<wfm-id>-<wfm-client-id>`), the folder that contains it, or a folder with `client-svid-cert.pem`, `client-svid-key.pem` and `mis-ca.crt` |
+| `MIAF cert validation failed` at the start of a run | Identity files were replaced manually with an inconsistent certificate, key or Root CA | Repeat `Setup MIAF Identity` |
+| Every step: `unable to verify the first certificate` | The X.509-SVID of the WFM does not chain to the installed trust anchor: Phase 1 was skipped or a different MIS issued the WFM SVID | Repeat `Setup MIAF Identity` with the material of the MIS that issued the WFM SVID |
+| Every step: `WFM presented ..., expected ...` | The WFM SPIFFE ID is not the one the WFM Client SPIFFE ID of the CTT is derived from | Issue the CTT a WFM Client SVID for the WFM ID of this WFM |
+| Every step: `certificate required`, `bad certificate` or `403` | The WFM does not authorize the X.509-SVID of the CTT | Add the WFM Client SPIFFE ID printed by `Setup MIAF Identity` to the local authorization policy of the WFM (Symphony: `wfm.sh` option 7) |
+| Every step: `ECONNREFUSED` or `could not reach the WFM` | Incorrect Margo Management Interface URL, or the WFM is not running | Verify the URL and port (Symphony: `https://localhost:8084/v1alpha2/margo`) |
+| `certificate has expired` | An X.509-SVID has exceeded its validity | Reissue the SVIDs and repeat `Setup MIAF Identity` |
+| Application Registry steps fail with `not found` | The Application Package is not in the registry | Sandbox: publish it (Phase 1, Step 2). WFM of a supplier: set `REGISTRY_REF` |
+| Application Registry steps fail otherwise | `oras` is not installed or not logged in | Install `oras`; run `oras login` for the registry |
+| Application Registry steps fail with `tls: failed to verify certificate` | The CTT host does not trust the TLS certificate of the registry | Add the CA of the registry to the trust store of the host |
+| Steps of the deployment scenario are `NOT RUN` ("no application deployment ... appeared within 5 minutes") | No deployment is assigned to the WFM Client identity of the CTT | Sandbox: run `provision-multi-component.sh`, then repeat the run. WFM of a supplier: assign the deployment to the SPIFFE ID the run printed. If a deployment was assigned, the WFM does not list it in `GET /api/v1/deployments` |
+| `wfm-mc-bundle-fetch` and `wfm-mc-bundle-contents` fail with HTTP 500 on Symphony | The host was rebooted or Symphony was restarted, and Symphony lost the Deployment Bundle archive | Run `provision-multi-component.sh` again; it detects the condition and assigns the deployment again. Then repeat the run |
+| `ERROR: failed to get auth token` from the Symphony helper | Symphony is not running, or its operator API is not at `https://localhost:8082/v1alpha2` with user `admin` | Start Symphony, or pass `--nbi-url`, `--nbi-user`, `--nbi-pass` to the helper. The helper supports Symphony only |
+| `Signed PDF not created` at the end of a run | Stated below the message. Typical causes: the repository folder is owned by root, or no internet access for the initial tool installation | Resolve the stated cause (ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `pdf_ops.sh` command the run printed |
+| A step fails with an unexpected 500 | Internal error of the WFM | Deviation of the WFM; refer to the requirement ID in the report |
 
 ---
 
-## Cleanup after a test run
+## Cleanup
 
-**Symphony sandbox:** remove the package and the deployments the helper created:
-
-```bash
-cd $HOME/workspace/conformance_test_toolkit
-bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh --cleanup
-```
-
-**Your own WFM:** remove the test deployment the same way you assigned it.
+- **Sandbox Symphony:** remove the Application Package registration and the
+  deployments created by the helper:
+  `bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh --cleanup`
+- **WFM of a supplier:** remove the test deployment by the same means it was
+  assigned.
+- **Sandbox environment:** see
+  [Cleaning Up (Starting Fresh)](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#cleaning-up-starting-fresh)
+  in the sandbox Setup Guide.
 
 ---
 
-## Quick-reference checklist
+## Checklist
 
 ```
-Phase 1 — Identity (once per WFM, re-run only if cert expires)
+Phase 1 — Identity provisioning (once per WFM; repeat when an X.509-SVID is reissued)
 
-  Symphony in the sandbox (sandbox MIS, mis.sh):
-  □ Sandbox cloned to ~/sandbox, its .env files and /etc/hosts set (sandbox setup guide, Steps 1-2)
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 1) PreRequisites: Setup   (once per machine; Enter, then 8)
-  □ sudo chown -R $USER:$USER ~/.docker
-  □ MIS installed: sudo -E bash ~/sandbox/scripts/mis.sh → 1, then again → 3, then again → 4
-  □ cd ~/mis-deployment && sudo -E bash ~/sandbox/scripts/mis.sh generate-svid
-      run 1: choice 1, WFM ID wfm      run 2: choice 2, WFM ID wfm, client ID ctt-client
-  □ sudo chown -R $USER:$USER ~/mis-deployment
-  □ ls ~/mis-deployment/ | grep x509svid   (note the directory names)
-  □ sudo cp ~/mis-deployment/x509svid-wfm/payload-cert.pem + payload-key.pem → $HOME/symphony/api/certificates/
-  □ sudo cp ~/mis-deployment/certs/https-ca.crt  $HOME/symphony/api/mis/
-  □ /etc/hosts: <this machine's address> mis.margo.org   (not 127.0.0.1)
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 7 → Enter → 1 → spiffe://margo.org/margo/wfm/wfm/client/ctt-client → 3 → Enter → 8
+  Margo sandbox (Symphony):
+  □ MIS and Symphony installed per the sandbox Setup Guide (MIS first, then WFM)
+  □ WFM Client SVID for the CTT generated: WFM ID wfm, WFM Client ID ctt-client
+  □ spiffe://margo.org/margo/wfm/wfm/client/ctt-client added to the SPIFFE ID allowlist of Symphony
+  □ sudo chown -R $USER:$USER $HOME/.docker
   □ ctt-start.sh → 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
-      (Enter for ~/mis-deployment, then pick the client SVID)
-  □ sudo -E bash ~/sandbox/scripts/wfm.sh → 3) Symphony: Start   (then 8)
+      folder: $HOME/workspace/sandbox/scripts/x509svid-wfm-ctt-client
   □ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
-  □ bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh   (assigns the test deployment in Symphony)
+  □ bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
 
-  Your own WFM (same sandbox MIS):
-  □ cd ~/mis-deployment && sudo -E bash ~/sandbox/scripts/mis.sh generate-svid
-      run 1: choice 1, WFM ID acme-wfm            → give x509svid-acme-wfm to the WFM's owner
-      run 2: choice 2, WFM ID acme-wfm, client ID ctt-client
-  □ WFM's owner: serve that SVID on the mTLS port, trust ~/mis-deployment/certs/ca.crt,
-      accept client spiffe://margo.org/margo/wfm/acme-wfm/client/ctt-client
-  □ ctt-start.sh → 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity → pick x509svid-acme-wfm-ctt-client
-  □ export REGISTRY_REF=<registry-host>/<repository>:<tag>   (an Application Package in that registry)
+  WFM of a supplier:
+  □ WFM SVID and WFM Client SVID (for the CTT) issued by the MIS of the Trust Domain
+  □ WFM: serves its X.509-SVID, has the Trust Bundle, authorizes the WFM Client SPIFFE ID of the CTT
+  □ ctt-start.sh → 1) WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
+  □ export REGISTRY_REF=<registry-host>/<repository>:<tag>
+  □ Application deployment (two components) assigned to the WFM Client identity of the CTT
 
-Phase 2 — Run (repeat for each test run)
-  □ bash ctt-runner/ctt-start.sh
-  □ Select: 1) WFM Supplier → 2) Functional tests → core (2 in the list)
-  □ Enter WFM SBI URL — everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
-  □ Press Enter for MIAF URL (same port unless WFM splits them)
-  □ Multi-component prompts: press Enter x3
-      (Symphony: provisioned automatically; own WFM: while the CTT prints "poll attempt",
-       assign a two-component deployment to device multi-component-test-device)
-  □ Wait for run to complete (under a minute once the deployment is assigned; up to ~5 min while polling)
-  □ Open report: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>.html
-  □ Signed PDF:  ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<ts>_signed.pdf (+ ca_cert.pem)
-      (sandbox Symphony: 39 passed, 11 failed, 2 not run — see "What to expect on the sandbox Symphony")
+Phase 2 — Test execution (every run)
+  □ bash ctt-runner/ctt-start.sh → 1) WFM Supplier → 2) Functional tests → core
+  □ Margo Management Interface URL: everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
+  □ MIAF mTLS URL: press Enter
+  □ Report:     ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>.html
+  □ Signed PDF: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf (+ ca_cert.pem)
+      (sandbox Symphony reference: 39 passed, 11 failed, 2 not run)
 ```

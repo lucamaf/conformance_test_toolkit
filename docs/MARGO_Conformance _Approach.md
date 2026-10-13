@@ -1645,9 +1645,9 @@ Value is a JSON array `\[]`; optionally checks `minItems`, `itemsType`, `itemsEn
 }
 ```
 
-- The SVID, its private key and the MIS CA certificate are given to the Conformance Framework once, in `ctt-runner` (Device Supplier → Setup Identity, WFM Supplier → Setup MIAF Identity). The steps are in `docs/device-supplier-setup-guide.md` and `docs/wfm-supplier-setup-guide.md`.
+- The X.509-SVID, its private key and the SVID Root CA certificate of the MIS (the trust anchor of the Trust Bundle) are given to the Conformance Framework once, in `ctt-runner` (Device Supplier → Setup Identity, WFM Supplier → Setup MIAF Identity). The steps are in `docs/device-supplier-setup-guide.md` and `docs/wfm-supplier-setup-guide.md`.
 
-- On every `mtls` step the Conformance Framework checks the certificate of the other side against the MIS CA and checks its SPIFFE ID: the WFM is `spiffe://<trust-domain>/margo/wfm/<wfm-id>` and its client is `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`.
+- On every `mtls` step the Conformance Framework validates the X.509-SVID of the other side against that trust anchor and checks its SPIFFE ID: the WFM is `spiffe://<trust-domain>/margo/wfm/<wfm-id>` and its client is `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`.
 
 ### Judging a real device: observe steps
 

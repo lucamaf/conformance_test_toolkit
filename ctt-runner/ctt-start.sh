@@ -355,11 +355,11 @@ execute_wfm_tests_with_url() {
     # If WFM URL not provided, prompt user
     if [[ -z "$wfm_url" ]]; then
         echo ""
-        echo "  The WFM SBI URL is everything before /api/v1 — the CTT adds /api/v1/... itself."
+        echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
         echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
         echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-        read -p "Enter WFM SBI URL: " wfm_url < /dev/tty
-        [[ -z "$wfm_url" ]] && error "WFM SBI URL is required"
+        read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
+        [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
     fi
 
     log "🚀 Starting WFM Supplier Test Execution"
@@ -1035,11 +1035,11 @@ execute_wfm_tests_with_group() {
     # If WFM URL not provided, prompt user
     if [[ -z "$wfm_url" ]]; then
         echo ""
-        echo "  The WFM SBI URL is everything before /api/v1 — the CTT adds /api/v1/... itself."
+        echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
         echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
         echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-        read -p "Enter WFM SBI URL: " wfm_url < /dev/tty
-        [[ -z "$wfm_url" ]] && error "WFM SBI URL is required"
+        read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
+        [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
         echo ""
         read -p "Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, or different port if WFM has separate mTLS port]: " miaf_url < /dev/tty
         miaf_url="${miaf_url:-$wfm_url}"
@@ -1650,22 +1650,24 @@ _wfm_miaf_vendor() {
 
     echo ""
     echo "════════════════════════════════════════════════════════════════"
-    echo "  MIS-issued identity for the CTT (acting as a WFM client)"
+    echo "  MIS-issued identity for the CTT (acting as a WFM Client)"
     echo "════════════════════════════════════════════════════════════════"
     echo ""
-    echo "  The MIS of the WFM under test must have issued the CTT a client SVID"
-    echo "  for that WFM:  <WFM SPIFFE ID>/client/<client-id>"
+    echo "  The MIS of the Trust Domain must have issued the CTT a WFM Client"
+    echo "  X.509-SVID for the WFM under test:  <WFM SPIFFE ID>/client/<wfm-client-id>"
     echo ""
-    echo "  Point this step at the folder that holds it. Accepted layouts:"
-    echo "    • MIS output folder (e.g. ~/mis-deployment from the sandbox mis.sh):"
-    echo "        x509svid-*/payload-cert.pem, x509svid-*/payload-key.pem, certs/ca.crt"
+    echo "  Provide the folder that contains it. Accepted layouts:"
+    echo "    • The SVID folder of the CTT (x509svid-<wfm-id>-<wfm-client-id>), or the"
+    echo "      folder that contains the x509svid-* folders (sandbox:"
+    echo "      \$HOME/workspace/sandbox/scripts). The SVID Root CA certificate is taken"
+    echo "      from certs/ca.crt next to them or from \$HOME/mis-deployment/certs/ca.crt."
     echo "    • A flat folder with:"
     echo "        client-svid-cert.pem, client-svid-key.pem, trust-bundle-ca.pem (or mis-ca.crt)"
     echo ""
-    echo "  The folder may be owned by root — sudo is used only when needed to read it."
+    echo "  Folders owned by root are read with sudo."
     echo ""
 
-    _device_read_dir "Folder containing the client SVID" "$HOME/mis-deployment"
+    _device_read_dir "Folder containing the client SVID" "$HOME/workspace/sandbox/scripts"
     local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
@@ -1689,7 +1691,7 @@ _wfm_miaf_vendor() {
     elif [[ -n "$picked_svid" ]]; then
         cert_path="$picked_svid/payload-cert.pem"
         key_path="$picked_svid/payload-key.pem"
-        ca_path="$src_dir/certs/ca.crt"
+        ca_path="$(_identity_ca_for_svid "$cert_path" "$src_dir")"
     else
         local find_cmd=(find "$src_dir" -mindepth 1 -maxdepth 1 -type d -name 'x509svid-*')
         [[ -r "$src_dir" && -x "$src_dir" ]] || find_cmd=(sudo "${find_cmd[@]}")
@@ -1704,7 +1706,7 @@ _wfm_miaf_vendor() {
                 echo "    $((i + 1))) ${svid_dirs[$i]##*/}"
             done
             echo ""
-            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<client-id>.
+            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<wfm-client-id>.
             local default_n=$(( ${#svid_dirs[@]} >= 2 ? 2 : 1 )) client_n
             read -r -p "  Which one is the CTT's client SVID? [$default_n]: " client_n < /dev/tty
             client_n="${client_n:-$default_n}"
@@ -1714,13 +1716,13 @@ _wfm_miaf_vendor() {
             fi
             cert_path="${svid_dirs[$((client_n - 1))]}/payload-cert.pem"
             key_path="${svid_dirs[$((client_n - 1))]}/payload-key.pem"
-            ca_path="$src_dir/certs/ca.crt"
+            ca_path="$(_identity_ca_for_svid "$cert_path" "$src_dir")"
         else
             echo ""
             echo "  No known layout found in $src_dir. Enter the three files:"
             read -r -p "  Path to client SVID cert  : " cert_path < /dev/tty
             read -r -p "  Path to client SVID key   : " key_path < /dev/tty
-            read -r -p "  Path to MIS CA cert       : " ca_path < /dev/tty
+            read -r -p "  Path to SVID Root CA cert : " ca_path < /dev/tty
             cert_path="${cert_path/#\~/$HOME}"
             key_path="${key_path/#\~/$HOME}"
             ca_path="${ca_path/#\~/$HOME}"
@@ -1728,10 +1730,10 @@ _wfm_miaf_vendor() {
     fi
 
     # MIS layout, but the CA is not where the MIS puts it (certs/ca.crt): ask for it.
-    if [[ "$ca_path" == "$src_dir/certs/ca.crt" ]] && ! _device_identity_file_exists "$ca_path"; then
+    if [[ "$ca_path" == */certs/ca.crt ]] && ! _device_identity_file_exists "$ca_path"; then
         echo ""
-        echo "  MIS CA certificate not found at $ca_path"
-        read -r -p "  Path to MIS CA cert (ca.crt of your MIS): " ca_path < /dev/tty
+        echo "  SVID Root CA certificate (trust anchor of the Trust Domain) not found at $ca_path"
+        read -r -p "  Path to the SVID Root CA certificate (ca.crt of the MIS): " ca_path < /dev/tty
         ca_path="${ca_path/#\~/$HOME}"
     fi
 
@@ -1751,7 +1753,7 @@ _wfm_miaf_vendor() {
 
     if ! openssl verify -CAfile "$stage/trust-bundle-ca.pem" "$stage/client-svid-cert.pem" >/dev/null 2>&1; then
         rm -rf "$stage"
-        warn "The client SVID was not issued by the given MIS CA ($ca_path)."
+        warn "The client X.509-SVID does not chain to the given SVID Root CA ($ca_path)."
         warn "Identity setup aborted — existing certs in $real_dir were left untouched."
         return 1
     fi
@@ -1761,7 +1763,7 @@ _wfm_miaf_vendor() {
     if [[ "$ctt_spiffe_id" != *"/client/"* ]]; then
         rm -rf "$stage"
         warn "That is not a client SVID: ${ctt_spiffe_id:-no SPIFFE ID}"
-        warn "Expected <WFM SPIFFE ID>/client/<client-id> — pick the client SVID, not the WFM's own."
+        warn "Expected <WFM SPIFFE ID>/client/<wfm-client-id> — pick the client SVID, not the WFM's own."
         warn "Identity setup aborted — existing certs in $real_dir were left untouched."
         return 1
     fi
@@ -1790,7 +1792,7 @@ _wfm_miaf_vendor() {
     rm -rf "$stage"
 
     echo ""
-    success "Identity setup complete — client SVID verified against the MIS CA."
+    success "Identity setup complete — client X.509-SVID validated against the Trust Domain's trust anchor."
     echo ""
     echo "  CTT client SVID : $ctt_spiffe_id"
     echo "  WFM it belongs to: ${ctt_spiffe_id%/client/*}"
@@ -1805,7 +1807,7 @@ _wfm_miaf_vendor() {
     fi
     echo ""
     echo "  ➜  The WFM under test must accept this client: add the CTT client SVID's"
-    echo "     SPIFFE ID above to its accepted-client list before running the tests"
+    echo "     SPIFFE ID above in its local authorization policy before running the tests"
     echo "     (Symphony: wfm.sh → 7) Manage SPIFFE ID allowlist)."
     echo ""
 }
@@ -1845,11 +1847,11 @@ run_wfm_flow() {
                     success "Selected group: $group_name"
 
                     echo ""
-                    echo "  The WFM SBI URL is everything before /api/v1 — the CTT adds /api/v1/... itself."
+                    echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
                     echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
                     echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-                    read -p "Enter WFM SBI URL: " wfm_url < /dev/tty
-                    [[ -z "$wfm_url" ]] && error "WFM SBI URL is required"
+                    read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
+                    [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
                     echo ""
                     read -p "Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, or different port if WFM has separate mTLS port]: " miaf_url < /dev/tty
                     miaf_url="${miaf_url:-$wfm_url}"
@@ -1875,11 +1877,11 @@ run_wfm_flow() {
                 fi
 
                 echo ""
-                echo "  The WFM SBI URL is everything before /api/v1 — the CTT adds /api/v1/... itself."
+                echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
                 echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
                 echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-                read -p "Enter WFM SBI URL: " wfm_url < /dev/tty
-                [[ -z "$wfm_url" ]] && error "WFM SBI URL is required"
+                read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
+                [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
 
                 run_wfm_contract_collection "$wfm_url" "$collection_path"
                 ;;
@@ -1909,6 +1911,26 @@ _device_identity_file_exists() {
     local dir="${1%/*}"
     [[ -r "$dir" && -x "$dir" ]] && return 1
     sudo test -f "$1"
+}
+
+# The SVID Root CA for SVID folders in the MIS layout. The sandbox writes the
+# x509svid-* folders into the directory mis.sh was run from, while the Root CA
+# stays in the MIS deployment folder, so look in both and take the one the
+# given SVID chains to.
+_identity_ca_for_svid() {
+    local svid_cert="$1" base="$2" cand first=""
+    for cand in "$base/certs/ca.crt" "$HOME/mis-deployment/certs/ca.crt"; do
+        _device_identity_file_exists "$cand" || continue
+        [[ -z "$first" ]] && first="$cand"
+        if sudo -n true 2>/dev/null || [[ -r "$cand" && -r "$svid_cert" ]]; then
+            if { [[ -r "$cand" && -r "$svid_cert" ]] && openssl verify -CAfile "$cand" "$svid_cert" >/dev/null 2>&1; } \
+               || sudo -n openssl verify -CAfile "$cand" "$svid_cert" >/dev/null 2>&1; then
+                echo "$cand"
+                return 0
+            fi
+        fi
+    done
+    echo "${first:-$base/certs/ca.crt}"
 }
 
 # The MIS CA in a flat identity folder: the same folder can serve both personas,
@@ -1959,23 +1981,24 @@ device_generate_certs() {
 
     echo ""
     echo "  ── MIAF Identity Setup ──────────────────────────────────────────────────"
-    echo "  Before continuing, use your MIS to generate two SVIDs:"
-    echo "    1. A WFM SVID    — mock WFM's mTLS server identity (port 3003)"
-    echo "    2. A Client SVID — CTT test runner's mTLS client identity"
+    echo "  The MIS of the Trust Domain must have issued two X.509-SVIDs:"
+    echo "    1. A WFM SVID        — identity of the mock WFM (mTLS endpoint, port 3003)"
+    echo "    2. A WFM Client SVID — identity of the CTT test client"
     echo ""
-    echo "  Then point this step at the folder that holds them. Accepted layouts:"
-    echo "    • MIS output folder (e.g. ~/mis-deployment from the sandbox mis.sh):"
-    echo "        x509svid-*/payload-cert.pem, x509svid-*/payload-key.pem, certs/ca.crt"
+    echo "  Provide the folder that contains them. Accepted layouts:"
+    echo "    • The folder that contains the x509svid-* folders (sandbox:"
+    echo "      \$HOME/workspace/sandbox/scripts). The SVID Root CA certificate is taken"
+    echo "      from certs/ca.crt next to them or from \$HOME/mis-deployment/certs/ca.crt."
     echo "    • A flat folder with:"
     echo "        wfm-svid-cert.pem, wfm-svid-key.pem,"
     echo "        client-svid-cert.pem, client-svid-key.pem, mis-ca.crt (or trust-bundle-ca.pem)"
     echo ""
-    echo "  The folder may be owned by root — sudo is used only when needed to read it."
-    echo "  ⚠  The CA used here MUST match the CA trusted by the vendor's device."
+    echo "  Folders owned by root are read with sudo."
+    echo "  The device under test must belong to the same Trust Domain (same MIS)."
     echo "  ────────────────────────────────────────────────────────────────────────"
     echo ""
 
-    _device_read_dir "Folder containing the SVIDs" "$HOME/mis-deployment"
+    _device_read_dir "Folder containing the SVIDs" "$HOME/workspace/sandbox/scripts"
     local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
@@ -2012,7 +2035,7 @@ device_generate_certs() {
                 echo "    $((i + 1))) ${svid_dirs[$i]##*/}"
             done
             echo ""
-            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<client-id>.
+            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<wfm-client-id>.
             local wfm_n client_n
             read -r -p "  Which one is the WFM SVID?    [1]: " wfm_n    < /dev/tty
             read -r -p "  Which one is the Client SVID? [2]: " client_n < /dev/tty
@@ -2027,14 +2050,14 @@ device_generate_certs() {
             fi
             wfm_dir="${svid_dirs[$((wfm_n - 1))]}"
             client_dir="${svid_dirs[$((client_n - 1))]}"
-            ca_cert="$src_dir/certs/ca.crt"
+            ca_cert="$(_identity_ca_for_svid "$client_dir/payload-cert.pem" "$src_dir")"
         else
             echo ""
             echo "  No known layout found in $src_dir."
             echo "  Enter the folders holding payload-cert.pem / payload-key.pem for each SVID:"
             _device_read_dir "WFM SVID folder" "";    wfm_dir="$REPLY"
             _device_read_dir "Client SVID folder" ""; client_dir="$REPLY"
-            read -r -p "  MIS CA cert file: " ca_cert < /dev/tty
+            read -r -p "  SVID Root CA certificate file (ca.crt of the MIS): " ca_cert < /dev/tty
             ca_cert="${ca_cert/#\~/$HOME}"
         fi
         wfm_cert="$wfm_dir/payload-cert.pem"
@@ -2063,7 +2086,7 @@ device_generate_certs() {
     for f in miaf-server-cert.pem svid-cert.pem; do
         if ! openssl verify -CAfile "$stage/svid-ca.pem" "$stage/$f" >/dev/null 2>&1; then
             rm -rf "$stage"
-            warn "$f was not issued by the given MIS CA ($ca_cert)."
+            warn "$f does not chain to the given SVID Root CA ($ca_cert)."
             warn "Identity setup aborted — existing certs in $cert_dir were left untouched."
             return 1
         fi
@@ -2079,7 +2102,7 @@ device_generate_certs() {
         warn "The client SVID is not a client of the WFM SVID:"
         warn "  WFM SVID    : ${wfm_spiffe_id:-no SPIFFE ID}"
         warn "  Client SVID : ${client_spiffe_id:-no SPIFFE ID}"
-        warn "Expected the client to be <WFM SPIFFE ID>/client/<client-id>. Check which one is the WFM"
+        warn "Expected the client to be <WFM SPIFFE ID>/client/<wfm-client-id>. Check which one is the WFM"
         warn "and which is the client, and that both were generated for the same WFM ID."
         warn "Identity setup aborted — existing certs in $cert_dir were left untouched."
         return 1
@@ -2108,16 +2131,16 @@ device_generate_certs() {
     rm -rf "$stage"
 
     echo ""
-    success "Identity setup complete — both SVIDs verified against the MIS CA."
+    success "Identity setup complete — both X.509-SVIDs validated against the Trust Domain's trust anchor."
     echo ""
     echo "  Certs       : $cert_dir"
     echo "  WFM SVID    : $wfm_spiffe_id"
     echo "  Client SVID : $client_spiffe_id"
     echo "  SVID Rotation scenario: $rotation_note."
     echo ""
-    echo "  ➜  A real device tested against this mock WFM must trust the same MIS CA"
+    echo "  ➜  A WFM Client tested against this mock WFM must use the Trust Bundle of the same MIS"
     echo "     ($cert_dir/svid-ca.pem) and hold an SVID of the form"
-    echo "     $wfm_spiffe_id/client/<client-id>."
+    echo "     $wfm_spiffe_id/client/<wfm-client-id>."
     echo ""
 }
 
@@ -2226,7 +2249,7 @@ device_start_server() {
     echo "  ─────────────────────────────────────────────────────────────────────"
     echo "  Management Interface : https://${server_host}:3003/v1alpha2/margo"
     echo "  WFM SPIFFE ID        : $(device_spiffe_id "$cert_dir/miaf-server-cert.pem")"
-    echo "  Trusted CA (MIS)     : $cert_dir/svid-ca.pem"
+    echo "  Trust anchor (MIS)   : $cert_dir/svid-ca.pem"
     echo "  Health / telemetry   : https://${server_host}:3001/health"
     echo "  Server log           : /tmp/wfm-server.log"
     echo ""

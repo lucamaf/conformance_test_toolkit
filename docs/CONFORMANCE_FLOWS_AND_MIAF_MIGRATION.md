@@ -52,7 +52,7 @@ Bundle and an optional discovery document.
 presents an X.509‑SVID issued by the MIS and checks the SPIFFE ID of the other
 side; every Management Interface step of the test-case files is sent that way
 (`"mtls": true`). The
-suite does not run a MIS of its own: the SVIDs and the MIS CA are given to the
+suite does not run a MIS of its own: the SVIDs and the SVID Root CA certificate of the MIS (the trust anchor of the Trust Bundle) are given to the
 runner once, as a folder, in its identity setup step. Part 7 lists what was
 changed and what is still open.
 
@@ -148,7 +148,7 @@ hits both runners.
 ### 4.1 WFM‑supplier Flow
 
 ```
-suite (mock device)                                   real WFM under test
+suite (WFM Client)                                    real WFM under test
 ───────────────────                                   ───────────────────
 1. GET  /api/v1/onboarding/certificate            →   200 { certificate: <b64 PEM> }   (no signature)
 2. POST /api/v1/onboarding                        →   201 { clientId }                 (cert in body; sig optional)
@@ -436,7 +436,7 @@ to Harbor as `margo-ctt-hello-world:1.0.0`) uses the new form.
 operate a MIS:
 - The operator issues the SVIDs with the MIS of the trust domain (for the
   sandbox: `mis.sh generate-svid`) and points the runner's identity setup step
-  at the folder. The step copies the SVID, its key and the MIS CA, verifies the
+  at the folder. The step copies the SVID, its key and the SVID Root CA certificate, verifies the
   chain and checks the SPIFFE ID form.
 - **WFM‑supplier persona** (we act as the device talking to a real WFM): the
   suite holds one client SVID of that WFM,
@@ -453,7 +453,7 @@ operate a MIS:
 
 Re‑checked the reference implementation after ~29 new commits landed since
 Part 5.7 was written. Everything in 5.7 still holds — same 2 MIS endpoints,
-same 5 SBI endpoints, minting still manual/offline. What changed is that the
+same 5 Management Interface endpoints, minting still manual/offline. What changed is that the
 **client‑side trust machinery got a lot more real**, plus one new field.
 In plain language:
 
@@ -511,9 +511,9 @@ status‑report test case needs to check this field now, including on removal.
 | Concern | OLD (before `rc.2`) | NEW (MIAF, `rc.3`) | In the suite today |
 |---|---|---|---|
 | **Get an identity** | `POST /onboarding` with self‑signed cert → `clientId` | Operator provisions an X.509‑SVID out of band (CSR preferred). No API call. | No onboarding scenarios. SVIDs come from the MIS and are installed with the runner's identity setup step. |
-| **Get the WFM's CA** | `GET /onboarding/certificate` | `GET` MIS discovery + `GET` Trust Bundle (JWK Set), bootstrapped by pin/anchor | The MIS CA is installed together with the SVIDs. No discovery or Trust‑Bundle refresh scenarios yet. |
+| **Get the WFM's CA** | `GET /onboarding/certificate` | `GET` MIS discovery + `GET` Trust Bundle (JWK Set), bootstrapped by pin/anchor | The SVID Root CA certificate (trust anchor) is installed together with the SVIDs. No discovery or Trust‑Bundle refresh scenarios yet. |
 | **Per‑request auth** | RFC 9421: `Signature`, `Signature-Input`, `Content-Digest`; `keyid`; IEEE‑P1363 ECDSA | **mTLS** — client cert in the TLS handshake; nothing per‑request | Both runners use an mTLS client that presents the SVID; every Management Interface step has `"mtls": true`. |
-| **Transport** | server‑side TLS only | **mutual** TLS 1.3, both validate against Trust Bundle | Both runners verify the peer certificate against the MIS CA and check that its SPIFFE ID belongs to their own. |
+| **Transport** | server‑side TLS only | **mutual** TLS 1.3, both validate against Trust Bundle | Both runners validate the X.509-SVID of the peer against the trust anchor and check that its SPIFFE ID belongs to their own. |
 | **Who am I in a request** | `clientId` in every URL path + `properties.id` must equal it | SPIFFE ID in the client cert; **no `clientId` anywhere** | All steps use the `rc.3` paths. |
 | **Capabilities endpoint** | `POST` then `PUT` `/clients/{clientId}/capabilities[/{deviceId}]`; k8s‑style `{apiVersion,kind,properties}` | `PUT` (+ `DELETE`) `/capabilities/{deviceId}`; LinkML body (no `apiVersion`/`kind` envelope); hierarchical `{deviceId}` | `PUT` scenarios in both personas; `DELETE` in the WFM group `device-unregister`; the mock WFM implements both. |
 | **Desired state** | `GET /clients/{clientId}/deployments` | `GET /deployments` | New path; same body checks (`manifestVersion`, `bundle`, `deployments`). |
@@ -557,7 +557,7 @@ status‑report test case needs to check this field now, including on removal.
 | # | Capability | State in the suite |
 |---|---|---|
 | A | **mTLS HTTP client** presenting an X.509‑SVID, validating the server SVID's SPIFFE ID | **Done** in both runners (`run_wfm_scenarios.js`; the Go device client and the mock WFM's `tls.Config`). |
-| B | **Trust‑bundle fetch from the MIS** (WFM‑supplier persona) — `GET /.well-known/margo` then `GET <trustBundleUri>` | **Available as a command** (`run_wfm_scenarios.js --fetch-trust-bundle`). The normal setup takes the MIS CA from the identity folder. |
+| B | **Trust‑bundle fetch from the MIS** (WFM‑supplier persona) — `GET /.well-known/margo` then `GET <trustBundleUri>` | **Not in use.** The setup takes the SVID Root CA certificate (trust anchor) from the identity folder, i.e. out-of-band delivery. A `--fetch-trust-bundle` command exists in `run_wfm_scenarios.js`, but it does not authenticate the MIS (no initial trust bootstrap) and fails against the sandbox MIS, which answers `Accept: application/json` on the discovery endpoint with HTTP 406. |
 | C | **A 2‑endpoint discovery stub** in the mock WFM (device‑supplier persona) | **Not built.** A device under test gets the Trust Bundle from the MIS itself. |
 | D | **Our own SVID** (cert + key) to present in every mTLS handshake, on both personas | **Done.** Issued by the MIS, installed by the identity setup step of the runner. |
 | E | **Negative SVID/TLS cases** | **Partly.** Covered in both personas: no client certificate, a client certificate the MIS did not issue. Not yet: expired SVID, a client of another WFM, wrong trust domain, `cA=true` leaf, two URI SANs. |

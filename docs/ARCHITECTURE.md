@@ -35,13 +35,13 @@ A vendor who builds *any one* of those three pieces needs a way to prove their
 implementation actually follows the spec, without needing a live copy of the
 other two pieces to test against. That is what this toolkit provides: for
 each of the three personas, it supplies a correct, spec-conformant stand-in
-for whatever that persona talks to (a mock WFM, a mock device, or a
+for whatever that persona talks to (a mock WFM, a WFM Client, or a
 structural validator for a package), drives a battery of both valid and
 deliberately-broken requests through it, and produces a pass/fail report
 where every check is traceable back to a specific requirement ID (CR-ID) in
 the spec.
 
-In short: **bring your implementation, get back a report showing exactly
+In short: **the supplier provides the implementation and receives a report showing exactly
 which parts of the Margo spec it does and does not conform to.**
 
 ---
@@ -96,7 +96,7 @@ Two CLIs drive the whole system:
 
 | Persona | The vendor brings... | The toolkit provides... | Direction of the test traffic |
 |---|---|---|---|
-| **WFM Supplier** | A real WFM (e.g. Eclipse Symphony) | A mock device / WFM-Client that fires real requests at it | Toolkit → vendor's WFM |
+| **WFM Supplier** | A real WFM (e.g. Eclipse Symphony) | A WFM Client that accesses the Margo Management Interface exposed by the WFM | Toolkit → vendor's WFM |
 | **Device Supplier** | A real device / device-agent | A mock WFM server for the device to connect to | Vendor's device → toolkit |
 | **Application Supplier** | An Application Package (`margo.yaml` + resources) | A structural validator checked against the Application Description spec | Static check, no network traffic |
 
@@ -157,7 +157,7 @@ The toolkit does not issue identities. The SVIDs come from the MIS of the
 trust domain (for the sandbox: `mis.sh generate-svid`) and are given to the
 runner once, as a folder, in *Setup MIAF Identity* (WFM Supplier) or *Setup
 Identity* (Device Supplier). On every request the toolkit presents its SVID,
-verifies the other side's certificate against the MIS CA, and checks that the
+validates the X.509-SVID of its peer against the trust anchor of the Trust Bundle (the SVID Root CA certificate of the MIS, provided out of band), and checks that the
 other side's SPIFFE ID is the one that belongs to its own.
 
 The full identity model — trust bundles, SVID issuance and rotation, and

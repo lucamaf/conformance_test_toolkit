@@ -35,7 +35,7 @@ manifest, ...), and what changed from the earlier versions.
 
 | Persona | The vendor brings... | This toolkit provides... |
 |---|---|---|
-| **WFM Supplier** | A real WFM (e.g. Eclipse Symphony) | A mock device / WFM-Client that fires real HTTP/mTLS calls at it |
+| **WFM Supplier** | A real WFM (e.g. Eclipse Symphony) | A WFM Client that accesses the Margo Management Interface exposed by the WFM over mTLS |
 | **Device Supplier** | A real device / device-agent | A mock WFM server for the device to connect to |
 | **Application Supplier** | An Application Package (`margo.yaml` + resources) | A validator that checks its structure against the Application Description spec |
 
@@ -94,7 +94,7 @@ the CTT's own device client against the mock WFM and needs no device.
 ## Quick start
 
 The suite is driven by two CLIs. Both are menu-driven; start with the setup
-guide of your persona (see [Key documents](#key-documents)).
+guide of the persona (see [Key documents](#key-documents)).
 
 ```bash
 # 1) Author: put test cases in a folder and create a test group from them
@@ -112,7 +112,7 @@ Reports land in `ctt-runner/reports/<persona>/`: the HTML report and, created
 automatically at the end of the run, the same report as a signed PDF with the
 signer's `ca_cert.pem`. Both personas use the same report layout.
 
-**Identity:** every run needs an X.509-SVID. Issue it with your MIS (for the
+**Identity:** every run needs an X.509-SVID. Issue it with the MIS of the Trust Domain (for the
 sandbox: `mis.sh generate-svid`) and give the folder to the runner once:
 WFM Supplier → *Setup MIAF Identity*, Device Supplier → *Setup Identity*. The
 setup guides show the exact answers for each prompt.
@@ -124,7 +124,7 @@ setup guides show the exact answers for each prompt.
 A **group** is a named list of test IDs with a spec version. Its `group.json`
 holds the name, version, description, the folder where the test files live,
 and the IDs of the scenarios, steps or Postman requests to run. The runner
-lists the groups with their descriptions and runs the one you pick; the report
+lists the groups with their descriptions and runs the selected one; the report
 carries the group name and version.
 
 | Group | Persona | What it is for |

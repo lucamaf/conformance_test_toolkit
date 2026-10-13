@@ -16,7 +16,7 @@ it is evidence for.
 
 | You are testing | The CTT plays | Demo setup |
 |---|---|---|
-| a WFM (WFM Supplier) | a **mock device** that sends requests to the WFM | sandbox Symphony |
+| a WFM (WFM Supplier) | a **WFM Client** that accesses the Margo Management Interface of the WFM | sandbox Symphony |
 | a device (Device Supplier) | a **mock WFM** that the device connects to | sandbox device-agent |
 | an Application Package (Application Supplier) | a validator that reads the package | — |
 
@@ -54,8 +54,8 @@ of the specification had both.
 ### The four phases
 
 1. **Provisioning.** The operator issues the SVIDs with the MIS and adds the
-   client to the WFM's accepted-client list.
-2. **Trust.** Each side gets the Trust Bundle (the MIS CA), either as a file or
+   client to the local authorization policy of the WFM (in the sandbox: the SPIFFE ID allowlist).
+2. **Trust.** Each side gets the Trust Bundle (its X.509 trust anchor is the SVID Root CA certificate of the MIS), either as a file or
    from the MIS.
 3. **Mutual TLS.** When the device connects, both sides show their SVID. Each
    checks that the other's certificate comes from the MIS and carries the
@@ -98,7 +98,7 @@ of the specification had both.
 ```
             WFM Supplier persona                         Device Supplier persona
 
-   CTT mock device ──── mTLS ───► WFM under test   Device under test ─── mTLS ──► CTT mock WFM
+   CTT (WFM Client) ─── mTLS ───► WFM under test   Device under test ─── mTLS ──► CTT mock WFM
    (run_wfm_scenarios.js)         (Symphony)       (sandbox device-agent)         (bin/server)
           │                                                                            │
    sends each step,                                             records every request, judges it
@@ -128,7 +128,7 @@ explain:
 |---|---|
 | `ctt-creator/ctt-start.sh` | CLI 1: reads a folder of test cases and writes a group's `group.json` |
 | `ctt-runner/ctt-start.sh` | CLI 2: identity setup, group selection, running, reports |
-| `ctt-runner/wfm-supplier/scripts/run_wfm_scenarios.js` | the mock device: runs scenario files and Postman collections against a WFM |
+| `ctt-runner/wfm-supplier/scripts/run_wfm_scenarios.js` | the WFM Client of the CTT: runs scenario files and Postman collections against a WFM |
 | `ctt-runner/device-supplier/scripts/cmd/device-supplier/` | the mock WFM server (Go) |
 | `ctt-runner/device-supplier/scripts/` | the device test runner (Go): `run_tests.go`, `observe.go` |
 | `ctt-runner/device-supplier/utils/manifests/assertions.json` | the rules the mock WFM applies to every request |
@@ -140,15 +140,15 @@ explain:
 
 ## 5. What happens when you run it
 
-### 5.1 WFM Supplier — CTT as mock device
+### 5.1 WFM Supplier — CTT as WFM Client
 
 | Step | Function | What it does |
 |---|---|---|
-| Setup MIAF Identity | `wfm_setup_miaf_identity`, `_wfm_miaf_vendor` in `ctt-start.sh` | copies the client SVID, its key and the MIS CA from the folder you name; checks the chain and that it is a client SVID; keeps the SVID it replaces for the rotation test |
+| Setup MIAF Identity | `wfm_setup_miaf_identity`, `_wfm_miaf_vendor` in `ctt-start.sh` | copies the client SVID, its key and the SVID Root CA certificate from the given folder; checks the chain and that it is a client SVID; keeps the SVID it replaces for the rotation test |
 | Pick a group | `select_wfm_group` | lists groups with their descriptions |
 | Start a run | `execute_wfm_tests_with_group` → `run_wfm_scenario_group` | installs the identity for the run (`wfm_install_run_identity`), selects the group's tests (`build_device_group_scenarios`), for the deployment scenario prints which client needs a deployment assigned in the WFM (the run does not call any WFM operator API) |
 | Run the tests | `run_wfm_scenarios.js`: `runStep` → `performHTTPStep` → `request` | sends each step over mTLS with the client SVID |
-| Check the WFM's identity | `recognizeWfm` | on every connection: certificate from the MIS CA, SPIFFE ID is the WFM this client belongs to |
+| Check the WFM's identity | `recognizeWfm` | on every connection: X.509-SVID validated against the trust anchor, SPIFFE ID is the WFM this WFM Client belongs to |
 | Check the answer | `runValidations` → `validate` | status code, then each validation (headers, body fields, digests) |
 | Carry values forward | `extractContext`, `substitute` | saves values such as `deploymentId` and puts them into later steps |
 | Postman collections | `parsePostmanCollection`, `convertPostmanItem` | turns a collection into the same kind of steps |
@@ -159,9 +159,9 @@ explain:
 
 | Step | Function | What it does |
 |---|---|---|
-| Setup Identity | `device_generate_certs` in `ctt-start.sh` | copies the mock WFM's SVID, the runner's client SVID and the MIS CA; checks that the client belongs to the WFM |
+| Setup Identity | `device_generate_certs` in `ctt-start.sh` | copies the mock WFM's SVID, the runner's client SVID and the SVID Root CA certificate; checks that the client belongs to the WFM |
 | Start Mock WFM Server | `device_start_server` → `bin/server` | builds and starts the mock WFM: port 3003 (mTLS), port 3001 (health) |
-| Accept a connection | `startMIAFServer`, `requireSVID`, `recognizeWFMClient` in `miaf_server.go` | client certificate from the MIS CA, exactly one SPIFFE URI, a client of this WFM |
+| Accept a connection | `startMIAFServer`, `requireSVID`, `recognizeWFMClient` in `miaf_server.go` | client X.509-SVID validated against the trust anchor, exactly one SPIFFE URI, a client of this WFM |
 | Serve the API | `handleMIAFPutCapabilities`, `…GetDeployments`, `…GetBundle`, `…GetDeploymentManifest`, `…PostStatus`, `…DeleteCapabilities` | the six rc.3 calls with correct ETag, digest and cache headers |
 | Judge a request | `validateRequest`, `applyRule` in `main.go`, rules from `assertions.json` | a body that breaks a rule is answered with problem details; `device_expectations` rules are evaluated and recorded without rejecting |
 | Record a request | `journaled`, `handleTestRequests` in `journal.go` | who sent what, what was answered, the verdicts |
