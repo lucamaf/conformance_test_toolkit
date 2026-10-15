@@ -105,6 +105,12 @@ From the same MIS, transfer the CA certificate and the SVID to the vendor's devi
 | WFM SPIFFE ID to authorize on the device | `spiffe://margo.org/margo/wfm/ctt-mock-wfm` |
 | Management Interface URL to connect to | `https://<ctt-host-ip>:3003/v1alpha2/margo` |
 
+> **Note:** A vendor's device that retrieves the Trust Bundle from the sandbox MIS connects to
+> `https://mis.margo.org:9443` (the name set by `EXPOSED_MIS_HOST` in the sandbox `mis.env`).
+> On the device, add `<ip-of-the-mis-host> mis.margo.org` to `/etc/hosts` and give the device
+> the MIS HTTPS CA (`$HOME/mis-deployment/certs/https-ca.crt`). Not needed when the device is
+> given the Root CA certificate above by configuration.
+
 ### Step 3 — Transfer the CA certs and SVIDS to CTT Host
 
 Only needed when the MIS runs on a different host than the CTT.

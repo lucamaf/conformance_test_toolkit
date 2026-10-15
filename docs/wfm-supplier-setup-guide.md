@@ -78,6 +78,12 @@ X.509-SVIDs of the WFM under test and of the CTT (WFM Client).
 > issued by the vendor's MIS:
 > `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/ctt-client`
 
+> **Note:** A vendor's WFM that retrieves the Trust Bundle from the sandbox MIS connects to
+> `https://mis.margo.org:9443` (the name set by `EXPOSED_MIS_HOST` in the sandbox `mis.env`).
+> On the WFM host, add `<ip-of-the-mis-host> mis.margo.org` to `/etc/hosts` and give the WFM
+> the MIS HTTPS CA (`$HOME/mis-deployment/certs/https-ca.crt`). Not needed when the WFM is
+> given the Trust Bundle by configuration.
+
 
 
 ### Step 2 — Symphony deployment
