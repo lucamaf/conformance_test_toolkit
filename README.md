@@ -24,7 +24,7 @@ The repository organization is explained below, but briefly, it has 3 parts -
 
 ---
 
-## Current spec baseline
+## Current baseline of Margo Specifications used for this version of CTT
 
 This suite targets **Margo spec `1.0.0-rc.3`**, which uses **MIAF** (the Margo
 Identity and Authorization Framework): identity is an X.509-SVID (a
@@ -47,7 +47,7 @@ manifest, ...), and what changed from the earlier versions.
 | **Device Supplier** | A real device / device-agent | A mock WFM server for the device to connect to |
 | **Application Supplier** | An Application Package (`margo.yaml` + resources) | A validator that checks its structure against the Application Description spec |
 
-Every test is a real request/response pair, checked against the spec — both
+Every test is a real request/response pair, checked against the Margo specification — both
 the "happy path" and deliberately-broken cases (identity that must be refused,
 wrong content type, invalid enum value, wrong digest, etc.), so a report row
 always reads as *expected vs. actual*, not just pass/fail.
