@@ -1,7 +1,8 @@
 # Margo Conformance Test Toolkit (CTT)
 
-This repository provides a Toolkit to run conformance test suites for the
-[Margo](https://margo.org/) specification.
+This repository provides a Toolkit to run conformance test suites for 
+Vendor software against the [Margo](https://margo.org/) specification.
+
 [The overall approach](docs/margo-conformance-approach.md) explains the purpose, 
 high-level use-cases, the intended users and high-level design.
 
@@ -171,4 +172,4 @@ This suite is under active development alongside the Margo spec itself.
 
 ## License
 
-[MIT](LICENSE)
+[MARGO](LICENSE)
