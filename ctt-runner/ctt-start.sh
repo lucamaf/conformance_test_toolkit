@@ -1659,7 +1659,7 @@ _wfm_miaf_vendor() {
     echo "  Provide the folder that contains it. Accepted layouts:"
     echo "    • The SVID folder of the CTT (x509svid-<wfm-id>-<wfm-client-id>), or the"
     echo "      folder that contains the x509svid-* folders (sandbox:"
-    echo "      \$HOME/workspace/sandbox/scripts). The SVID Root CA certificate is taken"
+    echo "      \$HOME/mis-deployment). The SVID Root CA certificate is taken"
     echo "      from certs/ca.crt next to them or from \$HOME/mis-deployment/certs/ca.crt."
     echo "    • A flat folder with:"
     echo "        client-svid-cert.pem, client-svid-key.pem, trust-bundle-ca.pem (or mis-ca.crt)"
@@ -1667,7 +1667,7 @@ _wfm_miaf_vendor() {
     echo "  Folders owned by root are read with sudo."
     echo ""
 
-    _device_read_dir "Folder containing the client SVID" "$HOME/workspace/sandbox/scripts"
+    _device_read_dir "Folder containing the client SVID" "$HOME/mis-deployment"
     local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
@@ -1987,7 +1987,7 @@ device_generate_certs() {
     echo ""
     echo "  Provide the folder that contains them. Accepted layouts:"
     echo "    • The folder that contains the x509svid-* folders (sandbox:"
-    echo "      \$HOME/workspace/sandbox/scripts). The SVID Root CA certificate is taken"
+    echo "      \$HOME/mis-deployment). The SVID Root CA certificate is taken"
     echo "      from certs/ca.crt next to them or from \$HOME/mis-deployment/certs/ca.crt."
     echo "    • A flat folder with:"
     echo "        wfm-svid-cert.pem, wfm-svid-key.pem,"
@@ -1998,7 +1998,7 @@ device_generate_certs() {
     echo "  ────────────────────────────────────────────────────────────────────────"
     echo ""
 
-    _device_read_dir "Folder containing the SVIDs" "$HOME/workspace/sandbox/scripts"
+    _device_read_dir "Folder containing the SVIDs" "$HOME/mis-deployment"
     local src_dir="${REPLY%/}"
     if [[ ! -d "$src_dir" ]] && ! sudo test -d "$src_dir"; then
         warn "Folder not found: $src_dir"
