@@ -1,6 +1,10 @@
 # Margo Conformance Test Toolkit (CTT)
 
-A conformance test suite for the [Margo](https://margo.org/) specification.
+This repository provides a Toolkit to run conformance test suites for the
+[Margo](https://margo.org/) specification.
+[The overall approach](docs/margo-conformance-approach.md) explains the purpose, 
+high-level use-cases, the intended users and high-level design.
+
 Margo defines how a **device** and a **WFM** (Workload Fleet Manager — the
 cloud/control-plane side) talk to each other over HTTPS, and how an
 **Application Package** must be structured. This toolkit lets a vendor who
@@ -12,6 +16,11 @@ back to a specific requirement (CR-ID).
 This repo is the execution engine; the
 [conformance_documentation](https://github.com/margo/conformance_documentation)
 repo is its conceptual companion.
+
+The repository organization is explained below, but briefly, it has 3 parts - 
+- A CTT Creator for writing and adding test-cases to the Test-Suites
+- A CTT Runner for running Conformance Test-Suites and getting Conformance Repeorts
+- Test-Suites which contain the actual test-cases
 
 ---
 
