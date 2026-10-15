@@ -254,8 +254,7 @@ select_wfm_group() {
         for i in "${!groups[@]}"; do
             local metadata="${group_metadata[$i]}"
             IFS='|' read -r name version desc count <<< "$metadata"
-            printf "  %2d) %-24s (%s)\n" "$((i+1))" "$name" "v${version#v}"
-            print_group_description "$desc"
+            printf "  %2d) %s\n" "$((i+1))" "$name"
         done
         echo ""
     } >&2
@@ -323,8 +322,7 @@ select_device_group() {
         for i in "${!groups[@]}"; do
             local metadata="${group_metadata[$i]}"
             IFS='|' read -r name version desc count <<< "$metadata"
-            printf "  %2d) %-24s (%s)\n" "$((i+1))" "$name" "v${version#v}"
-            print_group_description "$desc"
+            printf "  %2d) %s\n" "$((i+1))" "$name"
         done
         echo ""
     } >&2
@@ -355,11 +353,8 @@ execute_wfm_tests_with_url() {
     # If WFM URL not provided, prompt user
     if [[ -z "$wfm_url" ]]; then
         echo ""
-        echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
-        echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
-        echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-        read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
-        [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
+        read -p "Enter WFM URL: " wfm_url < /dev/tty
+        [[ -z "$wfm_url" ]] && error "The WFM URL is required"
     fi
 
     log "🚀 Starting WFM Supplier Test Execution"
@@ -1035,13 +1030,8 @@ execute_wfm_tests_with_group() {
     # If WFM URL not provided, prompt user
     if [[ -z "$wfm_url" ]]; then
         echo ""
-        echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
-        echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
-        echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-        read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
-        [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
-        echo ""
-        read -p "Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, or different port if WFM has separate mTLS port]: " miaf_url < /dev/tty
+        read -p "Enter WFM URL: " wfm_url < /dev/tty
+        [[ -z "$wfm_url" ]] && error "The WFM URL is required"
         miaf_url="${miaf_url:-$wfm_url}"
     else
         miaf_url="${miaf_url:-$wfm_url}"
@@ -1587,22 +1577,18 @@ wfm_setup_miaf_identity() {
         echo "┌─────────────────────────────────────────────────────────────────────────┐"
         echo "│  MIAF Identity Setup — Where does the CTT's client SVID come from?      │"
         echo "├─────────────────────────────────────────────────────────────────────────┤"
-        echo "│  1) CTT-generated identity    (ctt-mis.sh; you make the WFM trust it —  │"
-        echo "│                                sandbox Symphony without a running MIS)  │"
-        echo "│  2) MIS-issued identity       (sandbox mis.sh or your own MIS issued the│"
-        echo "│                                CTT a client SVID; copy it from a folder)│"
-        echo "│  3) Self-contained / no WFM   (CTT mock WFM; all certs self-signed)     │"
+        echo "│  1) MIS-issued identity       (copy the CTT's SVID issued by the MIS)   │"
+        echo "│  2) CTT-generated identity    (ctt-mis.sh, when no MIS is running)      │"
         echo "│  B) Back                                                                │"
         echo "└─────────────────────────────────────────────────────────────────────────┘"
         echo ""
-        read -p "Select option (1-3 or B): " miaf_choice < /dev/tty
+        read -p "Select option (1-2 or B): " miaf_choice < /dev/tty
 
         case "${miaf_choice,,}" in
-            1) _wfm_miaf_symphony "$mis_script"; return ;;
-            2) _wfm_miaf_vendor;                 return ;;
-            3) CTT_DIR="$CONFORMANCE_DIR" bash "$mis_script"; return ;;
+            1) _wfm_miaf_vendor;                 return ;;
+            2) _wfm_miaf_symphony "$mis_script"; return ;;
             b|back) return ;;
-            *) warn "Invalid option — enter 1, 2, 3, or B" ;;
+            *) warn "Invalid option — enter 1, 2, or B" ;;
         esac
     done
 }
@@ -1641,7 +1627,7 @@ _wfm_miaf_symphony() {
     echo ""
     echo "  Before starting Symphony, configure it to trust this identity"
     echo "  (WFM SVID, CA and trust bundle from ctt-mis.sh). The setup guide"
-    echo "  covers the MIS-issued identity instead — option 2 of this menu."
+    echo "  covers the MIS-issued identity instead — option 1 of this menu."
     echo "════════════════════════════════════════════════════════════════"
 }
 
@@ -1706,10 +1692,11 @@ _wfm_miaf_vendor() {
                 echo "    $((i + 1))) ${svid_dirs[$i]##*/}"
             done
             echo ""
-            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<wfm-client-id>.
-            local default_n=$(( ${#svid_dirs[@]} >= 2 ? 2 : 1 )) client_n
-            read -r -p "  Which one is the CTT's client SVID? [$default_n]: " client_n < /dev/tty
-            client_n="${client_n:-$default_n}"
+            # No default: the person who generated the SVIDs picks the CTT's client SVID by name.
+            local client_n=""
+            while [[ -z "$client_n" ]]; do
+                read -r -p "  Which one is the CTT's client SVID?: " client_n < /dev/tty
+            done
             if [[ ! "$client_n" =~ ^[0-9]+$ ]] || (( client_n < 1 || client_n > ${#svid_dirs[@]} )); then
                 warn "Invalid selection — pick a number from the list."
                 return 1
@@ -1820,8 +1807,8 @@ run_wfm_flow() {
         echo "│  WFM Supplier — Conformance Testing                                     │"
         echo "├─────────────────────────────────────────────────────────────────────────┤"
         echo "│  Run steps in order:                                                    │"
-        echo "│    1. Setup MIAF Identity   (mint SVID + trust bundle, once per WFM)   │"
-        echo "│    2. Functional tests      (Group-based test management)               │"
+        echo "│    1. Setup MIAF Identity   (install CTT SVID + Root CA, once per WFM)  │"
+        echo "│    2. Functional tests      (group-based test management)               │"
         echo "│    3. OpenAPI spec based contract tests                                 │"
         echo "│                                                                         │"
         echo "│  B) Back to main menu                                                   │"
@@ -1847,13 +1834,8 @@ run_wfm_flow() {
                     success "Selected group: $group_name"
 
                     echo ""
-                    echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
-                    echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
-                    echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-                    read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
-                    [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
-                    echo ""
-                    read -p "Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, or different port if WFM has separate mTLS port]: " miaf_url < /dev/tty
+                    read -p "Enter WFM URL: " wfm_url < /dev/tty
+                    [[ -z "$wfm_url" ]] && error "The WFM URL is required"
                     miaf_url="${miaf_url:-$wfm_url}"
 
                     execute_wfm_tests_with_group "$wfm_url" "$selected_group_path" "$miaf_url"
@@ -1877,11 +1859,8 @@ run_wfm_flow() {
                 fi
 
                 echo ""
-                echo "  Base URL of the Margo Management Interface exposed by the WFM: everything before /api/v1."
-                echo "    Symphony sandbox : https://localhost:8084/v1alpha2/margo"
-                echo "    Your own WFM     : https://<wfm-host>:<port>   (plus a path prefix, if your WFM has one)"
-                read -p "Enter Margo Management Interface URL: " wfm_url < /dev/tty
-                [[ -z "$wfm_url" ]] && error "The Margo Management Interface URL is required"
+                read -p "Enter WFM URL: " wfm_url < /dev/tty
+                [[ -z "$wfm_url" ]] && error "The WFM URL is required"
 
                 run_wfm_contract_collection "$wfm_url" "$collection_path"
                 ;;
@@ -2036,11 +2015,12 @@ device_generate_certs() {
             done
             echo ""
             # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<wfm-client-id>.
-            local wfm_n client_n
+            local wfm_n client_n=""
             read -r -p "  Which one is the WFM SVID?    [1]: " wfm_n    < /dev/tty
-            read -r -p "  Which one is the Client SVID? [2]: " client_n < /dev/tty
+            while [[ -z "$client_n" ]]; do
+                read -r -p "  Which one is the Client SVID?: " client_n < /dev/tty
+            done
             wfm_n="${wfm_n:-1}"
-            client_n="${client_n:-2}"
             if [[ ! "$wfm_n" =~ ^[0-9]+$ || ! "$client_n" =~ ^[0-9]+$ ]] \
                 || (( wfm_n < 1 || wfm_n > ${#svid_dirs[@]} )) \
                 || (( client_n < 1 || client_n > ${#svid_dirs[@]} )) \

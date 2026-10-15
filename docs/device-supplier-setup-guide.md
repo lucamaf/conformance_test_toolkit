@@ -139,7 +139,7 @@ bash ctt-runner/ctt-start.sh
 #       MIS on a different host:   ~/ctt-certs
 #   Which one is the WFM SVID?    [1]:
 #       the number of x509svid-ctt-mock-wfm (not asked for ~/ctt-certs)
-#   Which one is the Client SVID? [2]:
+#   Which one is the Client SVID?:
 #       the number of x509svid-ctt-mock-wfm-ctt-client (not asked for ~/ctt-certs)
 ```
 

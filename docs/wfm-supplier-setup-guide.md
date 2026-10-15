@@ -110,13 +110,13 @@ scp -r ~/ctt-certs <user>@<ctt-host>:~/
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
-# Select: 1. WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
+# Select: 1. WFM Supplier → 1. Setup MIAF Identity → 1) MIS-issued identity
 #
 # When prompted:
 #   Folder containing the client SVID [$HOME/mis-deployment]:
 #       MIS on the same host:      press Enter
 #       MIS on a different host:   ~/ctt-certs
-#   Which one is the CTT's client SVID? [2]:
+#   Which one is the CTT's client SVID?:
 #       the number of x509svid-wfm-ctt-client (not asked for ~/ctt-certs)
 ```
 
@@ -249,23 +249,15 @@ was executed.
 
 ### Step 9 — Enter the WFM endpoints
 
-The runner prompts for two URLs:
+The runner prompts for the WFM URL:
 
 ```
-Enter Margo Management Interface URL:
+Enter WFM URL:
 ```
 
 This is the base URL of the **Margo Management Interface** exposed by the WFM:
 the address up to, but not including, `/api/v1`. It is the mTLS endpoint. For
 the sandbox Symphony: `https://localhost:8084/v1alpha2/margo`
-
-```
-Enter MIAF mTLS URL for mtls:true steps [Enter = same as above, ...]:
-```
-
-Press Enter to use the same URL; the first URL is already the mTLS endpoint.
-Enter a different URL only if the WFM serves mTLS on another port than the URL
-entered first. For the sandbox Symphony: press Enter.
 
 ### Multi-component deployment
 
@@ -291,6 +283,8 @@ If it is missing, the run prints the CTT's SPIFFE ID and waits up to 5 minutes.
 Assign the deployment in the WFM during that time: two components, one with
 `wait: true` and one with `wait: false` (example:
 `ctt-runner/wfm-supplier/utils/fixtures/multi-component-app-deployment.yaml`).
+Name the two components `wait-true-component` and `wait-false-component`, as in
+the example: the CTT uses these names in the Deployment Status reports it sends.
 If no deployment appears, those steps are reported as `NOT RUN`, not as
 failures.
 
@@ -390,7 +384,7 @@ Phase 1 — Identity provisioning (once per WFM; repeat when an X.509-SVID is re
   □ Step 2: Symphony set up                        (sandbox Setup Guide: Build and Run WFM(Symphony))
             wfm.sh → 7) Manage SPIFFE ID allowlist (add spiffe://margo.org/margo/wfm/wfm/client/ctt-client)
   □ Step 3: only if the MIS runs on another host: copy client SVID, key and ca.crt to ~/ctt-certs on the CTT host
-  □ Step 4: ctt-start.sh → 1. WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity
+  □ Step 4: ctt-start.sh → 1. WFM Supplier → 1. Setup MIAF Identity → 1) MIS-issued identity
             (Enter for $HOME/mis-deployment, or ~/ctt-certs after a transfer; then select x509svid-wfm-ctt-client)
             openssl verify -CAfile trust-bundle-ca.pem client-svid-cert.pem → OK
   □ Step 5: only if Symphony is not running: wfm.sh → 3) Symphony: Start
@@ -399,7 +393,7 @@ Phase 1 — Identity provisioning (once per WFM; repeat when an X.509-SVID is re
   □ Step 1: The MIS of the Trust Domain issues the CTT a WFM Client SVID: <WFM SPIFFE ID>/client/<wfm-client-id>
   □ Step 2: The WFM Client SPIFFE ID of the CTT added to the local authorization policy of the WFM
   □ Step 3: client-svid-cert.pem, client-svid-key.pem and mis-ca.crt in one folder on the CTT host
-  □ Step 4: ctt-start.sh → 1. WFM Supplier → 1. Setup MIAF Identity → 2) MIS-issued identity → that folder
+  □ Step 4: ctt-start.sh → 1. WFM Supplier → 1. Setup MIAF Identity → 1) MIS-issued identity → that folder
 
 Phase 2 — Run the conformance suite (every run)
 
@@ -414,8 +408,7 @@ Phase 2 — Run the conformance suite (every run)
 
   Run:
   □ Step 8: bash ctt-runner/ctt-start.sh → 1. WFM Supplier → 2. Functional tests → core (2 in the list)
-  □ Step 9: Margo Management Interface URL: the mTLS endpoint, everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
-            MIAF mTLS URL: press Enter (same URL unless the WFM serves mTLS on another port)
+  □ Step 9: WFM URL: the mTLS endpoint, everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
             Wait for the run to complete (about one minute once the deployment is assigned; up to 5 minutes while polling)
   □ Step 10: Report:     ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>.html
              Signed PDF: ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf (+ ca_cert.pem)
