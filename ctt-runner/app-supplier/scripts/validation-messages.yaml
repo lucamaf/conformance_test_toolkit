@@ -122,7 +122,7 @@ deploymentProfiles.components:
     missing: Deployment profile does not contain any component definitions.
 
 deploymentProfiles.components.name:
-  crId: MARGO-APP-APPLICATIONDESCRIPTION-002
+  crId: MARGO-APP-APPLICATIONDESCRIPTION-002,MARGO-APP-APPLICATIONDESCRIPTION-007
   check:
     datatype: string
     expected: Required (non-empty)
