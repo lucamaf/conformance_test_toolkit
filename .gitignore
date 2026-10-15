@@ -46,6 +46,7 @@ ctt-runner/wfm-supplier/utils/fixtures/miaf/real/previous-client-svid-key.pem
 # (ctt-runner/reports/ itself stays: it holds the report signing scripts)
 ctt-runner/reports/*
 !ctt-runner/reports/scripts/
+!ctt-runner/reports/reference/
 ctt-runner/wfm-supplier/utils/fixtures/miaf/real/*.pem
 ctt-runner/wfm-supplier/utils/fixtures/miaf/real/*.json
 
