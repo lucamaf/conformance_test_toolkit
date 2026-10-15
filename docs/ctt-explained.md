@@ -311,16 +311,16 @@ through the `maestro` CLI. Other WFMs assign the deployment in their own way.
 
 **Is the report signed?**
 Yes. At the end of every run, for both personas, `ctt-runner/ctt-start.sh`
-calls `scripts/pdf_ops.sh`, which turns the HTML report into a PDF and signs it
-(`scripts/pdf_signer.py`: WeasyPrint for the PDF, pyHanko for the signature).
+calls `ctt-runner/reports/scripts/pdf_ops.sh`, which turns the HTML report into a PDF and signs it
+(`ctt-runner/reports/scripts/pdf_signer.py`: WeasyPrint for the PDF, pyHanko for the signature).
 The files `..._signed.pdf` and `ca_cert.pem` appear next to the HTML report.
-`scripts/pdf_verify.py` checks a signed report.
+`ctt-runner/reports/scripts/pdf_verify.py` checks a signed report.
 
 **What does the signature prove?**
 That the PDF was not changed after the CTT wrote it, and that it was signed by
 the certificate authority in `ca_cert.pem`. By default that authority is
 created by the CTT on the machine that ran the tests (kept in
-`scripts/signing-identity/`, the same one for every report of that machine).
+`ctt-runner/reports/scripts/signing-identity/`, the same one for every report of that machine).
 So it proves integrity, not who ran the tests: whoever runs the CTT holds the
 signing key. For a result that Margo itself vouches for, the run is signed with
 a certificate Margo issues (`CTT_SIGN_CERT`, a `.p12` file).

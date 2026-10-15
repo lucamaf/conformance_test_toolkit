@@ -1764,7 +1764,7 @@ function htmlEscape(value) {
 // The report template is shared with the device-supplier runner
 // (generateHTMLReport in ctt-runner/device-supplier/scripts/run_tests.go):
 // same title, header fields, sections, columns, wording and CSS. Change both
-// together. The CLI turns this HTML into the signed PDF (scripts/pdf_ops.sh).
+// together. The CLI turns this HTML into the signed PDF (ctt-runner/reports/scripts/pdf_ops.sh).
 //
 // Sections: header (persona, group, versions, system under test, run time),
 // result line, Requirements Coverage, Scenario Summary, Step Details.

@@ -314,11 +314,11 @@ same way. A requirement is FAIL when any step that checks it failed, PASS when
 at least one passed and none failed, NOT RUN when none of its steps ran.
 
 **Signed report.** At the end of every run `ctt-runner/ctt-start.sh` calls
-`scripts/pdf_ops.sh`, which converts the HTML report to PDF and signs it
-(`scripts/pdf_signer.py`). The signed PDF and the signer's CA certificate
-(`ca_cert.pem`) are written next to the HTML report; `scripts/pdf_verify.py`
+`ctt-runner/reports/scripts/pdf_ops.sh`, which converts the HTML report to PDF and signs it
+(`ctt-runner/reports/scripts/pdf_signer.py`). The signed PDF and the signer's CA certificate
+(`ca_cert.pem`) are written next to the HTML report; `ctt-runner/reports/scripts/pdf_verify.py`
 checks the signature. The default signer is a certificate authority the CTT
-creates once per machine (`scripts/signing-identity/`); `CTT_SIGN_CERT` signs
+creates once per machine (`ctt-runner/reports/scripts/signing-identity/`); `CTT_SIGN_CERT` signs
 with a supplied `.p12` instead, and `CTT_SIGN_REPORT=no` skips signing.
 
 ---

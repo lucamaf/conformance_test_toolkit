@@ -1210,7 +1210,7 @@ var reportWord = map[string]string{"pass": "PASS", "fail": "FAIL", "skip": "NOT 
 // external assets) summarizing a full test run. The template is shared with
 // the wfm-supplier runner (writeReport in run_wfm_scenarios.js): same title,
 // header fields, sections, columns, wording and CSS. Change both together.
-// The CLI turns this HTML into the signed PDF (scripts/pdf_ops.sh).
+// The CLI turns this HTML into the signed PDF (ctt-runner/reports/scripts/pdf_ops.sh).
 //
 // Sections: header (persona, group, versions, system under test, run time),
 // result line, Requirements Coverage, Scenario Summary, Step Details.

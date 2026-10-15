@@ -661,17 +661,17 @@ create_temp_scenarios_file() {
 }
 
 # Every run ends here: the HTML report is turned into a signed PDF next to it
-# (scripts/pdf_ops.sh). The first time, that script installs its PDF tools
+# (ctt-runner/reports/scripts/pdf_ops.sh). The first time, that script installs its PDF tools
 # (sudo + internet, about a minute).
 #   CTT_SIGN_REPORT=no       skip the signed PDF
 #   CTT_SIGN_CERT, CTT_SIGN_PASSPHRASE
 #                            sign with your own .p12 instead of the CTT's
-#                            self-signed CA (kept in scripts/signing-identity/)
+#                            self-signed CA (kept in ctt-runner/reports/scripts/signing-identity/)
 # A failure here never changes the test result; the HTML report stays as it is.
 sign_report() {
     local html="$1"
     [[ -f "$html" ]] || return 0
-    local signer="$SCRIPT_DIR/../scripts/pdf_ops.sh"
+    local signer="$SCRIPT_DIR/reports/scripts/pdf_ops.sh"
     if [[ ! -f "$signer" ]]; then
         warn "Signed PDF not created: $signer not found"
         return 0
@@ -1521,7 +1521,7 @@ REPORTS:
 
   Every run also writes the report as a signed PDF (<report>_signed.pdf) and
   the signer's CA certificate (ca_cert.pem) to the same folder. Check one with:
-    scripts/.venv/bin/python scripts/pdf_verify.py <report>_signed.pdf ca_cert.pem
+    ctt-runner/reports/scripts/.venv/bin/python ctt-runner/reports/scripts/pdf_verify.py <report>_signed.pdf ca_cert.pem
   CTT_SIGN_REPORT=no skips it; CTT_SIGN_CERT=<file.p12> (and
   CTT_SIGN_PASSPHRASE) signs with your own certificate.
 

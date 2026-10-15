@@ -328,7 +328,7 @@ Verify a signed report:
 
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
-scripts/.venv/bin/python scripts/pdf_verify.py \
+ctt-runner/reports/scripts/.venv/bin/python ctt-runner/reports/scripts/pdf_verify.py \
   ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>_signed.pdf \
   ctt-runner/reports/wfm-supplier/ca_cert.pem
 # RESULT    : signature OK
