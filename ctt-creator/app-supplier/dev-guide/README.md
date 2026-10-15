@@ -8,10 +8,9 @@ The **Application Supplier** persona verifies that a Margo application package c
 
 ```
 test-suites/app-supplier/
-├── sample-package/          # A package folder: one entry in the runner's list
-│   ├── margo.yaml           # Application description file (the artifact under test)
-│   └── resources/           # Resources referenced by margo.yaml
-└── app-package/
+└── app-package/             # A package folder: one entry in the runner's list
+    ├── margo.yaml           # Application description file (the artifact under test)
+    └── resources/           # Resources referenced by margo.yaml
 
 ctt-runner/app-supplier/scripts/   # The validator (Go)
 ctt-runner/reports/application-supplier/   # Generated HTML reports

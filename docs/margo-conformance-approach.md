@@ -54,7 +54,7 @@ This report may be used as evidence of conformance to Margo specifications.
 
 - A Test-Suite can have test-cases corresponding to only a single persona.
 
-- In the Conformance Test Toolkit a Test-Suite is called a **group**. A group is a named list of test IDs with a specification version: its `group.json` holds the name, version, description, the folder where the test files live, and the IDs of the scenarios, steps or Postman requests to run. The Specification Author puts the test-case files in a folder and creates the group with `ctt-creator`; the Vendor selects the group by name in `ctt-runner`, and the Conformance Report carries the group name and version. The groups shipped with the toolkit and the reasons for grouping are described in `docs/ARCHITECTURE.md`, section "The Test Data Model".
+- In the Conformance Test Toolkit a Test-Suite is called a **group**. A group is a named list of test IDs with a specification version: its `group.json` holds the name, version, description, the folder where the test files live, and the IDs of the scenarios, steps or Postman requests to run. The Specification Author puts the test-case files in a folder and creates the group with `ctt-creator`; the Vendor selects the group by name in `ctt-runner`, and the Conformance Report carries the group name and version. The groups shipped with the toolkit and the reasons for grouping are described in `docs/architecture.md`, section "The Test Data Model".
 
 ```mermaid
 flowchart LR

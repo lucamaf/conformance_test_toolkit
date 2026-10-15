@@ -27,7 +27,7 @@ The CLI writes `test-suites/<persona>/<group>/group.json` with the name, version
 
 A group contains every test in its folder. To make a group with fewer tests, put only those test cases in the group's own `test-cases` folder.
 
-The test-case formats are described in [`docs/MARGO_Conformance _Approach.md`](../docs/MARGO_Conformance%20_Approach.md).
+The test-case formats are described in [`docs/margo-conformance-approach.md`](../docs/margo-conformance-approach.md).
 
 ## Personas
 

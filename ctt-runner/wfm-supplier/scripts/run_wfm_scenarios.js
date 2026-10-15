@@ -843,7 +843,7 @@ function derToPem(b64der) {
 }
 
 // The MIAF "fetch the trust bundle once, at suite startup" step (Part 5.3
-// Phase 2 / Part 7.1-B of CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md): discovery
+// Phase 2 / Part 7.1-B of conformance-flows-and-miaf-migration.md): discovery
 // doc -> trust bundle -> write out the X.509 anchors as a CA PEM file that a
 // later `svid-ca.pem` in a cert dir can just be a copy of. Deliberately a
 // standalone one-shot command, not a scenario step — this is setup, run once,

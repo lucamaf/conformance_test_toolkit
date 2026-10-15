@@ -599,7 +599,7 @@ CREATING OR UPDATING A GROUP:
 
 TEST-CASE FORMATS:
 
-  docs/MARGO_Conformance _Approach.md
+  docs/margo-conformance-approach.md
     - "Postman Template for Expressing sequences of API exchanges"  (WFM)
     - "Margo schema for server-side test-cases"                     (Device, WFM)
   Working examples: the core, postman-lifecycle and postman-error-handling
@@ -936,7 +936,7 @@ interactive_mode() {
                 info "Functional Test Mode Selected"
                 echo ""
                 echo "WFM test cases can be a Postman collection (v2.1) or a Margo scenario file (JSON)."
-                echo "Template reference: $(realpath "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md" 2>/dev/null)"
+                echo "Template reference: $(realpath "$SCRIPT_DIR/../docs/margo-conformance-approach.md" 2>/dev/null)"
                 echo "                    (section: Postman Template for Expressing sequences of API exchanges)"
                 echo "Working example:    $(realpath "$SCRIPT_DIR/../test-suites/wfm-supplier/core/test-cases/wfm-supplier.json" 2>/dev/null)"
 
@@ -964,7 +964,7 @@ interactive_mode() {
                 info "You selected: Device Supplier"
                 echo ""
 
-                TEMPLATE_PATH="$(realpath "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md" 2>/dev/null || echo "$SCRIPT_DIR/../docs/MARGO_Conformance _Approach.md")"
+                TEMPLATE_PATH="$(realpath "$SCRIPT_DIR/../docs/margo-conformance-approach.md" 2>/dev/null || echo "$SCRIPT_DIR/../docs/margo-conformance-approach.md")"
                 EXAMPLE_PATH="$(realpath "$SCRIPT_DIR/../test-suites/device-supplier/core/test-cases/device-supplier.json" 2>/dev/null || true)"
 
                 echo "!! WARNING !!"

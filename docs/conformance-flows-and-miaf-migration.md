@@ -4,7 +4,7 @@
 **Author:** conformance team (nitparihar)
 **Spec baseline:** `1.0.0-rc.3` / `pre-draft` branch of `github.com/margo/specification`
 **Reference implementation cross‑checked:** `feature/miaf` branch of `github.com/margo/sandbox` (the project's own code‑first sandbox — see Parts 5.7 and 5.8)
-**Companion docs:** [ARCHITECTURE.md](ARCHITECTURE.md) (system architecture overview), the two setup guides (how to run the suite)
+**Companion docs:** [architecture.md](architecture.md) (system architecture overview), the two setup guides (how to run the suite)
 
 ---
 
@@ -515,7 +515,7 @@ status‑report test case needs to check this field now, including on removal.
 | **Per‑request auth** | RFC 9421: `Signature`, `Signature-Input`, `Content-Digest`; `keyid`; IEEE‑P1363 ECDSA | **mTLS** — client cert in the TLS handshake; nothing per‑request | Both runners use an mTLS client that presents the SVID; every Management Interface step has `"mtls": true`. |
 | **Transport** | server‑side TLS only | **mutual** TLS 1.3, both validate against Trust Bundle | Both runners validate the X.509-SVID of the peer against the trust anchor and check that its SPIFFE ID belongs to their own. |
 | **Who am I in a request** | `clientId` in every URL path + `properties.id` must equal it | SPIFFE ID in the client cert; **no `clientId` anywhere** | All steps use the `rc.3` paths. |
-| **Capabilities endpoint** | `POST` then `PUT` `/clients/{clientId}/capabilities[/{deviceId}]`; k8s‑style `{apiVersion,kind,properties}` | `PUT` (+ `DELETE`) `/capabilities/{deviceId}`; LinkML body (no `apiVersion`/`kind` envelope); hierarchical `{deviceId}` | `PUT` scenarios in both personas; `DELETE` in the WFM group `device-unregister`; the mock WFM implements both. |
+| **Capabilities endpoint** | `POST` then `PUT` `/clients/{clientId}/capabilities[/{deviceId}]`; k8s‑style `{apiVersion,kind,properties}` | `PUT` (+ `DELETE`) `/capabilities/{deviceId}`; LinkML body (no `apiVersion`/`kind` envelope); hierarchical `{deviceId}` | `PUT` scenarios in both personas; the mock WFM implements `PUT` and `DELETE`. |
 | **Desired state** | `GET /clients/{clientId}/deployments` | `GET /deployments` | New path; same body checks (`manifestVersion`, `bundle`, `deployments`). |
 | **Bundle / YAML** | `GET /clients/{clientId}/bundles/{digest}`, `…/deployments/{id}/{digest}` | `GET /bundles/{digest}`, `GET /deployments/{id}/{digest}` | New paths; digest and ETag checks kept; wrong‑digest `404` checks added. |
 | **Status** | `POST /clients/{clientId}/deployments/{id}/status`; `{apiVersion,kind,deploymentId,status,components}`; states `installed/installing/uninstalling/failed` | `POST /deployments/{id}/status`; add `adoptedManifestVersion`, optional `deviceId`; states add `removing/removed` | New path and body; `adoptedManifestVersion` is sent; the mock WFM accepts the new states. |
@@ -583,12 +583,11 @@ status‑report test case needs to check this field now, including on removal.
   `test-suites/wfm-supplier/core/test-cases/wfm-supplier.json` (10 scenarios:
   capabilities, desired state, content negotiation, status, header integrity,
   multi‑component deployment, application registry, trust bundle / mTLS
-  handshake, SVID rotation, observability). Unregistering a device is in its
-  own group, `device-unregister`.
+  handshake, SVID rotation, observability).
 - **Postman is still supported for the WFM persona**, but not through Newman:
   `run_wfm_scenarios.js` converts a Postman v2.1 collection into steps and
   sends them over mTLS (groups `postman-lifecycle`, `postman-error-handling`;
-  the rules are in `MARGO_Conformance _Approach.md`).
+  the rules are in `margo-conformance-approach.md`).
 - **Device persona:** one scenario file,
   `test-suites/device-supplier/core/test-cases/device-supplier.json`
   (25 scenarios): capabilities and deployments with their error cases, the
@@ -600,7 +599,7 @@ status‑report test case needs to check this field now, including on removal.
   endpoints to assign and unassign deployments), and observability.
 - **Groups:** besides `core`, each persona has smaller named groups
   (`quick-check`, `management-interface`, `identity`, ...), each with its own
-  `test-cases` folder. See [ARCHITECTURE.md](ARCHITECTURE.md), Part 6.
+  `test-cases` folder. See [architecture.md](architecture.md), Part 6.
 
 ### 7.3 Runner code after the migration
 

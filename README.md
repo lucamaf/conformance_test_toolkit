@@ -9,10 +9,9 @@ spec — by testing it against a correct, spec-conformant mock of whatever it
 talks to, and producing a pass/fail HTML report with every assertion traced
 back to a specific requirement (CR-ID).
 
-This repo works together with
+This repo is the execution engine; the
 [conformance_documentation](https://github.com/margo/conformance_documentation)
-for the broader conformance program's overview material; this repo is the
-actual test code.
+repo is its conceptual companion.
 
 ---
 
@@ -25,7 +24,7 @@ WFM Management Interface call is authenticated via **mutual TLS**. The
 onboarding API and the per-request HTTP Message Signatures (RFC 9421) of
 earlier spec versions are gone, and the suite no longer tests them.
 
-[`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md)
+[`docs/conformance-flows-and-miaf-migration.md`](docs/conformance-flows-and-miaf-migration.md)
 explains the full flow, every term (SPIFFE ID, Trust Bundle, SVID, digest,
 manifest, ...), and what changed from the earlier versions.
 
@@ -135,13 +134,12 @@ carries the group name and version.
 | `identity` | both | mTLS, trust, SVID rotation |
 | `observability` | both | OpenTelemetry |
 | `deployment-delivery`, `application-registry` | WFM | Delivering a deployment; the OCI registry |
-| `device-unregister` | WFM | `DELETE` capabilities, kept out of `core` |
 | `postman-lifecycle`, `postman-error-handling` | WFM | Tests written in Postman |
 | `manifest-integrity` | Device | Manifests and content a device must reject; state kept across a restart |
 | `core` | both | The full set — run this for a conformance result. WFM: requests sent to the real WFM. Device: the requests a real device sends, judged by the mock WFM |
 
 Why groups exist and how they are created is described in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#6-the-test-data-model).
+[`docs/architecture.md`](docs/architecture.md#6-the-test-data-model).
 
 ---
 
@@ -151,10 +149,10 @@ Why groups exist and how they are created is described in
 |---|---|
 | [`docs/wfm-supplier-setup-guide.md`](docs/wfm-supplier-setup-guide.md) | **WFM Supplier start here.** Step-by-step: identity setup, running a group, reading the report, troubleshooting. |
 | [`docs/device-supplier-setup-guide.md`](docs/device-supplier-setup-guide.md) | **Device Supplier start here.** Step-by-step: identity setup, starting the mock WFM, running a group, connecting a real device-agent. |
-| [`docs/CTT_EXPLAINED.md`](docs/CTT_EXPLAINED.md) | **Read this to understand or present the toolkit.** The rc.3 flow in plain words, how the CTT maps onto it, what each module does, the demo sequence with expected results, likely questions and answers, and the known gaps. |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | What the toolkit is, how the three personas and two CLIs fit together, test groups, and how reports trace back to spec requirements. |
-| [`docs/MARGO_Conformance _Approach.md`](docs/MARGO_Conformance%20_Approach.md) | The conformance approach and the **test-case templates**: Postman collections for the WFM persona, the Margo scenario schema for the device persona. Read this before writing tests. |
-| [`docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Every conformance flow explained end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF. |
+| [`docs/ctt-explained.md`](docs/ctt-explained.md) | **Read this to understand or present the toolkit.** The rc.3 flow in plain words, how the CTT maps onto it, what each module does, the demo sequence with expected results, likely questions and answers, and the known gaps. |
+| [`docs/architecture.md`](docs/architecture.md) | What the toolkit is, how the three personas and two CLIs fit together, test groups, and how reports trace back to spec requirements. |
+| [`docs/margo-conformance-approach.md`](docs/margo-conformance-approach.md) | The conformance approach and the **test-case templates**: Postman collections for the WFM persona, the Margo scenario schema for the device persona. Read this before writing tests. |
+| [`docs/conformance-flows-and-miaf-migration.md`](docs/conformance-flows-and-miaf-migration.md) | Every conformance flow explained end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF. |
 
 ---
 

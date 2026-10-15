@@ -1,7 +1,7 @@
 # Margo Conformance Test Toolkit — Architecture
 
 **Spec baseline:** Margo `1.0.0-rc.3` (MIAF — see
-[`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md)
+[`conformance-flows-and-miaf-migration.md`](conformance-flows-and-miaf-migration.md)
 for the full protocol-level detail this document intentionally leaves out)
 
 ---
@@ -162,7 +162,7 @@ other side's SPIFFE ID is the one that belongs to its own.
 
 The full identity model — trust bundles, SVID issuance and rotation, and
 exactly what changed from the earlier scheme — is covered in
-[`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md).
+[`conformance-flows-and-miaf-migration.md`](conformance-flows-and-miaf-migration.md).
 
 ---
 
@@ -218,7 +218,7 @@ described below.
   A scenario may list many IDs; a step normally has one to three.
 
 The format of both is described in
-[`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md).
+[`margo-conformance-approach.md`](margo-conformance-approach.md).
 
 ### Test groups
 
@@ -250,9 +250,6 @@ How it helps:
 - **Reviewers / plugfest:** the report carries the group name and version, so
   "passed `core` 1.0.0-rc.3" means the same thing on every machine, and two
   vendors' results are comparable.
-- **Risky or setup-dependent tests:** these stay out of the default run.
-  `device-unregister` is the example: it is kept separate because it stops
-  the sandbox Symphony WFM.
 
 The groups shipped with the toolkit:
 
@@ -265,10 +262,9 @@ The groups shipped with the toolkit:
 | `observability` | both | OpenTelemetry |
 | `deployment-delivery` | WFM | A multi-component deployment: URLs, deployment YAML, bundle, digests |
 | `application-registry` | WFM | The OCI Application Registry |
-| `device-unregister` | WFM | `DELETE /api/v1/capabilities/{deviceId}` |
 | `postman-lifecycle`, `postman-error-handling` | WFM | The same kind of tests written as Postman collections |
 | `manifest-integrity` | Device | Manifests and content a device must reject, one it must accept, state kept across a restart |
-| `core` | both | The full set — the conformance result. WFM: everything except `device-unregister`. Device: every real-device scenario |
+| `core` | both | The full set — the conformance result. WFM: every scenario. Device: every real-device scenario |
 
 `core` holds the complete test-case file of a persona. Each other group has
 its own `test-cases` folder with the scenarios it runs, so a scenario that is
@@ -334,5 +330,5 @@ with a supplied `.p12` instead, and `CTT_SIGN_REPORT=no` skips signing.
 | [`README.md`](../README.md) | Prerequisites and the commands of the two CLIs |
 | [`wfm-supplier-setup-guide.md`](wfm-supplier-setup-guide.md) | Step-by-step for testing a WFM |
 | [`device-supplier-setup-guide.md`](device-supplier-setup-guide.md) | Step-by-step for testing a device |
-| [`MARGO_Conformance _Approach.md`](MARGO_Conformance%20_Approach.md) | The conformance approach and the test-case templates (Postman, Margo scenario schema) |
-| [`CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md`](CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md) | Full protocol detail: every conformance flow end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF |
+| [`margo-conformance-approach.md`](margo-conformance-approach.md) | The conformance approach and the test-case templates (Postman, Margo scenario schema) |
+| [`conformance-flows-and-miaf-migration.md`](conformance-flows-and-miaf-migration.md) | Full protocol detail: every conformance flow end to end, terminology glossary, and what changed from the onboarding/signature flow to MIAF |

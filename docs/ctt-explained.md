@@ -213,7 +213,6 @@ every device requirement and the step that judges it.
 | `management-interface` | both | the six API calls, accepted and rejected |
 | `identity` | both | mTLS, refused identities, SVID rotation |
 | `deployment-delivery`, `application-registry` | WFM | a deployment delivered with correct digests; the OCI registry |
-| `device-unregister` | WFM | `DELETE` — separate, because it stops the sandbox Symphony |
 | `postman-lifecycle`, `postman-error-handling` | WFM | tests written in Postman |
 | `manifest-integrity` | Device | what a device must reject, what it must accept, state kept across a restart |
 | `self-check`, `random-order` | Device | the CTT itself, no device needed |
@@ -287,12 +286,12 @@ each one with the reason.
 **How does a vendor or spec author add a test?**
 Write a scenario (or, for a WFM, a Postman request), put the file in a folder,
 run `ctt-creator`. No code change. The formats are in
-`docs/MARGO_Conformance _Approach.md`.
+`docs/margo-conformance-approach.md`.
 
 **What changed from the earlier specification?**
 The onboarding API, the client ID in every URL and per-request signatures
 (RFC 9421) are gone. Identity is an X.509-SVID issued by the MIS, and every
-call is mutual TLS. `docs/CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md` has the
+call is mutual TLS. `docs/conformance-flows-and-miaf-migration.md` has the
 details.
 
 **Does the CTT run its own MIS?**
@@ -332,10 +331,6 @@ Yes. `writeReport` in `run_wfm_scenarios.js` and `generateHTMLReport` in
 system under test, run time), result line, Requirements Coverage, Scenario
 Summary, Step Details. A requirement is FAIL when any step that checks it
 failed, PASS when at least one passed and none failed, NOT RUN otherwise.
-
-**Why is unregistering a device not in `core`?**
-The sandbox Symphony stops when it receives that request. It is in its own
-group so nobody sends it by accident.
 
 **Does it need the internet or a cloud service?**
 No. It runs on one Linux machine. Internet is needed only to install the tools.
@@ -383,5 +378,4 @@ code:
 | `mis.margo.org` pointing at `127.0.0.1` | use the machine's address, or the device-agent cannot start |
 | a test file was changed but its group was not recreated | run `ctt-creator` for the group again; new steps are otherwise left out without a message |
 | device `core` started on a mock WFM or device with old state | restart the mock WFM and start the device with empty state |
-| the `device-unregister` group run against Symphony | Symphony stops and restarts after about a minute |
 | Application Supplier shown live | not ready; leave it out |

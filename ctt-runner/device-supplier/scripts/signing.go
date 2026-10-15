@@ -87,7 +87,7 @@ func caVerifyingClient() (*http.Client, error) {
 // (certDir/svid-cert.pem + svid-key.pem) and verifies the WFM's SVID against
 // certDir/svid-ca.pem — the MIAF transport (mutual TLS), replacing RFC 9421
 // signing entirely for steps that opt in via "mtls": true. See
-// CONFORMANCE_FLOWS_AND_MIAF_MIGRATION.md Part 5.3/7.1. Loaded fresh per call
+// conformance-flows-and-miaf-migration.md Part 5.3/7.1. Loaded fresh per call
 // like caVerifyingClient, for the same reason: cheap, and never on a hot path.
 // svidSourceBlocker says why a step that needs a rotated SVID cannot be run,
 // or "" when it can. Rotation is real only when Setup Identity replaced one

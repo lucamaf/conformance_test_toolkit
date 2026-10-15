@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Device Supplier** persona verifies that a Margo device (its WFM Client) correctly uses the Margo Management Interface. The CTT plays the WFM: a mock WFM server that the device, or the CTT's own device client, sends its requests to. This guide is for people who write or change the device test cases and groups.
+The **Device Supplier** persona verifies that a Margo device (its WFM Client) conforms to the Margo specification. The CTT runs a mock WFM server that the device, or the CTT's own device client, sends its requests to. This guide is for people who write or change the device test cases and groups.
 
 ## Directory Layout
 
@@ -20,7 +20,7 @@ test-suites/device-supplier/
 
 ctt-runner/device-supplier/
 ├── scripts/run_tests.go         # The CTT's device client (runs the scenarios)
-├── scripts/cmd/device-supplier/ # The mock WFM server
+├── scripts/cmd/device-supplier/ # The mock WFM server the device under test connects to
 └── utils/manifests/             # assertions.json, deployment templates
 ```
 
@@ -28,9 +28,9 @@ ctt-runner/device-supplier/
 
 | Term | Meaning |
 |---|---|
-| **Test Group** | A named list of test IDs with a spec version (e.g. `core`, `quick-check`, `manifest-integrity`). Each group has a `group.json`, written by `ctt-creator`. |
+| **Test Group** | A named list of test IDs (for example the groups `core`, `quick-check`, `manifest-integrity`), with the spec version it targets. Each group has a `group.json`, written by `ctt-creator`. |
 | **group.json** | Describes a test group: its name, version, persona, description, the folder with its test-case files, and the scenario and step IDs to run. |
-| **Test Case JSON** | Declarative scenario file (`test-suites/device-supplier/<group>/test-cases/*.json`) read by the CTT Runner. The format is in `docs/MARGO_Conformance _Approach.md`, section "Margo schema for server-side test-cases". |
+| **Test Case JSON** | Declarative scenario file (`test-suites/device-supplier/<group>/test-cases/*.json`) read by the CTT Runner. The format is in `docs/margo-conformance-approach.md`, section "Margo schema for server-side test-cases". |
 | **MIAF / SVID** | The mTLS identity mechanism. The mock WFM holds a WFM SVID (`spiffe://<trust-domain>/margo/wfm/<wfm-id>`); the device presents a client SVID (`spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`). Both are issued by the MIS. |
 | **Negative Fixture** | A test-control mechanism of the mock WFM that makes it serve a manifest a device must reject (wrong digest, unsupported algorithm, version not increasing), so the device's rejection logic can be tested. |
 | **manifestVersion** | A monotonically increasing counter the WFM increments each time the desired state changes. Used by the device to detect updates via `If-None-Match`. |

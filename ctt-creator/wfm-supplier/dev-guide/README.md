@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **WFM Supplier** persona verifies that a Workload Fleet Manager (WFM) correctly implements the Margo Management Interface. The CTT plays the device (WFM Client) and sends requests to the vendor's real WFM over mTLS. Test cases are Margo scenario files (JSON) or Postman collections. This guide is for people who write or change the WFM test cases and groups.
+The **WFM Supplier** persona verifies that a Workload Fleet Manager (WFM) conforms to the Margo specification. The CTT acts as a mock device (WFM Client) and sends requests to the vendor's real WFM over mTLS. Test cases are Margo scenario files (JSON) or Postman collections. This guide is for people who write or change the WFM test cases and groups.
 
 ## Directory Layout
 
@@ -32,7 +32,7 @@ ctt-runner/wfm-supplier/
 | **Test Group** | A named list of test IDs with a spec version (e.g. `core`, `quick-check`, `identity`). Each group has a `group.json`, written by `ctt-creator`. |
 | **group.json** | Describes a test group: its name, version, persona, description, the folder with its test-case files, and the scenario, step or Postman request IDs to run. |
 | **Scenario JSON** | Declarative scenario file (`test-suites/wfm-supplier/<group>/test-cases/*.json`) read by the CTT Runner. |
-| **Postman collection** | A Postman v2.1 export in the same folder. The runner converts each request into a step and sends it over mTLS. Postman test scripts are not executed. The rules are in `docs/MARGO_Conformance _Approach.md`, section "Postman Template for Expressing sequences of API exchanges". |
+| **Postman collection** | A Postman v2.1 export in the same folder. The runner converts each request into a step and sends it over mTLS. Postman test scripts are not executed. The rules are in `docs/margo-conformance-approach.md`, section "Postman Template for Expressing sequences of API exchanges". |
 | **Contract tests** | A Postman collection generated from the Margo OpenAPI file with Portman (`ctt-creator` → WFM Supplier → *OpenAPI spec based contract tests*). The runner executes it from its own menu option of the same name: one check per documented response of each endpoint. |
 | **MIAF / mTLS** | The WFM (`spiffe://<trust-domain>/margo/wfm/<wfm-id>`) must accept mTLS connections from its clients (`spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>`). The CTT presents a client SVID issued by the MIS to test this. |
 | **SVID Rotation** | The WFM must continue accepting connections as the device rotates its SVID without disruption. |
@@ -41,14 +41,13 @@ ctt-runner/wfm-supplier/
 
 | Group | Purpose |
 |---|---|
-| `core` | Every scenario of the suite except `device-unregister` — the conformance result |
+| `core` | Every scenario of the suite — the conformance result |
 | `quick-check` | Identity accepted, a device registered, manifest served, conditional request answered — first check of the setup |
 | `management-interface` | Capabilities, desired-state retrieval, content negotiation, status reporting, ETag and cache headers |
 | `deployment-delivery` | Multi-component `ApplicationDeployment` — manifest URLs, deployment YAML, bundle, digests |
 | `identity` | mTLS handshake, trust bundle, refused clients, SVID rotation |
 | `application-registry` | OCI registry conformance (AR-002 through AR-012) |
 | `observability` | A device reporting an OpenTelemetry collector is accepted |
-| `device-unregister` | `DELETE /api/v1/capabilities/{deviceId}` — kept out of `core` (stops the sandbox Symphony WFM) |
 | `postman-lifecycle`, `postman-error-handling` | The same kind of tests written as Postman collections |
 
 ## Key Requirement IDs
