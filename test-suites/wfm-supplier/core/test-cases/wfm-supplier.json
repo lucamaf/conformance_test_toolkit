@@ -1,0 +1,1746 @@
+[
+  {
+    "id": "wfm-core-capabilities",
+    "name": "Device Capabilities — Report, Update, and Validation",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
+    ],
+    "description": "Device capabilities: the first report creates the device, a second report updates it, and reports with a value outside the allowed set or without a required field are rejected with problem details.",
+    "steps": [
+      {
+        "id": "wfm-core-cap-1",
+        "name": "Report Device Capabilities (create)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-core-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-core-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-WFMCORE-1",
+            "serialNumber": "SN-WFMCORE-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [],
+        "extract_context": {},
+        "accepted_statuses": [
+          200
+        ]
+      },
+      {
+        "id": "wfm-core-cap-2",
+        "name": "Update Device Capabilities (same deviceId, second call)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-core-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-core-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-WFMCORE-1",
+            "serialNumber": "SN-WFMCORE-001",
+            "cpus": [
+              {
+                "cores": 8,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "32Gi",
+            "storage": "512Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              },
+              {
+                "type": "wifi"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [],
+        "extract_context": {},
+        "accepted_statuses": [
+          201
+        ]
+      },
+      {
+        "id": "wfm-core-cap-3",
+        "name": "Reject Capabilities — Invalid supportedDeploymentTypes",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-core-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-core-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-WFMCORE-1",
+            "serialNumber": "SN-WFMCORE-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "docker-swarm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#semantic-error"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-cap-4",
+        "name": "Reject Capabilities — Invalid supportedRuntimes",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-core-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-core-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-WFMCORE-1",
+            "serialNumber": "SN-WFMCORE-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "containerd-direct"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#semantic-error"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-cap-5",
+        "name": "Reject Capabilities — Required Field vendor Is Missing",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-core-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-core-device",
+            "modelNumber": "CTS-WFMCORE-1",
+            "serialNumber": "SN-WFMCORE-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "arm64"
+              }
+            ],
+            "memory": "16Gi",
+            "storage": "256Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "peripherals": [],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "accepted_statuses": [
+          400
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wfm-core-desired-state",
+    "name": "Desired State — Retrieval, Content Negotiation, Digest-Addressed Fetches",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-004",
+      "MARGO-WFM-MANAGEMENTINTERFACE-006",
+      "MARGO-WFM-MANAGEMENTINTERFACE-007",
+      "MARGO-WFM-MANAGEMENTINTERFACE-009",
+      "MARGO-WFM-MANAGEMENTINTERFACE-027",
+      "MARGO-WFM-MANAGEMENTINTERFACE-030",
+      "MARGO-WFM-MANAGEMENTINTERFACE-033",
+      "MARGO-WFM-MANAGEMENTINTERFACE-034",
+      "MARGO-WFM-MANAGEMENTINTERFACE-035"
+    ],
+    "description": "The desired-state manifest: served with and without an Accept header, with a quoted sha256 ETag and without `immutable` caching; `bundle` is null exactly when there are no deployments; a conditional request with the current ETag is answered 304.",
+    "steps": [
+      {
+        "id": "wfm-core-ds-1",
+        "name": "Retrieve Desired State With Explicit Accept Header — Content-Type And ETag Format",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-004",
+          "MARGO-WFM-MANAGEMENTINTERFACE-006",
+          "MARGO-WFM-MANAGEMENTINTERFACE-027",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          }
+        ],
+        "extract_context": {
+          "manifestEtag": "_headers.etag",
+          "bundleDigest": "bundle.digest",
+          "deploymentId": "deployments.0.deploymentId",
+          "deploymentDigest": "deployments.0.digest"
+        }
+      },
+      {
+        "id": "wfm-core-ds-bundle-field",
+        "name": "Desired State: bundle Is null Exactly When There Are No Deployments",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-009",
+          "MARGO-WFM-MANAGEMENTINTERFACE-033"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "bundle_null_iff_no_deployments"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-ds-not-immutable",
+        "name": "Desired State Manifest Is Not Marked immutable",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-ds-2",
+        "name": "Retrieve Desired State Without An Accept Header — Defaults To Manifest Media Type",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-007"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-core-ds-3",
+        "name": "Retrieve Desired State Again With Matching ETag — 304",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-030"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json",
+          "If-None-Match": "{manifestEtag}"
+        },
+        "expected_status": 304,
+        "validations": [],
+        "extract_context": {}
+      }
+    ]
+  },
+  {
+    "id": "wfm-core-content-negotiation",
+    "name": "WFM Content Negotiation — Unsupported Accept Header",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-008"
+    ],
+    "description": "A request whose Accept header lists only media types the WFM does not serve is answered 406 with problem details.",
+    "steps": [
+      {
+        "id": "wfm-core-cn-1",
+        "name": "Request With Unsupported Accept Header Returns 406",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-008"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/json"
+        },
+        "expected_status": 406,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#server-cannot-generate-response"
+          }
+        ],
+        "extract_context": {}
+      }
+    ]
+  },
+  {
+    "id": "wfm-core-status",
+    "name": "Deployment Status Reporting",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
+    ],
+    "description": "A status report for a deployment ID the WFM did not assign. The specification leaves the answer open, so the report may be accepted (200/201) or rejected as a semantic error (422); a server error or any other answer fails.",
+    "steps": [
+      {
+        "id": "wfm-core-status-1",
+        "name": "Status For A Deployment The WFM Did Not Assign — Accepted, Or Rejected As A Semantic Error (never a server error)",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/wfm-core-test-deployment/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "wfm-core-test-deployment",
+          "adoptedManifestVersion": 1,
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "name": "wfm-core-component-1",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201,
+          422
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wfm-header-integrity-manifest",
+    "name": "Desired State Manifest — ETag & Content-Type Correctness",
+    "description": "Headers of the desired-state manifest: Content-Type, a quoted sha256 ETag that is the digest of the exact response body, the same ETag on a second read, and 304 with an empty body for a conditional request.",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-004",
+      "MARGO-WFM-MANAGEMENTINTERFACE-006",
+      "MARGO-WFM-MANAGEMENTINTERFACE-015",
+      "MARGO-WFM-MANAGEMENTINTERFACE-027",
+      "MARGO-WFM-MANAGEMENTINTERFACE-030",
+      "MARGO-WFM-MANAGEMENTINTERFACE-034",
+      "MARGO-WFM-MANAGEMENTINTERFACE-036",
+      "MARGO-WFM-MANAGEMENTINTERFACE-039"
+    ],
+    "steps": [
+      {
+        "id": "step-wfm-hi-1.1",
+        "name": "Get Deployments — Manifest Has ETag, Content-Type, and a Valid Version",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "greater_than",
+            "value": 0
+          },
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "exists"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          }
+        ],
+        "extract_context": {
+          "etag": "_headers.etag"
+        },
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-004",
+          "MARGO-WFM-MANAGEMENTINTERFACE-006",
+          "MARGO-WFM-MANAGEMENTINTERFACE-027",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
+        ]
+      },
+      {
+        "id": "step-wfm-hi-1.2",
+        "name": "Get Deployments Again With If-None-Match — Returns 304 With Empty Body",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json",
+          "If-None-Match": "{etag}"
+        },
+        "expected_status": 304,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "equals",
+            "value": ""
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-030"
+        ]
+      },
+      {
+        "id": "step-wfm-hi-1.3",
+        "name": "Manifest ETag Is The sha256 Digest Of The Exact Response Body",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-015",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "etag_is_body_digest"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "step-wfm-hi-1.4",
+        "name": "Manifest ETag Is Unchanged On A Second Read",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-039"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.etag",
+            "operation": "equals",
+            "value": "{etag}"
+          }
+        ],
+        "extract_context": {}
+      }
+    ]
+  },
+  {
+    "id": "wfm-multi-component-deployment",
+    "name": "Multi-Component ApplicationDeployment — wait=true/false, digest & caching contract",
+    "crIds": [
+      "MARGO-WFM-APPLICATIONDESCRIPTION-001",
+      "MARGO-WFM-APPLICATIONDESCRIPTION-002",
+      "MARGO-WFM-MANAGEMENTINTERFACE-014",
+      "MARGO-WFM-MANAGEMENTINTERFACE-023",
+      "MARGO-WFM-MANAGEMENTINTERFACE-024",
+      "MARGO-WFM-MANAGEMENTINTERFACE-025",
+      "MARGO-WFM-MANAGEMENTINTERFACE-027",
+      "MARGO-WFM-MANAGEMENTINTERFACE-030",
+      "MARGO-WFM-MANAGEMENTINTERFACE-031",
+      "MARGO-WFM-MANAGEMENTINTERFACE-034",
+      "MARGO-WFM-MANAGEMENTINTERFACE-035",
+      "MARGO-WFM-MANAGEMENTINTERFACE-036",
+      "MARGO-WFM-MANAGEMENTINTERFACE-038"
+    ],
+    "description": "A WFM serves a multi-component compose ApplicationDeployment faithfully, without anything being deployed: content-addressed URLs, the deployment YAML with both `wait` values and its digest, the bundle archive with exactly the listed YAML files, its cache headers and 304, wrong digests answered 404, and status reports for every state, with invalid reports rejected. PRECONDITION: a deployment with two components (wait: true and wait: false) is assigned to the CTT's device while the second step is polling.",
+    "steps": [
+      {
+        "id": "f55c84c8-3c29-4cd0-b11a-49bde4aeafe4",
+        "name": "Report Capabilities (compose + helm supported)",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/multi-component-test-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "multi-component-test-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-MULTICOMPONENT-1",
+            "serialNumber": "SN-MULTICOMPONENT-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "peripherals": [],
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [],
+        "extract_context": {},
+        "accepted_statuses": [
+          200
+        ],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "efd8ad9d-1a6f-4b12-bf9d-040f11eddec6",
+        "name": "Wait For The Multi-Component Deployment To Be Assigned To The CTT's Client",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "poll": {
+          "interval_seconds": 10,
+          "timeout_seconds": 300,
+          "until": [
+            {
+              "field": "deployments",
+              "operation": "array_length_gte",
+              "value": 1
+            }
+          ],
+          "instruct": [
+            "The WFM lists no deployment for the CTT's client yet: {cttClientSpiffeId}",
+            "The steps of this scenario need one. Assign it now, in a second terminal or in your WFM's console; the run continues by itself:",
+            "  - Sandbox Symphony:  bash {fixturesDir}/provision-multi-component.sh",
+            "  - Your own WFM:      in its console or operator API, assign an application deployment to that client.",
+            "                       It needs two components, one 'wait: true' and one 'wait: false'",
+            "                       (see {fixturesDir}/multi-component-app-deployment.yaml).",
+            "If nothing is assigned in time, the steps of this scenario are reported as NOT RUN."
+          ],
+          "on_timeout": "skip_scenario",
+          "skip_reason": "no application deployment for the CTT's client ({cttClientSpiffeId}) appeared within 5 minutes, so deployment delivery was not judged. Assign one in the WFM and run the group again (sandbox Symphony: provision-multi-component.sh). If one was assigned, the WFM does not list it in GET /api/v1/deployments."
+        },
+        "validations": [
+          {
+            "field": "deployments",
+            "operation": "array_length_gte",
+            "value": 1
+          },
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "operation": "bundle_media_type"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          }
+        ],
+        "extract_context": {
+          "deploymentId": "deployments.0.deploymentId",
+          "deploymentDigest": "deployments.0.digest",
+          "manifestVersion": "manifestVersion",
+          "manifestDeployments": "deployments"
+        },
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
+        ]
+      },
+      {
+        "id": "wfm-mc-manifest-not-immutable",
+        "name": "Manifest With Deployments Is Not Marked immutable",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-manifest-urls",
+        "name": "State Manifest URLs Are Content-Addressed (bundle.url, deployments[].url)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "manifest_urls_are_content_addressed"
+          }
+        ],
+        "extract_context": {
+          "bundleDigest": "bundle.digest"
+        }
+      },
+      {
+        "id": "e2e5bf11-3015-40cd-8e58-96aceb20bc5e",
+        "name": "Fetch The Multi-Component ApplicationDeployment YAML (content-addressed) — Content-Type, ETag And Digest",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "yaml"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          },
+          {
+            "operation": "etag_is_body_digest"
+          },
+          {
+            "operation": "body_sha256_equals",
+            "field": "deploymentDigest",
+            "value": "{deploymentDigest}"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-014",
+          "MARGO-WFM-MANAGEMENTINTERFACE-025",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ]
+      },
+      {
+        "id": "wfm-mc-deployment-yaml-content",
+        "name": "ApplicationDeployment YAML Carries Both Components (wait: true and wait: false)",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONDESCRIPTION-001",
+          "MARGO-WFM-APPLICATIONDESCRIPTION-002"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: true"
+          },
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: false"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-deployment-wrong-digest",
+        "name": "Deployment YAML With A Digest The WFM Does Not Have Returns 404",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#deployment-not-found"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-fetch",
+        "name": "Download The Deployment Bundle — Content-Type, ETag And Digest",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-025",
+          "MARGO-WFM-MANAGEMENTINTERFACE-027",
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.bundle.v1+tar+gzip"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "equals",
+            "value": "\"{bundleDigest}\""
+          },
+          {
+            "field": "bundleDigest",
+            "operation": "body_sha256_equals",
+            "value": "{bundleDigest}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-contents",
+        "name": "Deployment Bundle Contains Exactly The Listed Deployment Files",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-024"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "bundle_contains_exactly_deployments",
+            "value": "{manifestDeployments}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-cache",
+        "name": "Deployment Bundle Cache Headers (private, max-age=31536000, immutable)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-038"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "private"
+          },
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "max-age=31536000"
+          },
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-not-modified",
+        "name": "Download The Bundle Again With If-None-Match — 304 With An Empty Body",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-030"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {
+          "If-None-Match": "\"{bundleDigest}\""
+        },
+        "expected_status": 304,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "equals",
+            "value": ""
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-wrong-digest",
+        "name": "Bundle With A Digest The WFM Does Not Have Returns 404",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#invalid-bundle"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-status-pending",
+        "name": "Report Deployment Status: pending",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "pending"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "pending"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-installing",
+        "name": "Report Deployment Status: installing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "installing"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installing"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installing"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-failed",
+        "name": "Report Deployment Status: failed, with error details",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "failed",
+            "error": {
+              "code": "IMAGE_PULL_FAILED",
+              "source": "device",
+              "message": "Conformance test error"
+            }
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "failed",
+              "error": {
+                "code": "IMAGE_PULL_FAILED",
+                "source": "device",
+                "message": "Conformance test error"
+              }
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "e9089cb2-d210-4434-b736-5cc1f61d2d07",
+        "name": "Report Deployment Status: installed (no container actually run)",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installed"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-invalid-state",
+        "name": "Reject Deployment Status — State Outside The Allowed Set",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "not-a-state"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "not-a-state"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "not-a-state"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-missing-status",
+        "name": "Reject Deployment Status — Required Field status Is Missing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installed"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wfm-application-registry-oci-conformance",
+    "name": "Application Registry — OCI Manifest, Media Types & Registry API Surface",
+    "description": "Verifies a real Application Registry serves the Application Package as a spec-conformant OCI artifact and speaks the standard OCI Registry API (tags, manifests, blobs). Runs `oras manifest fetch` / `oras blob fetch` / `oras repo tags` / a raw v2 tags-list GET against REGISTRY_REF (env var, or set `oras.ref` per step) — no mocking, no signing, no mTLS (the Application Registry is a plain OCI registry, unrelated to the WFM management-interface auth model). One test case per CR-ID; verdict logic reuses the same validate() operators as every other wfm-supplier check.",
+    "steps": [
+      {
+        "id": "ar-012-artifact-type",
+        "name": "Manifest artifactType marks this as a Margo Application Package",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-012"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "artifactType",
+            "operation": "equals",
+            "value": "application/vnd.margo.app.v1+json"
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-009-empty-config",
+        "name": "config object is the OCI empty-config descriptor",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-009"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "config.mediaType",
+            "operation": "equals",
+            "value": "application/vnd.oci.empty.v1+json"
+          },
+          {
+            "field": "config.size",
+            "operation": "equals",
+            "value": 2
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-007-manifest-conforms-to-oci",
+        "name": "The manifest as a whole is a valid OCI Image Manifest (schemaVersion 2, correct manifest mediaType)",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-007"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "schemaVersion",
+            "operation": "equals",
+            "value": 2
+          },
+          {
+            "field": "mediaType",
+            "operation": "equals",
+            "value": "application/vnd.oci.image.manifest.v1+json"
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-002-application-description-present",
+        "name": "The Application Description is present as a manifest layer",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-002"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "has_application_description_layer"
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-004-011-resource-media-types",
+        "name": "Every layer the package ships carries a Margo-specific media type, never a generic one (e.g. application/octet-stream)",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-004",
+          "MARGO-WFM-APPLICATIONREGISTRY-011"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "layer_media_types_are_margo_specific"
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-006-manifest-pullable",
+        "name": "Retrieving the Application Package Manifest works via the standard OCI 'pull manifest' pattern",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
+          "MARGO-WFM-APPLICATIONREGISTRY-006"
+        ],
+        "oras": {
+          "cmd": "manifest"
+        },
+        "expected_status": 200,
+        "validations": [],
+        "endpoint": null
+      },
+      {
+        "id": "ar-005-blobs-pullable",
+        "name": "Retrieving each Application Package part works via the standard OCI 'pull blob' pattern, not a custom download mechanism",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
+          "MARGO-WFM-APPLICATIONREGISTRY-005"
+        ],
+        "oras": {
+          "cmd": "blobs"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "failedDigests",
+            "operation": "is_array"
+          },
+          {
+            "field": "failedDigests",
+            "operation": "array_length_equals",
+            "value": 0
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-003-tags-listing",
+        "name": "The registry lists at least one published tag/version for this Application Package",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-003"
+        ],
+        "oras": {
+          "cmd": "tags"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "tags",
+            "operation": "array_length_gte",
+            "value": 1
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-010-tags-list-json-shape",
+        "name": "The raw tags-list response is the exact {name, tags[]} JSON shape the OCI Distribution Spec defines",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-010"
+        ],
+        "oras": {
+          "cmd": "tags_raw"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "name",
+            "operation": "is_string"
+          },
+          {
+            "field": "tags",
+            "operation": "is_array"
+          }
+        ],
+        "endpoint": null
+      },
+      {
+        "id": "ar-008-registry-api-surface",
+        "name": "The full OCI Registry API surface (tags, manifest, blobs) is usable end to end, not a partial/bespoke subset",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONREGISTRY-001",
+          "MARGO-WFM-APPLICATIONREGISTRY-008"
+        ],
+        "oras": {
+          "cmd": "blobs"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "failedDigests",
+            "operation": "array_length_equals",
+            "value": 0
+          }
+        ],
+        "endpoint": null
+      }
+    ],
+    "crIds": [
+      "MARGO-WFM-APPLICATIONREGISTRY-001",
+      "MARGO-WFM-APPLICATIONREGISTRY-002",
+      "MARGO-WFM-APPLICATIONREGISTRY-003",
+      "MARGO-WFM-APPLICATIONREGISTRY-004",
+      "MARGO-WFM-APPLICATIONREGISTRY-005",
+      "MARGO-WFM-APPLICATIONREGISTRY-006",
+      "MARGO-WFM-APPLICATIONREGISTRY-007",
+      "MARGO-WFM-APPLICATIONREGISTRY-008",
+      "MARGO-WFM-APPLICATIONREGISTRY-009",
+      "MARGO-WFM-APPLICATIONREGISTRY-010",
+      "MARGO-WFM-APPLICATIONREGISTRY-011",
+      "MARGO-WFM-APPLICATIONREGISTRY-012"
+    ]
+  },
+  {
+    "id": "wfm-identity-trust-bundle",
+    "name": "MIAF Identity — Trust Bundle Fetch and mTLS Handshake",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-001",
+      "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-002"
+    ],
+    "description": "The mTLS handshake: the WFM presents an SVID that chains to the MIS CA and carries the SPIFFE ID of the WFM this client belongs to, and accepts the CTT's client SVID; it refuses a connection without a client certificate and one with a certificate the MIS did not issue.",
+    "steps": [
+      {
+        "id": "wfm-identity-tb-1",
+        "name": "mTLS Handshake Both Ways — The WFM Presents Its SVID And Accepts The CTT's SVID",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-001",
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-identity-tb-2",
+        "name": "WFM Rejects Connection Without Client Certificate",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-001"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": false,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "validations": [],
+        "extract_context": {},
+        "expected_status": 0,
+        "accepted_statuses": [
+          403
+        ],
+        "expect_transport_error": true
+      },
+      {
+        "id": "wfm-identity-tb-3",
+        "name": "WFM Refuses A Client Certificate The MIS Did Not Issue",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "validations": [],
+        "extract_context": {},
+        "expected_status": 0,
+        "expect_transport_error": true,
+        "svid_source": "untrusted",
+        "accepted_statuses": [
+          403
+        ]
+      }
+    ]
+  },
+  {
+    "id": "wfm-identity-svid-refresh",
+    "name": "MIAF Identity — SVID Rotation Continuity",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-003"
+    ],
+    "description": "Verifies that after SVID rotation the WFM continues to accept the client without re-registration: a request with the pre-rotation SVID and a request with the re-issued SVID (same SPIFFE ID) must both succeed. Runs only once the CTT's client SVID has been re-issued and installed again through Setup MIAF Identity, which keeps the SVID it replaces; until then both steps are reported as NOT RUN.",
+    "steps": [
+      {
+        "id": "wfm-identity-svid-1",
+        "name": "Authenticate With The Pre-Rotation SVID (baseline)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-003"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ],
+        "extract_context": {},
+        "svid_source": "previous"
+      },
+      {
+        "id": "wfm-identity-svid-2",
+        "name": "Authenticate With Refreshed SVID (after rotation)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-MIAF-003"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "svid_source": "refreshed",
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ],
+        "extract_context": {}
+      }
+    ]
+  },
+  {
+    "id": "wfm-otel-observability",
+    "name": "OTEL Observability — WFM Accepts Device with otelCollector Capability",
+    "description": "The otelCollector capability: the WFM accepts a device that reports a collector and one that reports none, and rejects a value that is not a boolean. Whether telemetry reaches the WFM's observability backend is not checked here.",
+    "crIds": [
+      "MARGO-WFM-MANAGEMENTINTERFACE-023"
+    ],
+    "steps": [
+      {
+        "id": "wfm-otel-cap-1",
+        "name": "Report Capabilities With otelCollector: true — Accepted",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": true,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          200,
+          201
+        ],
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-otel-cap-2",
+        "name": "Report Capabilities With otelCollector: false — Accepted",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose",
+              "helm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          200,
+          201
+        ],
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-otel-cap-3",
+        "name": "Reject Capabilities — otelCollector Is Not A Boolean",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/wfm-otel-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "wfm-otel-device",
+            "vendor": "Acme Corp",
+            "modelNumber": "ACM-OTEL",
+            "serialNumber": "SN-OTEL-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": "yes",
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "compose",
+              "helm"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {}
+      }
+    ]
+  }
+]

@@ -1,0 +1,413 @@
+{
+  "endpoints": {
+    "PUT_capabilities": {
+      "path": "/api/v1/capabilities/{deviceId}",
+      "method": "PUT",
+      "status_code": 201,
+      "validation_error_key": "unprocessable",
+      "validations": [
+        {
+          "rule_id": "capabilities-003",
+          "field": "properties",
+          "type": "object",
+          "required": true,
+          "description": "properties field is required"
+        },
+        {
+          "rule_id": "capabilities-004",
+          "field": "properties.id",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "properties.id is required"
+        },
+        {
+          "rule_id": "capabilities-005",
+          "field": "properties.vendor",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "properties.vendor is required"
+        },
+        {
+          "rule_id": "capabilities-006",
+          "field": "properties.modelNumber",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "properties.modelNumber is required"
+        },
+        {
+          "rule_id": "capabilities-007",
+          "field": "properties.serialNumber",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "properties.serialNumber is required"
+        },
+        {
+          "rule_id": "capabilities-008",
+          "field": "properties.cpus",
+          "type": "array",
+          "required": false,
+          "itemsType": "object",
+          "description": "properties.cpus is required and must be an array of CPU objects"
+        },
+        {
+          "rule_id": "capabilities-009",
+          "field": "properties.cpus.*.cores",
+          "type": "number",
+          "required": true,
+          "requiredIf": "properties.cpus",
+          "description": "Each entry in properties.cpus must declare cores"
+        },
+        {
+          "rule_id": "capabilities-010",
+          "field": "properties.cpus.*.architecture",
+          "type": "string",
+          "required": false,
+          "requiredIf": "properties.cpus",
+          "enum": [
+            "amd64",
+            "arm64",
+            "arm"
+          ],
+          "description": "properties.cpus[].architecture must use a supported architecture value when present"
+        },
+        {
+          "rule_id": "capabilities-011",
+          "field": "properties.memory",
+          "type": "string",
+          "required": false,
+          "minLength": 1,
+          "description": "properties.memory is required"
+        },
+        {
+          "rule_id": "capabilities-012",
+          "field": "properties.storage",
+          "type": "string",
+          "required": false,
+          "minLength": 1,
+          "description": "properties.storage is required"
+        },
+        {
+          "rule_id": "capabilities-013",
+          "field": "properties.interfaces",
+          "type": "array",
+          "required": false,
+          "itemsType": "object",
+          "description": "properties.interfaces is required and must be an array of interface objects"
+        },
+        {
+          "rule_id": "capabilities-014",
+          "field": "properties.interfaces.*.type",
+          "type": "string",
+          "required": true,
+          "requiredIf": "properties.interfaces",
+          "enum": [
+            "ethernet",
+            "wifi",
+            "cellular",
+            "bluetooth",
+            "usb",
+            "canbus",
+            "rs232"
+          ],
+          "description": "Each interface must declare a supported type"
+        },
+        {
+          "rule_id": "capabilities-015",
+          "field": "properties.peripherals",
+          "type": "array",
+          "required": false,
+          "itemsType": "object",
+          "description": "properties.peripherals is required and must be an array of peripheral objects"
+        },
+        {
+          "rule_id": "capabilities-016",
+          "field": "properties.peripherals.*.type",
+          "type": "string",
+          "required": true,
+          "requiredIf": "properties.peripherals",
+          "enum": [
+            "gpu",
+            "display",
+            "camera",
+            "microphone",
+            "speaker"
+          ],
+          "description": "Each peripheral must declare a supported type"
+        },
+        {
+          "rule_id": "capabilities-017",
+          "field": "properties.otelCollector",
+          "type": "boolean",
+          "required": false,
+          "description": "properties.otelCollector is required"
+        },
+        {
+          "rule_id": "capabilities-018",
+          "field": "properties.supportedRuntimes",
+          "type": "array",
+          "required": false,
+          "minItems": 1,
+          "itemsType": "string",
+          "itemsEnum": [
+            "oci",
+            "custom"
+          ],
+          "description": "properties.supportedRuntimes is required and must contain at least one supported runtime"
+        },
+        {
+          "rule_id": "capabilities-019",
+          "field": "properties.supportedDeploymentTypes",
+          "type": "array",
+          "required": false,
+          "minItems": 1,
+          "itemsType": "string",
+          "itemsEnum": [
+            "helm",
+            "compose",
+            "custom"
+          ],
+          "description": "properties.supportedDeploymentTypes is required and must contain at least one supported deployment type"
+        },
+        {
+          "rule_id": "capabilities-020",
+          "field": "properties.id",
+          "type": "string",
+          "required": true,
+          "pattern": "^[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$",
+          "description": "properties.id must be a device ID: segments of letters, digits, '.', '_', '~', '-' separated by '/'"
+        },
+        {
+          "rule_id": "capabilities-021",
+          "field": "labels",
+          "type": "object",
+          "required": false,
+          "description": "labels must be an object when present"
+        }
+      ],
+      "response_structure": {
+        "matches": [
+          {
+            "description": "Response must indicate success",
+            "json": "status",
+            "value": "capabilities_received"
+          }
+        ]
+      }
+    },
+    "POST_status": {
+      "path": "/api/v1/deployments/{deploymentId}/status",
+      "method": "POST",
+      "status_code": 200,
+      "validation_error_key": "unprocessable",
+      "validations": [
+        {
+          "rule_id": "status-003",
+          "field": "deploymentId",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "deploymentId is required"
+        },
+        {
+          "rule_id": "status-004",
+          "field": "status",
+          "type": "object",
+          "required": true,
+          "description": "status object is required"
+        },
+        {
+          "rule_id": "status-005",
+          "field": "status.state",
+          "type": "string",
+          "required": true,
+          "enum": [
+            "pending",
+            "installing",
+            "installed",
+            "failed",
+            "removing",
+            "removed"
+          ],
+          "description": "status.state must be a valid deployment state"
+        },
+        {
+          "rule_id": "status-006",
+          "field": "components",
+          "type": "array",
+          "required": true,
+          "itemsType": "object",
+          "description": "components must be an array of status entries"
+        },
+        {
+          "rule_id": "status-007",
+          "field": "components.*.name",
+          "type": "string",
+          "required": true,
+          "minLength": 1,
+          "description": "Each component must include a name"
+        },
+        {
+          "rule_id": "status-008",
+          "field": "components.*.state",
+          "type": "string",
+          "required": true,
+          "enum": [
+            "pending",
+            "installing",
+            "installed",
+            "failed",
+            "removing",
+            "removed"
+          ],
+          "description": "Each component must include a valid state"
+        },
+        {
+          "rule_id": "status-009",
+          "field": "deviceId",
+          "type": "string",
+          "required": false,
+          "description": "deviceId is optional; when present it must be a string identifying the reporting device"
+        },
+        {
+          "rule_id": "status-010",
+          "field": "adoptedManifestVersion",
+          "type": "number",
+          "required": true,
+          "description": "adoptedManifestVersion is required: the manifest version the device has adopted"
+        },
+        {
+          "rule_id": "status-011",
+          "field": "status.error",
+          "type": "object",
+          "required": false,
+          "description": "status.error must be an object when present"
+        },
+        {
+          "rule_id": "status-012",
+          "field": "components.*.error",
+          "type": "object",
+          "required": false,
+          "requiredIf": "components",
+          "description": "A component's error must be an object when present"
+        }
+      ],
+      "response_structure": {
+        "matches": [
+          {
+            "description": "Response must acknowledge receipt",
+            "json": "acknowledgement",
+            "value": "received"
+          }
+        ]
+      }
+    }
+  },
+  "device_expectations": {
+    "PUT_capabilities": [
+      {
+        "rule_id": "device-id",
+        "field": "properties.id",
+        "type": "string",
+        "required": true,
+        "minLength": 1,
+        "description": "The capabilities name the device (properties.id)"
+      },
+      {
+        "rule_id": "device-runtime-oci",
+        "field": "properties.supportedRuntimes",
+        "type": "array",
+        "required": true,
+        "itemsInclude": [
+          "oci"
+        ],
+        "description": "A device must provide an OCI container runtime: properties.supportedRuntimes must include \"oci\""
+      },
+      {
+        "rule_id": "device-otel-collector",
+        "field": "properties.otelCollector",
+        "type": "boolean",
+        "required": true,
+        "value": true,
+        "description": "A device must provide an OpenTelemetry collector: properties.otelCollector must be true"
+      },
+      {
+        "rule_id": "device-deployment-type",
+        "field": "properties.supportedDeploymentTypes",
+        "type": "array",
+        "required": true,
+        "minItems": 1,
+        "itemsType": "string",
+        "itemsEnum": [
+          "helm",
+          "compose",
+          "custom"
+        ],
+        "description": "A device must declare at least one deployment type it can deploy"
+      },
+      {
+        "rule_id": "device-role-standalone-device",
+        "field": "properties.supportedDeploymentTypes",
+        "type": "array",
+        "required": true,
+        "itemsInclude": [
+          "compose"
+        ],
+        "description": "The standalone device role deploys Compose applications: properties.supportedDeploymentTypes includes \"compose\""
+      },
+      {
+        "rule_id": "device-role-standalone-cluster",
+        "field": "properties.supportedDeploymentTypes",
+        "type": "array",
+        "required": true,
+        "itemsInclude": [
+          "helm"
+        ],
+        "description": "The standalone cluster role deploys Helm charts: properties.supportedDeploymentTypes includes \"helm\""
+      },
+      {
+        "rule_id": "device-memory",
+        "field": "properties.memory",
+        "type": "string",
+        "required": true,
+        "minLength": 1,
+        "description": "The device states the memory it provides (properties.memory)"
+      },
+      {
+        "rule_id": "device-storage",
+        "field": "properties.storage",
+        "type": "string",
+        "required": true,
+        "minLength": 1,
+        "description": "The device states the storage it provides (properties.storage)"
+      },
+      {
+        "rule_id": "device-cpus",
+        "field": "properties.cpus",
+        "type": "array",
+        "required": true,
+        "minItems": 1,
+        "itemsType": "object",
+        "description": "The device states the CPU cores it provides (properties.cpus)"
+      }
+    ]
+  },
+  "error_responses": {
+    "badRequest": {
+      "status_code": 400,
+      "format": "error_string"
+    },
+    "notFound": {
+      "status_code": 404,
+      "format": "error_string"
+    },
+    "unprocessable": {
+      "status_code": 422,
+      "format": "validation_errors",
+      "status": "validation_failed"
+    }
+  }
+}

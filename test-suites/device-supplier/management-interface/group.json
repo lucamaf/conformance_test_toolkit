@@ -1,0 +1,34 @@
+{
+  "name": "management-interface",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "Real device: capabilities, desired state, fetch and status, and a deployment that is added and withdrawn.",
+  "FolderPath": [
+    "../test-suites/device-supplier/management-interface/test-cases"
+  ],
+  "testCases": [
+    "rd-02-capabilities",
+    "rd-02-capabilities-accepted",
+    "rd-02-capabilities-connected",
+    "rd-02-capabilities-deployment-type",
+    "rd-02-capabilities-device-id",
+    "rd-02-capabilities-otel",
+    "rd-02-capabilities-resources",
+    "rd-02-capabilities-role-cluster",
+    "rd-02-capabilities-role-device",
+    "rd-02-capabilities-runtime",
+    "rd-03-desired-state",
+    "rd-03-desired-state-connected",
+    "rd-03-desired-state-etag",
+    "rd-03-desired-state-fetch",
+    "rd-03-desired-state-read",
+    "rd-03-desired-state-status",
+    "rd-04-deployment-lifecycle",
+    "rd-04-deployment-lifecycle-add",
+    "rd-04-deployment-lifecycle-connected",
+    "rd-04-deployment-lifecycle-read",
+    "rd-04-deployment-lifecycle-removed",
+    "rd-04-deployment-lifecycle-status",
+    "rd-04-deployment-lifecycle-withdraw"
+  ]
+}

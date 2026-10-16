@@ -1,0 +1,30 @@
+{
+  "name": "deployment-delivery",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "Delivery of a multi-component deployment: manifest URLs, deployment YAML, bundle archive and their digests. Needs a deployment assigned to the CTT's device.",
+  "FolderPath": [
+    "../test-suites/wfm-supplier/deployment-delivery/test-cases"
+  ],
+  "testCases": [
+    "e2e5bf11-3015-40cd-8e58-96aceb20bc5e",
+    "e9089cb2-d210-4434-b736-5cc1f61d2d07",
+    "efd8ad9d-1a6f-4b12-bf9d-040f11eddec6",
+    "f55c84c8-3c29-4cd0-b11a-49bde4aeafe4",
+    "wfm-mc-bundle-cache",
+    "wfm-mc-bundle-contents",
+    "wfm-mc-bundle-fetch",
+    "wfm-mc-bundle-not-modified",
+    "wfm-mc-bundle-wrong-digest",
+    "wfm-mc-deployment-wrong-digest",
+    "wfm-mc-deployment-yaml-content",
+    "wfm-mc-manifest-not-immutable",
+    "wfm-mc-manifest-urls",
+    "wfm-mc-status-failed",
+    "wfm-mc-status-installing",
+    "wfm-mc-status-invalid-state",
+    "wfm-mc-status-missing-status",
+    "wfm-mc-status-pending",
+    "wfm-multi-component-deployment"
+  ]
+}

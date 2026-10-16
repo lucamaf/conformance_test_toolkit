@@ -1,0 +1,24 @@
+{
+  "name": "quick-check",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "No device needed: a first check of the URLs and the identity setup, a few seconds.",
+  "FolderPath": [
+    "../test-suites/device-supplier/quick-check/test-cases"
+  ],
+  "testCases": [
+    "scenario-capabilities",
+    "scenario-deployments",
+    "step-2.1",
+    "step-2.2",
+    "step-3.1",
+    "step-3.2",
+    "step-3.3",
+    "step-3.4",
+    "step-3.5",
+    "step-3.6",
+    "step-3.7",
+    "step-3.8",
+    "step-3.9"
+  ]
+}

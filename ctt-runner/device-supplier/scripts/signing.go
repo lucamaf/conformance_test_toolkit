@@ -1,0 +1,300 @@
+package main
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/lestrrat-go/htmsig"
+	"github.com/lestrrat-go/htmsig/component"
+	"github.com/lestrrat-go/htmsig/input"
+)
+
+// ===== RFC 9421 CLIENT-SIDE SIGNING + TLS TRUST =====
+//
+// Everything the runner needs to present itself as a device-agent: build the
+// Content-Digest, load a signing key, produce an RFC 9421 signature with a
+// chosen algorithm (MI-011/012/014), and — for MI-018 — verify the WFM's TLS
+// certificate against the fetched root CA.
+
+// defaultDeviceKeyPath is the private key used to sign requests unless a
+// scenario/step selects another. Matches ./certs/device-cert.pem.
+const defaultDeviceKeyPath = "./certs/device-key.pem"
+
+func getDeviceKeyPath() string {
+	if customPath := strings.TrimSpace(os.Getenv("DEVICE_PRIVATE_KEY_PATH")); customPath != "" {
+		return customPath
+	}
+	return defaultDeviceKeyPath
+}
+
+func buildContentDigest(body []byte) string {
+	sum := sha256.Sum256(body)
+	return "sha-256=:" + base64.StdEncoding.EncodeToString(sum[:]) + ":"
+}
+
+// firstNonEmpty returns the first non-empty string, or "".
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// ctxString reads a string value from ctx.Data (empty if absent/other type).
+func ctxString(ctx *TestContext, key string) string {
+	if s, ok := ctx.Data[key].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// caVerifyingClient returns an HTTP client that verifies the server's TLS
+// certificate against the root CA in certs/ca-cert.pem — the CA a device fetches
+// via the Certificate API (MI-018).
+func caVerifyingClient() (*http.Client, error) {
+	caPEM, err := os.ReadFile(filepath.Join(certDir, "ca-cert.pem"))
+	if err != nil {
+		return nil, fmt.Errorf("read ca-cert.pem: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("ca-cert.pem is not a valid certificate")
+	}
+	return &http.Client{
+		Timeout:   10 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}},
+	}, nil
+}
+
+// mtlsClient returns an HTTP client that presents this suite's own X.509-SVID
+// (certDir/svid-cert.pem + svid-key.pem) and verifies the WFM's SVID against
+// certDir/svid-ca.pem — the MIAF transport (mutual TLS), replacing RFC 9421
+// signing entirely for steps that opt in via "mtls": true. See
+// conformance-flows-and-miaf-migration.md Part 5.3/7.1. Loaded fresh per call
+// like caVerifyingClient, for the same reason: cheap, and never on a hot path.
+// svidSourceBlocker says why a step that needs a rotated SVID cannot be run,
+// or "" when it can. Rotation is real only when Setup Identity replaced one
+// SVID with another for the same SPIFFE ID and kept the one it replaced.
+func svidSourceBlocker(source string) string {
+	if source != "previous" && source != "refreshed" {
+		return ""
+	}
+	prev, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-previous-cert.pem"), filepath.Join(certDir, "svid-previous-key.pem"))
+	if err != nil {
+		return "no SVID rotation to test — re-issue the client SVID for the same SPIFFE ID and run Setup Identity again (it keeps the SVID it replaces)"
+	}
+	cur, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-cert.pem"), filepath.Join(certDir, "svid-key.pem"))
+	if err != nil {
+		return fmt.Sprintf("current SVID could not be loaded: %v", err)
+	}
+	prevLeaf, err1 := x509.ParseCertificate(prev.Certificate[0])
+	curLeaf, err2 := x509.ParseCertificate(cur.Certificate[0])
+	if err1 != nil || err2 != nil || len(prevLeaf.URIs) != 1 || len(curLeaf.URIs) != 1 || prevLeaf.URIs[0].String() != curLeaf.URIs[0].String() {
+		return "the kept pre-rotation SVID belongs to a different SPIFFE ID than the current SVID"
+	}
+	if source == "previous" && time.Now().After(prevLeaf.NotAfter) {
+		return "the pre-rotation SVID has expired"
+	}
+	return ""
+}
+
+// untrustedSVID makes a certificate that carries our own SPIFFE ID but is
+// self-signed — the MIS did not issue it, so a WFM must refuse it.
+func untrustedSVID(own *x509.Certificate) (tls.Certificate, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: "ctt-untrusted-client"},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		URIs:                  own.URIs,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
+}
+
+func mtlsClient(source string) (*http.Client, error) {
+	certPath := filepath.Join(certDir, "svid-cert.pem")
+	keyPath := filepath.Join(certDir, "svid-key.pem")
+	caPath := filepath.Join(certDir, "svid-ca.pem")
+
+	// The installed SVID always decides which WFM we expect to be talking to.
+	cert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("load SVID from %s/%s: %w", certPath, keyPath, err)
+	}
+	ownLeaf, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		return nil, fmt.Errorf("parse SVID %s: %w", certPath, err)
+	}
+	presented := []tls.Certificate{cert}
+	switch source {
+	case "previous":
+		prev, err := tls.LoadX509KeyPair(filepath.Join(certDir, "svid-previous-cert.pem"), filepath.Join(certDir, "svid-previous-key.pem"))
+		if err != nil {
+			return nil, fmt.Errorf("load pre-rotation SVID: %w", err)
+		}
+		presented = []tls.Certificate{prev}
+	case "untrusted":
+		bad, err := untrustedSVID(ownLeaf)
+		if err != nil {
+			return nil, fmt.Errorf("make untrusted certificate: %w", err)
+		}
+		presented = []tls.Certificate{bad}
+	case "none":
+		presented = nil
+	}
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return nil, fmt.Errorf("read trust bundle CA %s: %w", caPath, err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("%s is not a valid certificate", caPath)
+	}
+	// InsecureSkipVerify + a custom VerifyPeerCertificate: an X.509-SVID's
+	// identity lives entirely in the URI SAN (spiffe://...), never a DNS/IP
+	// SAN, so Go's default hostname verification always fails against one —
+	// the same reason run_wfm_scenarios.js's request() sets
+	// rejectUnauthorized: false. We still cryptographically verify the peer's
+	// chain against the trust bundle CA, just without the hostname check.
+	return &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{
+			// Always present the chosen certificate, also when the server's list of
+			// acceptable CAs does not include its issuer — that is the case under test
+			// for "untrusted". With "none" nothing is presented.
+			GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+				if len(presented) == 0 {
+					return &tls.Certificate{}, nil
+				}
+				return &presented[0], nil
+			},
+			InsecureSkipVerify: true, //nolint:gosec // chain is verified manually below; only hostname checking is skipped
+			MinVersion:         tls.VersionTLS12,
+			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				if len(rawCerts) == 0 {
+					return fmt.Errorf("no server certificate presented")
+				}
+				leaf, err := x509.ParseCertificate(rawCerts[0])
+				if err != nil {
+					return fmt.Errorf("parse server certificate: %w", err)
+				}
+				if _, err = leaf.Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+					return err
+				}
+				return recognizeWFM(leaf, ownLeaf)
+			},
+		}},
+	}, nil
+}
+
+// recognizeWFM applies "Recognition by the WFM Client" (WFM Identity Profile):
+// the server's SPIFFE ID must be exactly spiffe://<trust-domain>/margo/wfm/<wfm-id>,
+// with trust domain and wfm-id taken from this client's own SVID
+// (spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/<wfm-client-id>).
+func recognizeWFM(server, own *x509.Certificate) error {
+	if len(own.URIs) != 1 || own.URIs[0].Scheme != "spiffe" {
+		return fmt.Errorf("client SVID must carry exactly one spiffe:// URI SAN")
+	}
+	ownID := own.URIs[0].String()
+	i := strings.LastIndex(ownID, "/client/")
+	if i < 0 {
+		return fmt.Errorf("client SVID %s is not a WFM Client identity (expected .../margo/wfm/<wfm-id>/client/<wfm-client-id>)", ownID)
+	}
+	expected := ownID[:i]
+	if len(server.URIs) != 1 || server.URIs[0].String() != expected {
+		got := "no SPIFFE ID"
+		if len(server.URIs) == 1 {
+			got = server.URIs[0].String()
+		}
+		return fmt.Errorf("server presented %s, expected the WFM %s", got, expected)
+	}
+	return nil
+}
+
+// loadPrivateKey loads and parses a PEM private key from path.
+func loadPrivateKey(keyPath string) (interface{}, error) {
+	data, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, fmt.Errorf("private key not found at %s: %w", keyPath, err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("failed to PEM-decode private key")
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParseECPrivateKey(block.Bytes); err == nil {
+		return key, nil
+	}
+	return nil, fmt.Errorf("unrecognized private key format")
+}
+
+// signRequest adds RFC 9421 Signature-Input, Signature, and Content-Digest
+// headers. keyPath selects the signing key; alg, when set, pins the RFC 9421
+// algorithm (otherwise htmsig derives it from the key type).
+func signRequest(req *http.Request, bodyBytes []byte, keyPath, alg string) error {
+	key, err := loadPrivateKey(keyPath)
+	if err != nil {
+		return fmt.Errorf("could not load signing key: %w", err)
+	}
+
+	comps := []component.Identifier{component.Method(), component.TargetURI()}
+	if len(bodyBytes) > 0 {
+		req.Header.Set("Content-Digest", buildContentDigest(bodyBytes))
+		comps = append(comps, component.New("content-digest"))
+	}
+
+	// Build the signature definition directly (not via the http Signer wrapper)
+	// so a non-default algorithm can be pinned — the wrapper's NewSigner has no
+	// exported algorithm option.
+	builder := input.NewDefinitionBuilder().
+		Label("sig1").
+		KeyID("device-key").
+		Components(comps...).
+		Created(time.Now().Unix())
+	if alg != "" {
+		builder = builder.Algorithm(alg)
+	}
+	def, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("build signature definition: %w", err)
+	}
+	inputValue := input.NewValueBuilder().AddDefinition(def).MustBuild()
+	ctx := component.WithRequestInfoFromHTTP(context.Background(), req)
+	if err := htmsig.SignRequest(ctx, req.Header, inputValue, key); err != nil {
+		return fmt.Errorf("htmsig SignRequest failed: %w", err)
+	}
+	return nil
+}

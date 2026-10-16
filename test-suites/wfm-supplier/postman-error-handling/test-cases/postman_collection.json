@@ -1,0 +1,433 @@
+{
+  "info": {
+    "_postman_id": "a7e1c3f5-2b4d-4e6f-8a90-b1c2d3e4f506",
+    "name": "Margo WFM Supplier — Negative Conformance Tests (rc.3)",
+    "description": "Negative tests for the WFM Supplier persona on Margo 1.0.0-rc.3, written as a Postman collection: requests the WFM must reject, each with the problem details it must answer.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "id": "9d0f2c1e-5b7a-4c3d-8e21-0a6b4f7c9d10",
+      "name": "PUT Capabilities — Register the device (setup)",
+      "request": {
+        "method": "PUT",
+        "description": "",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/capabilities/:deviceId",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "capabilities",
+            ":deviceId"
+          ],
+          "query": [],
+          "variable": [
+            {
+              "key": "deviceId",
+              "value": "{{deviceId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"properties\": {\n    \"id\": \"{{deviceId}}\",\n    \"vendor\": \"ConformanceTestVendor\",\n    \"modelNumber\": \"MDL-CONFORM-001\",\n    \"serialNumber\": \"SN-CONFORM-0001\",\n    \"cpus\": [{ \"cores\": 4, \"architecture\": \"amd64\" }],\n    \"memory\": \"8Gi\",\n    \"storage\": \"64Gi\",\n    \"interfaces\": [{ \"type\": \"ethernet\" }],\n    \"peripherals\": [],\n    \"otelCollector\": false,\n    \"supportedRuntimes\": [\"oci\"],\n    \"supportedDeploymentTypes\": [\"helm\", \"compose\"]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 201\", function () {",
+              "    pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 201,
+      "accepted_statuses": [
+        200
+      ]
+    },
+    {
+      "id": "cce2e8d1-dde4-41b0-893d-6b988c353b91",
+      "name": "PUT Capabilities — Unknown deployment type is rejected",
+      "request": {
+        "method": "PUT",
+        "description": "",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/capabilities/:deviceId",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "capabilities",
+            ":deviceId"
+          ],
+          "query": [],
+          "variable": [
+            {
+              "key": "deviceId",
+              "value": "{{deviceId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"properties\": {\n    \"id\": \"{{deviceId}}\",\n    \"vendor\": \"ConformanceTestVendor\",\n    \"modelNumber\": \"MDL-CONFORM-001\",\n    \"serialNumber\": \"SN-CONFORM-0001\",\n    \"cpus\": [{ \"cores\": 4, \"architecture\": \"amd64\" }],\n    \"memory\": \"8Gi\",\n    \"storage\": \"64Gi\",\n    \"interfaces\": [{ \"type\": \"ethernet\" }],\n    \"peripherals\": [],\n    \"otelCollector\": false,\n    \"supportedRuntimes\": [\"oci\"],\n    \"supportedDeploymentTypes\": [\"not-a-deployment-type\"]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 422,
+      "validations": [
+        {
+          "field": "_headers.content-type",
+          "operation": "contains",
+          "value": "application/problem+json"
+        },
+        {
+          "field": "type",
+          "operation": "not_empty"
+        }
+      ]
+    },
+    {
+      "id": "3b8e6a2f-1c4d-4f9a-b7e5-2d0c9a8f6e31",
+      "name": "GET Deployments — Read the manifest (setup)",
+      "request": {
+        "method": "GET",
+        "description": "",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/deployments",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "deployments"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/vnd.margo.manifest.v1+json"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 200\", function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "const body = pm.response.json();",
+              "pm.environment.set('manifestVersion', body.manifestVersion);",
+              "if (pm.response.headers.get('ETag')) { pm.environment.set('manifestEtag', pm.response.headers.get('ETag')); }",
+              "if (body.deployments && body.deployments.length > 0) {",
+              "    pm.environment.set('deploymentId', body.deployments[0].deploymentId);",
+              "    pm.environment.set('deploymentDigest', body.deployments[0].digest);",
+              "}",
+              "if (body.bundle) { pm.environment.set('bundleDigest', body.bundle.digest); }"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 200
+    },
+    {
+      "id": "ac5ccdb9-ba6c-4cfd-af52-1afc19860899",
+      "name": "GET Deployments — Unsupported Accept returns 406",
+      "request": {
+        "method": "GET",
+        "description": "",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/deployments",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "deployments"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/plain"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 406\", function () {",
+              "    pm.response.to.have.status(406);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-008"
+      ],
+      "expected_status": 406,
+      "validations": [
+        {
+          "field": "_headers.content-type",
+          "operation": "contains",
+          "value": "application/problem+json"
+        },
+        {
+          "field": "type",
+          "operation": "not_empty"
+        }
+      ]
+    },
+    {
+      "id": "7e1a4c9b-3d2f-4b6a-9c80-5f4e3d2c1b42",
+      "name": "GET Deployment — Wrong digest returns 404",
+      "request": {
+        "method": "GET",
+        "description": "Needs a deployment assigned to the device.",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/deployments/:deploymentId/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "deployments",
+            ":deploymentId",
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "query": [],
+          "variable": [
+            {
+              "key": "deploymentId",
+              "value": "{{deploymentId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/yaml"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 404
+    },
+    {
+      "id": "4c7d2e8a-6f1b-4a3c-8d95-1e0f9b8a7c53",
+      "name": "GET Bundle — Wrong digest returns 404",
+      "request": {
+        "method": "GET",
+        "description": "",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/bundles/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "bundles",
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          ],
+          "query": [],
+          "variable": []
+        },
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/vnd.margo.bundle.v1+tar+gzip"
+          }
+        ]
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 404\", function () {",
+              "    pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 404
+    },
+    {
+      "id": "2f0f025c-3bb5-4e9f-9557-83a52fdaa2c1",
+      "name": "POST Status — Unknown state is rejected",
+      "request": {
+        "method": "POST",
+        "description": "Needs a deployment assigned to the device.",
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/deployments/:deploymentId/status",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "deployments",
+            ":deploymentId",
+            "status"
+          ],
+          "query": [],
+          "variable": [
+            {
+              "key": "deploymentId",
+              "value": "{{deploymentId}}"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"deploymentId\": \"{{deploymentId}}\",\n  \"adoptedManifestVersion\": {{manifestVersion}},\n  \"status\": { \"state\": \"not-a-state\" },\n  \"components\": []\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Status code is 422\", function () {",
+              "    pm.response.to.have.status(422);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "response": [],
+      "crIds": [
+        "MARGO-WFM-MANAGEMENTINTERFACE-023"
+      ],
+      "expected_status": 422,
+      "validations": [
+        {
+          "field": "_headers.content-type",
+          "operation": "contains",
+          "value": "application/problem+json"
+        },
+        {
+          "field": "type",
+          "operation": "not_empty"
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:8084/v1alpha2/margo"
+    },
+    {
+      "key": "deviceId",
+      "value": "ctt-postman-negative-device"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "name": "postman-error-handling",
+  "version": "1.0.0-rc.3",
+  "persona": "wfm-supplier",
+  "description": "Written in Postman: requests the WFM must reject, each with the problem details it must answer. An example of adding tests from Postman.",
+  "FolderPath": [
+    "../test-suites/wfm-supplier/postman-error-handling/test-cases"
+  ],
+  "testCases": [
+    "2f0f025c-3bb5-4e9f-9557-83a52fdaa2c1",
+    "3b8e6a2f-1c4d-4f9a-b7e5-2d0c9a8f6e31",
+    "4c7d2e8a-6f1b-4a3c-8d95-1e0f9b8a7c53",
+    "7e1a4c9b-3d2f-4b6a-9c80-5f4e3d2c1b42",
+    "9d0f2c1e-5b7a-4c3d-8e21-0a6b4f7c9d10",
+    "ac5ccdb9-ba6c-4cfd-af52-1afc19860899",
+    "cce2e8d1-dde4-41b0-893d-6b988c353b91"
+  ]
+}

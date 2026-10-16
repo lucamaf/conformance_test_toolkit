@@ -1,0 +1,516 @@
+[
+  {
+    "id": "rd-02-capabilities",
+    "name": "Real device \u2014 capabilities",
+    "description": "The device reports its capabilities. The mock WFM validates the report against the rules of assertions.json (endpoint rules and device_expectations); each step reads one of those verdicts.",
+    "crIds": [
+      "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+      "MARGO-DEV-APPLICATIONDESCRIPTION-003",
+      "MARGO-DEV-DEPLOYMENT-002",
+      "MARGO-DEV-DEPLOYMENT-004",
+      "MARGO-DEV-DEPLOYMENT-005",
+      "MARGO-DEV-DEPLOYMENT-006",
+      "MARGO-DEV-DEPLOYMENT-007",
+      "MARGO-DEV-DEPLOYMENT-008",
+      "MARGO-DEV-DEPLOYMENT-009",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-001"
+    ],
+    "steps": [
+      {
+        "id": "rd-02-capabilities-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-accepted",
+        "name": "The device reports its capabilities and the report passes the mock WFM's validation",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": []
+        },
+        "extract_context": {
+          "reportedDeviceId": "body.properties.id"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-device-id",
+        "name": "The device ID in the request path is the ID in the report",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-001"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-id",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "path",
+              "operation": "contains",
+              "value": "{reportedDeviceId}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-runtime",
+        "name": "The device provides an OCI container runtime",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-004"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-runtime-oci",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-otel",
+        "name": "The device provides an OpenTelemetry collector",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-005"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-otel-collector",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-deployment-type",
+        "name": "The device declares a deployment type of a Margo device role",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-002"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-deployment-type",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-02-capabilities-role-device",
+        "name": "Standalone device role: the device deploys Compose applications",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-008",
+          "MARGO-DEV-DEPLOYMENT-009"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 5,
+          "check": [],
+          "where": [
+            {
+              "field": "expectations.device-role-standalone-device",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device does not declare the standalone device role (compose)"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-role-cluster",
+        "name": "Standalone cluster role: the device deploys Helm charts",
+        "crIds": [
+          "MARGO-DEV-DEPLOYMENT-006",
+          "MARGO-DEV-DEPLOYMENT-007"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 5,
+          "check": [],
+          "where": [
+            {
+              "field": "expectations.device-role-standalone-cluster",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device does not declare the standalone cluster role (helm)"
+        }
+      },
+      {
+        "id": "rd-02-capabilities-resources",
+        "name": "The device states the memory, storage and CPU cores it provides",
+        "crIds": [
+          "MARGO-DEV-APPLICATIONDESCRIPTION-001",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-002",
+          "MARGO-DEV-APPLICATIONDESCRIPTION-003"
+        ],
+        "observe": {
+          "method": "PUT",
+          "path_regex": "^/api/v1/capabilities/[^/]+$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 60,
+          "check": [
+            {
+              "field": "expectations.device-memory",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "expectations.device-storage",
+              "operation": "equals",
+              "value": "pass"
+            },
+            {
+              "field": "expectations.device-cpus",
+              "operation": "equals",
+              "value": "pass"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-03-desired-state",
+    "name": "Real device \u2014 desired state, fetch and status",
+    "description": "The device reads its desired-state manifest, fetches the bundle or the deployment it lists by digest, reports the status of the deployment with the manifest version it adopted, and re-reads with the ETag of that manifest.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-015",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-019",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+    ],
+    "steps": [
+      {
+        "id": "rd-03-desired-state-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-03-desired-state-read",
+        "name": "The device reads the desired-state manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 180
+        }
+      },
+      {
+        "id": "rd-03-desired-state-fetch",
+        "name": "The device fetches the bundle or a deployment by its digest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
+          "MARGO-DEV-MANAGEMENTINTERFACE-019"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/(bundles|deployments/[^/]+)/sha256:[0-9a-f]+$",
+          "status": [
+            200,
+            304
+          ],
+          "within_seconds": 240
+        }
+      },
+      {
+        "id": "rd-03-desired-state-status",
+        "name": "The device reports the deployment status and the report passes the mock WFM's validation",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-016",
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/[^/]+/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300
+        }
+      },
+      {
+        "id": "rd-03-desired-state-etag",
+        "name": "The device re-reads the manifest with the ETag of the manifest it adopted (304 Not Modified)",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-015"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "where": [
+            {
+              "field": "status",
+              "operation": "equals",
+              "value": 304
+            }
+          ],
+          "status": [
+            304
+          ],
+          "within_seconds": 240
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-04-deployment-lifecycle",
+    "name": "Real device \u2014 a deployment is added and withdrawn",
+    "description": "The mock WFM adds a deployment to the desired state and later withdraws it. The device reads each new manifest and reports the status of that deployment after each change.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-007",
+      "MARGO-DEV-MANAGEMENTINTERFACE-016",
+      "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+    ],
+    "steps": [
+      {
+        "id": "rd-04-deployment-lifecycle-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-add",
+        "name": "Mock WFM: add deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01 to the desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06",
+            "5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-read",
+        "name": "The device reads the new manifest",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-016"
+        ],
+        "observe": {
+          "method": "GET",
+          "path_regex": "^/api/v1/deployments$",
+          "status": [
+            200
+          ],
+          "within_seconds": 240,
+          "where": [
+            {
+              "field": "response.manifestVersion",
+              "operation": "equals",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-status",
+        "name": "The device reports status for the added deployment with the new manifest version",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007",
+          "MARGO-DEV-MANAGEMENTINTERFACE-RC3-002"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "check": [
+            {
+              "field": "body.adoptedManifestVersion",
+              "operation": "gte",
+              "value": "{newVersion}"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-withdraw",
+        "name": "Mock WFM: withdraw deployment 5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01 from the desired state",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/deployments?client={deviceClient}",
+        "mtls": true,
+        "request_body": {
+          "deploymentIds": [
+            "a3e2f5dc-912e-494f-8395-52cf3769bc06"
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          }
+        ],
+        "extract_context": {
+          "newVersion": "manifestVersion"
+        }
+      },
+      {
+        "id": "rd-04-deployment-lifecycle-removed",
+        "name": "The device reports the withdrawn deployment as removing or removed",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-007"
+        ],
+        "observe": {
+          "method": "POST",
+          "path_regex": "^/api/v1/deployments/5f0c1c1e-2b7a-4c58-9d3e-1a2b3c4d5e01/status$",
+          "status": [
+            200,
+            201
+          ],
+          "within_seconds": 300,
+          "where": [
+            {
+              "field": "body.status.state",
+              "operation": "one_of",
+              "value": [
+                "removing",
+                "removed"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+]

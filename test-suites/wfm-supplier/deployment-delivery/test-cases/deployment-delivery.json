@@ -1,0 +1,624 @@
+[
+  {
+    "id": "wfm-multi-component-deployment",
+    "name": "Multi-Component ApplicationDeployment — wait=true/false, digest & caching contract",
+    "crIds": [
+      "MARGO-WFM-APPLICATIONDESCRIPTION-001",
+      "MARGO-WFM-APPLICATIONDESCRIPTION-002",
+      "MARGO-WFM-MANAGEMENTINTERFACE-014",
+      "MARGO-WFM-MANAGEMENTINTERFACE-023",
+      "MARGO-WFM-MANAGEMENTINTERFACE-024",
+      "MARGO-WFM-MANAGEMENTINTERFACE-025",
+      "MARGO-WFM-MANAGEMENTINTERFACE-027",
+      "MARGO-WFM-MANAGEMENTINTERFACE-030",
+      "MARGO-WFM-MANAGEMENTINTERFACE-031",
+      "MARGO-WFM-MANAGEMENTINTERFACE-034",
+      "MARGO-WFM-MANAGEMENTINTERFACE-035",
+      "MARGO-WFM-MANAGEMENTINTERFACE-036",
+      "MARGO-WFM-MANAGEMENTINTERFACE-038"
+    ],
+    "description": "A WFM serves a multi-component compose ApplicationDeployment faithfully, without anything being deployed: content-addressed URLs, the deployment YAML with both `wait` values and its digest, the bundle archive with exactly the listed YAML files, its cache headers and 304, wrong digests answered 404, and status reports for every state, with invalid reports rejected. PRECONDITION: a deployment with two components (wait: true and wait: false) is assigned to the CTT's device while the second step is polling.",
+    "steps": [
+      {
+        "id": "f55c84c8-3c29-4cd0-b11a-49bde4aeafe4",
+        "name": "Report Capabilities (compose + helm supported)",
+        "method": "PUT",
+        "endpoint": "/api/v1/capabilities/multi-component-test-device",
+        "mtls": true,
+        "request_body": {
+          "properties": {
+            "id": "multi-component-test-device",
+            "vendor": "Conformance Test Suite",
+            "modelNumber": "CTS-MULTICOMPONENT-1",
+            "serialNumber": "SN-MULTICOMPONENT-001",
+            "cpus": [
+              {
+                "cores": 4,
+                "architecture": "amd64"
+              }
+            ],
+            "memory": "8Gi",
+            "storage": "64Gi",
+            "peripherals": [],
+            "interfaces": [
+              {
+                "type": "ethernet"
+              }
+            ],
+            "otelCollector": false,
+            "supportedRuntimes": [
+              "oci"
+            ],
+            "supportedDeploymentTypes": [
+              "helm",
+              "compose"
+            ]
+          }
+        },
+        "headers": {},
+        "expected_status": 201,
+        "validations": [],
+        "extract_context": {},
+        "accepted_statuses": [
+          200
+        ],
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "efd8ad9d-1a6f-4b12-bf9d-040f11eddec6",
+        "name": "Wait For The Multi-Component Deployment To Be Assigned To The CTT's Client",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "poll": {
+          "interval_seconds": 10,
+          "timeout_seconds": 300,
+          "until": [
+            {
+              "field": "deployments",
+              "operation": "array_length_gte",
+              "value": 1
+            }
+          ],
+          "instruct": [
+            "The WFM lists no deployment for the CTT's client yet: {cttClientSpiffeId}",
+            "The steps of this scenario need one. Assign it now, in a second terminal or in your WFM's console; the run continues by itself:",
+            "  - Sandbox Symphony:  bash {fixturesDir}/provision-multi-component.sh",
+            "  - Your own WFM:      in its console or operator API, assign an application deployment to that client.",
+            "                       It needs two components, one 'wait: true' and one 'wait: false'",
+            "                       (see {fixturesDir}/multi-component-app-deployment.yaml).",
+            "If nothing is assigned in time, the steps of this scenario are reported as NOT RUN."
+          ],
+          "on_timeout": "skip_scenario",
+          "skip_reason": "no application deployment for the CTT's client ({cttClientSpiffeId}) appeared within 5 minutes, so deployment delivery was not judged. Assign one in the WFM and run the group again (sandbox Symphony: provision-multi-component.sh). If one was assigned, the WFM does not list it in GET /api/v1/deployments."
+        },
+        "validations": [
+          {
+            "field": "deployments",
+            "operation": "array_length_gte",
+            "value": 1
+          },
+          {
+            "field": "manifestVersion",
+            "operation": "is_number"
+          },
+          {
+            "operation": "bundle_media_type"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          }
+        ],
+        "extract_context": {
+          "deploymentId": "deployments.0.deploymentId",
+          "deploymentDigest": "deployments.0.digest",
+          "manifestVersion": "manifestVersion",
+          "manifestDeployments": "deployments"
+        },
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034"
+        ]
+      },
+      {
+        "id": "wfm-mc-manifest-not-immutable",
+        "name": "Manifest With Deployments Is Not Marked immutable",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-035"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "not_contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-manifest-urls",
+        "name": "State Manifest URLs Are Content-Addressed (bundle.url, deployments[].url)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments",
+        "mtls": true,
+        "headers": {
+          "Accept": "application/vnd.margo.manifest.v1+json"
+        },
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "manifest_urls_are_content_addressed"
+          }
+        ],
+        "extract_context": {
+          "bundleDigest": "bundle.digest"
+        }
+      },
+      {
+        "id": "e2e5bf11-3015-40cd-8e58-96aceb20bc5e",
+        "name": "Fetch The Multi-Component ApplicationDeployment YAML (content-addressed) — Content-Type, ETag And Digest",
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "yaml"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "matches_regex",
+            "value": "^\"sha256:[0-9a-f]{64}\"$"
+          },
+          {
+            "operation": "etag_is_body_digest"
+          },
+          {
+            "operation": "body_sha256_equals",
+            "field": "deploymentDigest",
+            "value": "{deploymentDigest}"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-014",
+          "MARGO-WFM-MANAGEMENTINTERFACE-025",
+          "MARGO-WFM-MANAGEMENTINTERFACE-034",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ]
+      },
+      {
+        "id": "wfm-mc-deployment-yaml-content",
+        "name": "ApplicationDeployment YAML Carries Both Components (wait: true and wait: false)",
+        "crIds": [
+          "MARGO-WFM-APPLICATIONDESCRIPTION-001",
+          "MARGO-WFM-APPLICATIONDESCRIPTION-002"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/{deploymentDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: true"
+          },
+          {
+            "field": "_body",
+            "operation": "contains",
+            "value": "wait: false"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-deployment-wrong-digest",
+        "name": "Deployment YAML With A Digest The WFM Does Not Have Returns 404",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/deployments/{deploymentId}/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#deployment-not-found"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-fetch",
+        "name": "Download The Deployment Bundle — Content-Type, ETag And Digest",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-025",
+          "MARGO-WFM-MANAGEMENTINTERFACE-027",
+          "MARGO-WFM-MANAGEMENTINTERFACE-031",
+          "MARGO-WFM-MANAGEMENTINTERFACE-036"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "equals",
+            "value": "application/vnd.margo.bundle.v1+tar+gzip"
+          },
+          {
+            "field": "_headers.etag",
+            "operation": "equals",
+            "value": "\"{bundleDigest}\""
+          },
+          {
+            "field": "bundleDigest",
+            "operation": "body_sha256_equals",
+            "value": "{bundleDigest}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-contents",
+        "name": "Deployment Bundle Contains Exactly The Listed Deployment Files",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-024"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "operation": "bundle_contains_exactly_deployments",
+            "value": "{manifestDeployments}"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-cache",
+        "name": "Deployment Bundle Cache Headers (private, max-age=31536000, immutable)",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-038"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 200,
+        "validations": [
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "private"
+          },
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "max-age=31536000"
+          },
+          {
+            "field": "_headers.cache-control",
+            "operation": "contains",
+            "value": "immutable"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-not-modified",
+        "name": "Download The Bundle Again With If-None-Match — 304 With An Empty Body",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-030"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/{bundleDigest}",
+        "mtls": true,
+        "headers": {
+          "If-None-Match": "\"{bundleDigest}\""
+        },
+        "expected_status": 304,
+        "validations": [
+          {
+            "field": "_body",
+            "operation": "equals",
+            "value": ""
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-bundle-wrong-digest",
+        "name": "Bundle With A Digest The WFM Does Not Have Returns 404",
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ],
+        "method": "GET",
+        "endpoint": "/api/v1/bundles/sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "mtls": true,
+        "headers": {},
+        "expected_status": 404,
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "equals",
+            "value": "https://docs.margo.org/specification/problem-types#invalid-bundle"
+          }
+        ],
+        "extract_context": {}
+      },
+      {
+        "id": "wfm-mc-status-pending",
+        "name": "Report Deployment Status: pending",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "pending"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "pending"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-installing",
+        "name": "Report Deployment Status: installing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "installing"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installing"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installing"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-failed",
+        "name": "Report Deployment Status: failed, with error details",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "failed",
+            "error": {
+              "code": "IMAGE_PULL_FAILED",
+              "source": "device",
+              "message": "Conformance test error"
+            }
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "failed",
+              "error": {
+                "code": "IMAGE_PULL_FAILED",
+                "source": "device",
+                "message": "Conformance test error"
+              }
+            },
+            {
+              "name": "wait-false-component",
+              "state": "pending"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "e9089cb2-d210-4434-b736-5cc1f61d2d07",
+        "name": "Report Deployment Status: installed (no container actually run)",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "installed"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installed"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 200,
+        "accepted_statuses": [
+          201
+        ],
+        "validations": [],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-invalid-state",
+        "name": "Reject Deployment Status — State Outside The Allowed Set",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "status": {
+            "state": "not-a-state"
+          },
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "not-a-state"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "not-a-state"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      },
+      {
+        "id": "wfm-mc-status-missing-status",
+        "name": "Reject Deployment Status — Required Field status Is Missing",
+        "method": "POST",
+        "endpoint": "/api/v1/deployments/{deploymentId}/status",
+        "mtls": true,
+        "request_body": {
+          "deploymentId": "{deploymentId}",
+          "adoptedManifestVersion": "{manifestVersion}",
+          "components": [
+            {
+              "name": "wait-true-component",
+              "state": "installed"
+            },
+            {
+              "name": "wait-false-component",
+              "state": "installed"
+            }
+          ]
+        },
+        "headers": {},
+        "expected_status": 422,
+        "accepted_statuses": [
+          400
+        ],
+        "validations": [
+          {
+            "field": "_headers.content-type",
+            "operation": "contains",
+            "value": "application/problem+json"
+          },
+          {
+            "field": "type",
+            "operation": "not_empty"
+          }
+        ],
+        "extract_context": {},
+        "crIds": [
+          "MARGO-WFM-MANAGEMENTINTERFACE-023"
+        ]
+      }
+    ]
+  }
+]

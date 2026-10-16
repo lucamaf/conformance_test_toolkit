@@ -1,0 +1,15 @@
+id: {{deploymentId}}
+metadata:
+  name: ctt-sample-app-a
+  namespace: margo-ctt
+  deviceId: {{deviceId}}
+spec:
+  applicationId: ctt-sample-app-a
+  deploymentProfile:
+    type: compose
+    components:
+      - name: sample-app-a
+        properties:
+          repository: oci://registry.example.com/margo-ctt/sample-app-a
+          revision: 1.0.0
+          wait: true
