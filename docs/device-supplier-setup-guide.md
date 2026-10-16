@@ -309,13 +309,37 @@ Enter Management Interface (mTLS) URL [https://localhost:3003/v1alpha2/margo]:
 Press Enter. This is the Margo Management Interface of the mock WFM, which the
 device uses.
 
-### Restart of the device during the run
+The execution starts. The runner confirms the URLs and the mock WFM, then runs
+the scenarios one after the other:
 
-In `core` the CTT sends no request to the device: it assesses the requests the
-device sends to the mock WFM. Between steps the CTT changes the Desired State —
-also to State Manifests a device must reject — and waits for the device to
-retrieve it. A run takes about 12 minutes with the sandbox device agent; lines
-starting with `⏳ waiting for the device` are expected.
+```
+▶️  Running Device Conformance Tests
+   Mock WFM (health):           https://localhost:3001/v1alpha2/margo
+   Management Interface (mTLS): https://localhost:3003/v1alpha2/margo
+...
+✅ WFM Server is ready
+
+▶ Running Scenario: Real device — identity (rd-01-identity)
+  → Step: The device connects over mTLS with its X.509-SVID and the mock WFM accepts it
+    ✅ PASS - seen: POST /api/v1/deployments/<deployment id>/status → 200
+```
+
+
+### Device restart during the run to verify the scenario "state survives a restart"
+
+The scenario *Real device — state survives a restart* (`rd-11-restart`, in the
+`core` group selected for the test-scenario execution, and in `manifest-integrity`) verifies that the device retains its state
+across a restart (MARGO-DEV-MANAGEMENTINTERFACE-015, MARGO-DEV-MANAGEMENTINTERFACE-017):
+
+- after the restart, the device sends the ETag of the State Manifest it adopted
+  before the restart;
+- after the restart, the device still rejects a State Manifest whose version does
+  not increase.
+
+The CTT cannot restart the device; the operator restarts it when prompted. The same
+restart can be used for the [SVID Rotation scenario](#svid-rotation-scenario-optional)
+(`rd-12-svid-rotation`): install the reissued X.509-SVID before the device is started
+again.
 
 When this line appears, restart the device within 3 minutes:
 
@@ -383,7 +407,7 @@ reissued X.509-SVID is installed on the device. To run it:
    Client ID (sandbox: `cd $HOME/mis-deployment`, then
    `sudo -E bash $HOME/workspace/sandbox/scripts/mis.sh` → `6) Generate SVID` →
    principal `2`, WFM ID `ctt-mock-wfm`, WFM Client ID `vendor-device-1`).
-2. Run `core`. When the restart line appears, install the reissued X.509-SVID on
+2. Start the test-scenario execution with the `core` group selected. When the restart line appears, install the reissued X.509-SVID on
    the device before it is started again. For the sandbox device agent, the
    procedure is described in
    [Renewal and Reissuance](https://github.com/margo/sandbox/blob/main/docs/identity-lifecycle.md#renewal-and-reissuance)
@@ -489,26 +513,31 @@ Phase 1 — Identity provisioning (once; repeat when an X.509-SVID is reissued)
 
   Sandbox device agent (sandbox MIS):
   □ Step 1: MIS installed and Root CAs generated   (sandbox Setup Guide: Build and Run MIS)
+            mis.sh → 3) Factory Bootstrap: Generate Root CAs, 4) Margo Identity Service: Install
             mis.sh → 6) Generate SVID, three times (WFM ID ctt-mock-wfm; WFM Client IDs ctt-client and vendor-device-1)
   □ Step 2: device agent installed                 (sandbox Setup Guide: On Each Device VM)
             SVID x509svid-ctt-mock-wfm-vendor-device-1, WFM_HOST = CTT host, WFM_PORT=3003,
-            device-agent.sh → 11) add spiffe://margo.org/margo/wfm/ctt-mock-wfm
+            device-agent.sh docker → 11) Manage SPIFFE ID allowlist → 1) Set SPIFFE ID:
+            spiffe://margo.org/margo/wfm/ctt-mock-wfm
   □ Step 3: only if the MIS runs on another host: copy the five files to ~/ctt-certs on the CTT host
   □ Step 4: ctt-start.sh → 2. Device Supplier → 1. Setup Identity
             (Enter for $HOME/mis-deployment, or ~/ctt-certs after a transfer; then select x509svid-ctt-mock-wfm and x509svid-ctt-mock-wfm-ctt-client)
             openssl verify -CAfile svid-ca.pem miaf-server-cert.pem svid-cert.pem → OK
-  □ Before Step 5: device cleanup (device-agent.sh docker stop-docker, answer y)
+  □ Before Step 5 (every run): device cleanup (device-agent.sh docker stop-docker, answer y to "delete data folder")
   □ Step 5: ctt-start.sh → 2. Device Supplier → 2. Start Mock WFM Server
 
   Vendor's device:
   □ Step 1: The MIS issues the device a WFM Client SVID: spiffe://<trust-domain>/margo/wfm/ctt-mock-wfm/client/<wfm-client-id>
   □ Step 2: Device configured: its X.509-SVID and key, Management Interface URL (port 3003),
             WFM SPIFFE ID authorized, Trust Bundle of the MIS
+  □ Before Step 5 (every run): device cleanup as described by the vendor
 
 Phase 2 — Run the conformance suite (every run)
 
   □ Step 6: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 8) self-check; Enter at both URL prompts (90 passed, 2 not run)
-  □ Step 7: start the device (sandbox: device-agent.sh docker start-docker); tail -f /tmp/wfm-server.log shows → 201, → 200
+  □ Optional, before Step 7: OpenTelemetry Collector of the device exports to <ctt-host-ip>:4318 and :9090 (Observability)
+  □ Step 7: start the device (sandbox: device-agent.sh docker → 3) WFM-Client-Start(docker-compose-device));
+            tail -f /tmp/wfm-server.log shows → 201, → 200
   □ Step 8: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 1) core
   □ Step 9: Enter at both URL prompts; restart the device when requested (within 3 minutes)
   □ Step 10: Report:     ctt-runner/reports/device-supplier/conformance-report-<timestamp>.html
@@ -517,27 +546,6 @@ Phase 2 — Run the conformance suite (every run)
 
 ---
 
-## Reference
-
-### Reference result: sandbox device agent
-
-A `core` run takes about 12 minutes. With the sandbox device agent verified
-with this guide (October 2026, Compose-capable device, restarted with a
-reissued X.509-SVID when requested) the result is **53 passed, 3 failed,
-5 not run**. These are deviations of that device agent build; they do not
-indicate a setup error:
-
-| Result | Step | Reason |
-|---|---|---|
-| FAIL | "does not fetch anything by a digest of the unsupported algorithm" | For a `sha512` State Manifest the device agent still requests `.../sha512:...` |
-| FAIL | "keeps its previous state" (unsupported digest algorithm) | It stores the ETag of the State Manifest it had to reject |
-| FAIL | "keeps its previous state" (ApplicationDeployment YAML does not match its digest) | It stores the ETag of the State Manifest it had to reject |
-| NOT RUN | Standalone cluster role | The device agent declares Compose, not Helm |
-| NOT RUN | Deployment Bundle does not match its digest (2 steps) | This device agent retrieves the ApplicationDeployment YAML files, not the Deployment Bundle |
-| NOT RUN | Observability (2 steps) | No OpenTelemetry collector is directed at the CTT ([Observability](#observability-opentelemetry)) |
-
-The requirement verified by each step, and the requirements that cannot be
-verified, are listed in `docs/device-supplier-requirements-coverage.md`.
 
 ### Certificate expiry and renewal
 

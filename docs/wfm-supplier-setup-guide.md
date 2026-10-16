@@ -169,7 +169,7 @@ Steps 6 and 7 must be completed before the tests are started.
 
 ### Step 6 — Application Package in the Application Registry
 
-**Sandbox Symphony:** the `core` group uses one Application Package in the sandbox Harbor registry,
+**Sandbox Symphony:** the `core` group (selected for the test-scenario execution) uses one Application Package in the sandbox Harbor registry,
 for the Application Registry checks and for the deployment the WFM delivers as Desired State.
 
 ```bash
@@ -179,7 +179,7 @@ bash ctt-runner/wfm-supplier/utils/fixtures/margo-ctt-package/push.sh
 # → Pushed [registry] harbor.machine:8443/library/margo-ctt-hello-world:1.0.0
 ```
 
-**Vendor's WFM:** the `core` group also verifies the Application Registry. Before the CLI is
+**Vendor's WFM:** the `core` group (selected for the test-scenario execution) also verifies the Application Registry. Before the CLI is
 started, name one Application Package in the registry of the
 supplier:
 
@@ -187,7 +187,7 @@ supplier:
 oras login <registry-host>                          # only if the registry requires credentials
 export REGISTRY_REF=<registry-host>/<repository>:<tag>
 
-# Example: the Application Package used for the core run against the sandbox
+# Example: the Application Package used for the test-scenario execution of the core group against the sandbox
 oras login harbor.machine:8443 -u admin -p Harbor12345
 export REGISTRY_REF=harbor.machine:8443/library/margo-ctt-hello-world:1.0.0
 ```
@@ -198,7 +198,7 @@ uses a private CA, add that CA to the trust store of the host first
 
 ### Step 7 — Assign the test deployment to the CTT
 
-The `core` and `deployment-delivery` groups verify how the WFM delivers a
+The `core` group and the `deployment-delivery` group, verify how the WFM delivers a
 deployment. A deployment must therefore be assigned to the WFM Client identity
 of the CTT. For the sandbox Symphony a helper performs this assignment; it
 requires the identity installed in Step 4 and Step 6:
@@ -271,10 +271,34 @@ This is the base URL of the **Margo Management Interface** exposed by the WFM:
 the address up to, but not including, `/api/v1`. It is the mTLS endpoint. For
 the sandbox Symphony: `https://localhost:8084/v1alpha2/margo`
 
+The execution starts. The runner confirms the group and the WFM URL, then runs
+the scenarios one after the other:
+
+```
+🚀 Starting WFM Supplier Test Execution (Group Mode)
+   Group: core
+   WFM Server: https://localhost:8084/v1alpha2/margo
+...
+════════════════════════════════════════════════════════════════════════
+ Margo WFM Conformance Test Runner
+ Group: core (v1.0.0-rc.3)
+ WFM:   https://localhost:8084/v1alpha2/margo
+════════════════════════════════════════════════════════════════════════
+
+────────────────────────────────────────────────────────────────────────
+ SCENARIO 1 of <n>  ·  <scenario name>
+────────────────────────────────────────────────────────────────────────
+
+  [<step id>]  <step name>
+   ▶  <method> <path>  [mTLS · X.509-SVID]
+   ⚙  <requirement ID>
+   ✓  PASS  <status>
+```
+
 ### Multi-component deployment
 
 If the selected group includes the `wfm-multi-component-deployment` scenario
-(groups `core` and `deployment-delivery`), the runner detects it and states
+(in the `core` group and in `deployment-delivery`), the runner detects it and states
 what is required:
 
 ```
@@ -286,7 +310,7 @@ what is required:
 ────────────────────────────────────────────────────────────────
 ```
 
-The `core` and `deployment-delivery` groups need a deployment in the WFM for the
+Also `core` and `deployment-delivery` group, need a deployment in the WFM for the
 CTT. If it was assigned before the run
 ([Step 7](#step-7--assign-the-test-deployment-to-the-ctt)), nothing has to be done
 here.
@@ -400,9 +424,11 @@ Phase 1 — Identity provisioning (once per WFM; repeat when an X.509-SVID is re
 
   Sandbox Symphony (sandbox MIS):
   □ Step 1: MIS installed and Root CAs generated   (sandbox Setup Guide: Build and Run MIS)
+            mis.sh → 3) Factory Bootstrap: Generate Root CAs, 4) Margo Identity Service: Install
             mis.sh → 6) Generate SVID, twice       (WFM SVID, then WFM Client SVID for the CTT: WFM ID wfm, WFM Client ID ctt-client)
   □ Step 2: Symphony set up                        (sandbox Setup Guide: Build and Run WFM(Symphony))
-            wfm.sh → 7) Manage SPIFFE ID allowlist (add spiffe://margo.org/margo/wfm/wfm/client/ctt-client)
+            wfm.sh → 7) Manage SPIFFE ID allowlist → 1) Add SPIFFE IDs:
+            spiffe://margo.org/margo/wfm/wfm/client/ctt-client
   □ Step 3: only if the MIS runs on another host: copy client SVID, key and ca.crt to ~/ctt-certs on the CTT host
   □ Step 4: ctt-start.sh → 1. WFM Supplier → 1. Setup MIAF Identity → 1) MIS-issued identity
             (Enter for $HOME/mis-deployment, or ~/ctt-certs after a transfer; then select x509svid-wfm-ctt-client)
@@ -427,7 +453,7 @@ Phase 2 — Run the conformance suite (every run)
   □ Step 7: Application deployment (two components) assigned to the WFM Client SPIFFE ID of the CTT
 
   Run:
-  □ Step 8: bash ctt-runner/ctt-start.sh → 1. WFM Supplier → 2. Functional tests → core (2 in the list)
+  □ Step 8: bash ctt-runner/ctt-start.sh → 1. WFM Supplier → 2. Functional tests → 2) core
   □ Step 9: WFM URL: the mTLS endpoint, everything before /api/v1 (Symphony: https://localhost:8084/v1alpha2/margo)
             Wait for the run to complete (about one minute once the deployment is assigned; up to 5 minutes while polling)
   □ Step 10: Report:     ctt-runner/reports/wfm-supplier/wfm-scenario-report-core_<timestamp>.html
@@ -440,7 +466,7 @@ Phase 2 — Run the conformance suite (every run)
 
 ### Reference result: sandbox Symphony
 
-A `core` run takes about one minute. Against the sandbox Symphony build
+A test-scenario execution with the `core` group selected takes about one minute. Against the sandbox Symphony build
 verified with this guide (October 2026) the result is **52 steps: 39 passed,
 11 failed, 2 not run**, and **28 of 36 requirements passing, 7 failing,
 1 not run**. The failures are deviations of that Symphony build from Margo
