@@ -426,7 +426,9 @@ the collector with the following endpoints of the mock WFM:
 
 `<ctt-host-ip>` is the address of the Management Interface printed in Step 5.
 OTLP over gRPC (port 4317) is not supported. If the collector runs on the CTT
-host, its OTLP receiver must use a port other than 4318.
+host, its OTLP receiver must use a port other than 4318. Change the collector before
+the mock WFM is started (Step 5); otherwise the mock WFM cannot open port 4318 and the
+OTLP step is reported as `NOT RUN`.
 
 Vendor's device: set these endpoints as exporters of its collector.
 

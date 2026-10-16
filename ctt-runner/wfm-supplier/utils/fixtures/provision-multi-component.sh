@@ -104,6 +104,46 @@ echo "  Auth OK"
 # ── Helper: curl with auth ────────────────────────────────────────────────────
 nbi() { curl -sk -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@"; }
 
+# ── Helper: finish the removal of the CTT client's deleted deployments ───────
+# Symphony keeps a deleted deployment in REMOVING until the device reports
+# "removed" (Margo Deployment Status). Here the device is the CTT's client, so the
+# helper reports it, over the Management Interface with the CTT's own client SVID,
+# and only for deployments assigned to that client. Without this the deployments
+# stay REMOVING, and once their package is deleted the sandbox Symphony crashes
+# when it rebuilds the Deployment Bundle.
+SVID_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/miaf/real"
+CLIENT_ID=""
+if [[ -f "$SVID_DIR/client-svid-cert.pem" && -f "$SVID_DIR/client-svid-key.pem" ]]; then
+  CLIENT_ID=$(openssl x509 -in "$SVID_DIR/client-svid-cert.pem" -text -noout 2>/dev/null \
+    | grep -oE 'URI:spiffe://[^[:space:]]+' | head -1 | sed 's/URI://' || true)
+fi
+removing_ids() {
+  nbi "$DEPS_URL" | python3 -c "
+import sys,json
+for i in json.load(sys.stdin).get('items') or []:
+    if i.get('status',{}).get('state','') == 'REMOVING' and i.get('spec',{}).get('deviceRef',{}).get('id','') == '$CLIENT_ID':
+        print(i.get('id',''))
+" 2>/dev/null || true
+}
+finish_removals() {
+  [[ -n "$CLIENT_ID" ]] || return 0
+  local ids id code
+  ids=$(removing_ids)
+  [[ -n "$ids" ]] || return 0
+  for id in $ids; do
+    code=$(curl -sk -m 15 --cert "$SVID_DIR/client-svid-cert.pem" --key "$SVID_DIR/client-svid-key.pem" \
+      -H "Content-Type: application/json" -X POST "$MI_URL/api/v1/deployments/$id/status" \
+      -d "{\"deploymentId\":\"$id\",\"adoptedManifestVersion\":1,\"status\":{\"state\":\"removed\"},\"components\":[]}" \
+      -o /dev/null -w '%{http_code}' || true)
+    echo "  Reported 'removed' for deployment $id (HTTP $code)"
+  done
+  for _ in 1 2 3 4 5; do
+    [[ -z "$(removing_ids)" ]] && return 0
+    sleep 2
+  done
+  echo "  WARNING: deployments still REMOVING: $(removing_ids | tr '\n' ' ')"
+}
+
 # ── Cleanup mode ─────────────────────────────────────────────────────────────
 if [[ "$CLEANUP" == "true" ]]; then
   echo "Cleanup: looking for provisioned package and deployment..."
@@ -128,10 +168,24 @@ for i in items:
   for DEP_ID in $DEP_IDS; do
     nbi -X DELETE "$DEPS_URL/$DEP_ID" >/dev/null && echo "  Deleted deployment $DEP_ID"
   done
-  [[ -n "$PKG_ID" ]] && nbi -X DELETE "$PKGS_URL/$PKG_ID" >/dev/null && echo "  Deleted package $PKG_ID"
+  finish_removals
+  # Delete the package only when no deployment refers to it any more.
+  IN_USE=$(nbi "$DEPS_URL" | python3 -c "
+import sys,json
+print(sum(1 for i in json.load(sys.stdin).get('items') or [] if i.get('spec',{}).get('appPackageRef',{}).get('id','') == '$PKG_ID'))
+" 2>/dev/null || echo 0)
+  if [[ -n "$PKG_ID" && "$IN_USE" != "0" ]]; then
+    echo "  Package $PKG_ID kept: $IN_USE deployment(s) still refer to it"
+  elif [[ -n "$PKG_ID" ]]; then
+    nbi -X DELETE "$PKGS_URL/$PKG_ID" >/dev/null && echo "  Deleted package $PKG_ID"
+  fi
   echo "Cleanup done."
   exit 0
 fi
+
+# Deployments left in REMOVING by earlier runs would crash Symphony on the next
+# bundle rebuild (when the deployment below is created): finish their removal first.
+finish_removals
 
 # ── Step 1: Register app package ─────────────────────────────────────────────
 echo "Checking for existing app package '$PKG_NAME'..."
@@ -257,7 +311,6 @@ fi
 # fails (the bundle file was lost). The CTT run would then wait or fail. So ask
 # the Management Interface with the CTT's own client SVID, and repair once or
 # twice by deleting and creating the deployment again.
-SVID_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/miaf/real"
 mi_state() {
   python3 - "$MI_URL" "$SVID_DIR/client-svid-cert.pem" "$SVID_DIR/client-svid-key.pem" <<'PY'
 import json, subprocess, sys
