@@ -173,6 +173,10 @@ openssl verify -CAfile svid-ca.pem miaf-server-cert.pem svid-cert.pem
 
 ### Step 5 — Start the mock WFM
 
+> **Note:** Perform a device cleanup always before starting the mock WFM
+> ([Cleanup](#cleanup-after-a-test-run)). Start the device only after the mock WFM (Step 7), because the
+> device reports its Device Capabilities when it starts.
+
 ```bash
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
@@ -200,11 +204,11 @@ The mock WFM continues to run after the menu is left. Option 4 stops it.
 
 ## Phase 2 — Run the conformance suite
 
-Steps 6 and 7 must be completed before `core` is started. Before starting a fresh run, clean
-up both the mock WFM and the device (WFM Client) as described in
+Steps 6 and 7 must be completed before starting the test-scenario execution( For  CTT `core` group is used, `core` group has the collection of all the requirement based scenarios). Before starting a fresh run, clean
+up both the mock WFM and the device (WFM Client) as described in Sandbox setup-guide section - 
 [Cleanup](#cleanup-after-a-test-run).
 
-### Step 6 — Verify the setup without a device
+### Step 6 — Run the Sanity
 
 With the mock WFM running:
 
@@ -212,20 +216,23 @@ With the mock WFM running:
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
 # Select: 2. Device Supplier → 3. Run Tests → 8) self-check
+# Press Enter at both URL prompts
 ```
 
 `self-check` runs the test client of the CTT against the mock WFM and makes no
-statement about a device. Expected: **92 steps, 90 passed, 2 not run** (the SVID
-rotation steps). It confirms the identities, the URLs and the mock WFM before a
-device is connected.
+statement about a device.
 
-### Step 7 — Start the device and watch the mock WFM
+### Step 7 — start the device and verify mock-WFM logs
 
-**Sandbox device agent:**
+**Sandbox device agent:** start the device agent as described in the sandbox Setup Guide,
+section [Start Device Services](https://github.com/margo/sandbox/blob/main/docs/setup-guide.md#start-device-services).
+This guide uses the Docker device ("On Docker Device VM"):
 
 ```bash
 cd $HOME/workspace/sandbox/scripts
-sudo -E bash device-agent.sh docker start-docker
+sudo -E bash device-agent.sh docker
+# Select: 3) WFM-Client-Start(docker-compose-device)
+# → workload-fleet-management-client docker-container started
 ```
 
 On the CTT host, watch the requests of the device:
@@ -240,6 +247,10 @@ tail -f /tmp/wfm-server.log
 > **Note:**
 > Vendor's device: start the device as described by the vendor, and check that
 > its requests appear in `/tmp/wfm-server.log`.
+
+> **Note:** For the `observability` group, configure the OpenTelemetry Collector of the
+> device before the run, as described in [Observability (OpenTelemetry)](#observability-opentelemetry).
+> Without it, the observability steps are reported as `NOT RUN`.
 
 ### Step 8 — Launch the runner
 
@@ -276,15 +287,29 @@ was executed.
 | `management-interface` | yes | Device Capabilities, Desired State, retrieval, Deployment Status, a deployment added and withdrawn | Work on the Management Interface client |
 | `manifest-integrity` | yes | State Manifests and content a device MUST reject, one it MUST accept, state retained across a restart | Work on manifest validation |
 | `identity` | yes | X.509-SVID of the device, rejection of a WFM the MIS did not certify, SVID rotation | Work on MIAF |
-| `observability` | yes | The OpenTelemetry collector of the device publishes telemetry to the CTT | When a collector is configured (`NOT RUN` otherwise) |
+| `observability` | yes | The OpenTelemetry collector of the device publishes telemetry to the CTT | When a collector is configured ([Observability](#observability-opentelemetry); `NOT RUN` otherwise) |
 | `self-check` | no | The test client of the CTT against the mock WFM: every API call, its errors, the State Manifests a device must reject | Before a device is connected (Step 6) |
 | `quick-check` | no | Device Capabilities, State Manifest, deployment, Deployment Bundle, Deployment Status (11 steps) | Verification of the URLs and the identity setup |
 | `random-order` | no | The `self-check` lifecycle scenarios in a different random order on every run | Demonstrates that no scenario depends on another |
 
-### Step 9 — During the run: restart the device when asked
+### Step 9 — Enter the mock WFM endpoints
 
-The run starts right after the group is selected; no URL is asked, because the CTT
-connects to its own mock WFM on this host.
+The runner prompts for two URLs:
+
+```
+Enter Mock WFM Server URL [https://localhost:3001/v1alpha2/margo]:
+```
+
+Press Enter. This is the health and telemetry port of the mock WFM.
+
+```
+Enter Management Interface (mTLS) URL [https://localhost:3003/v1alpha2/margo]:
+```
+
+Press Enter. This is the Margo Management Interface of the mock WFM, which the
+device uses.
+
+### Restart of the device during the run
 
 In `core` the CTT sends no request to the device: it assesses the requests the
 device sends to the mock WFM. Between steps the CTT changes the Desired State —
@@ -443,6 +468,9 @@ cd $HOME/workspace/sandbox/scripts
 sudo -E bash device-agent.sh docker stop-docker      # answer y to "delete data folder"
 ```
 
+Vendor's device: perform the device cleanup as described by the vendor (stop the device
+and delete the deployments and data it stored).
+
 The mock WFM retains every request received since its start, and a device
 retains the deployments and the manifest version it adopted. The next run then
 starts with Step 5 (start the mock WFM) and Step 7 (start the device).
@@ -469,6 +497,7 @@ Phase 1 — Identity provisioning (once; repeat when an X.509-SVID is reissued)
   □ Step 4: ctt-start.sh → 2. Device Supplier → 1. Setup Identity
             (Enter for $HOME/mis-deployment, or ~/ctt-certs after a transfer; then select x509svid-ctt-mock-wfm and x509svid-ctt-mock-wfm-ctt-client)
             openssl verify -CAfile svid-ca.pem miaf-server-cert.pem svid-cert.pem → OK
+  □ Before Step 5: device cleanup (device-agent.sh docker stop-docker, answer y)
   □ Step 5: ctt-start.sh → 2. Device Supplier → 2. Start Mock WFM Server
 
   Vendor's device:
@@ -478,10 +507,10 @@ Phase 1 — Identity provisioning (once; repeat when an X.509-SVID is reissued)
 
 Phase 2 — Run the conformance suite (every run)
 
-  □ Step 6: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 8) self-check (90 passed, 2 not run)
+  □ Step 6: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 8) self-check; Enter at both URL prompts (90 passed, 2 not run)
   □ Step 7: start the device (sandbox: device-agent.sh docker start-docker); tail -f /tmp/wfm-server.log shows → 201, → 200
   □ Step 8: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 1) core
-  □ Step 9: restart the device when requested (within 3 minutes)
+  □ Step 9: Enter at both URL prompts; restart the device when requested (within 3 minutes)
   □ Step 10: Report:     ctt-runner/reports/device-supplier/conformance-report-<timestamp>.html
              Signed PDF: ctt-runner/reports/device-supplier/conformance-report-<timestamp>_signed.pdf (+ ca_cert.pem)
 ```
@@ -540,6 +569,7 @@ openssl x509 -in ctt-runner/device-supplier/certs/svid-cert.pem -noout -enddate
 | Device: `TLS handshake error ... is not a client of this WFM` in `/tmp/wfm-server.log` | The X.509-SVID of the device belongs to a different WFM ID | Issue the device a WFM Client SVID for the WFM ID of the mock WFM (Step 1) |
 | Device: `TLS handshake error ... unknown certificate authority` | The X.509-SVID of the device was issued by a different MIS | Use one MIS for the mock WFM and the device |
 | Device: `[MIAF] answered 422 Semantic Error — ... \| <rule>: <reason>` | The request body of the device violates the specification | Deviation of the device; the rule and the reason follow the `\|` |
+| Every step fails with `403` | The mTLS URL was set to port 3001 | Press Enter at the URL prompts to use the defaults (mTLS on port 3003) |
 | Every step of a device group fails with `no request from any device was received` | The device does not reach the mock WFM, or does not authorize its WFM SPIFFE ID | Verify port 3003, the Management Interface URL and the local authorization policy of the device |
 | Sandbox device agent continues to connect to Symphony | `WFM_HOST` and `WFM_PORT` in `device-agent.env` are unchanged | Set them to the CTT host and `3003`, then restart the device agent |
 | Sandbox device agent rejects the mock WFM | The WFM SPIFFE ID of the mock WFM is not in its local allow list policy | `device-agent.sh` option 11 (Manage SPIFFE ID allowlist) |

@@ -2302,9 +2302,17 @@ device_run_tests() {
     extra_flags+=("-claimed-app-version" "$claimed_app_version" "-ctt-margo-version" "$ctt_margo_version")
     confirm_version_mismatch "$claimed_app_version"
 
-    # The CTT reaches its own mock WFM on this host (fixed ports): nothing to ask.
-    local wfm_url="https://localhost:3001/v1alpha2/margo"
-    local miaf_url="https://localhost:3003/v1alpha2/margo"
+    # The CTT reaches its own mock WFM on this host (fixed ports), so the
+    # defaults are always right; the prompts only show which URLs are used.
+    local default_url="https://localhost:3001/v1alpha2/margo"
+    local default_miaf_url="https://localhost:3003/v1alpha2/margo"
+    local wfm_url miaf_url
+    echo ""
+    echo "  ➜  The CTT connects to its own mock WFM on this host. Press Enter at both prompts."
+    read -p "Enter Mock WFM Server URL [$default_url]: " wfm_url < /dev/tty
+    wfm_url="${wfm_url:-$default_url}"
+    read -p "Enter Management Interface (mTLS) URL [$default_miaf_url]: " miaf_url < /dev/tty
+    miaf_url="${miaf_url:-$default_miaf_url}"
     extra_flags+=("-miaf-url" "$miaf_url")
 
     log "▶️  Running Device Conformance Tests"
