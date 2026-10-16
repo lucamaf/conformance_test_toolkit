@@ -1571,7 +1571,7 @@
           "timeout_seconds": 120,
           "until": [
             {
-              "field": "otlp_traces",
+              "field": "otlp_total",
               "operation": "gte",
               "value": 1
             }

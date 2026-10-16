@@ -357,6 +357,14 @@ policy. It requires two X.509-SVIDs for the same SPIFFE ID and is therefore
 4. Run the suite again. The scenario sends one request with the previous
    X.509-SVID and one with the new one; both must succeed.
 
+### Observability (OpenTelemetry)
+
+The `observability` group verifies that the WFM accepts Device Capabilities that
+declare whether the device has an OpenTelemetry Collector (`otelCollector`
+`true` or `false`), and rejects a value that is not a boolean. The CTT does not
+receive telemetry from the WFM; no OpenTelemetry configuration is required for
+this persona.
+
 ---
 
 ## Cleanup after a test run

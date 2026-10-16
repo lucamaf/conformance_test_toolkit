@@ -149,9 +149,9 @@ bash ctt-runner/ctt-start.sh
 #   Folder containing the SVIDs [$HOME/mis-deployment]:
 #       MIS on the same host:      press Enter
 #       MIS on a different host:   ~/ctt-certs
-#   Which one is the WFM SVID?    [1]:
+#   Select the mock WFM SVID:
 #       the number of x509svid-ctt-mock-wfm (not asked for ~/ctt-certs)
-#   Which one is the Client SVID?:
+#   Select the WFM Client SVID:
 #       the number of x509svid-ctt-mock-wfm-ctt-client (not asked for ~/ctt-certs)
 ```
 
@@ -190,13 +190,19 @@ build) and prints the values a device requires:
   Server log           : /tmp/wfm-server.log
 ```
 
+The Management Interface address is the one a device uses to reach the CTT host. If the
+device reaches the host by a different address (for example at a PlugFest), start the CLI
+with that address, e.g. `CTT_HOST_ADDRESS=192.168.10.20 bash ctt-runner/ctt-start.sh`.
+
 The mock WFM continues to run after the menu is left. Option 4 stops it.
 
 ---
 
 ## Phase 2 — Run the conformance suite
 
-Steps 6 and 7 must be completed before `core` is started.
+Steps 6 and 7 must be completed before `core` is started. Before starting a fresh run, clean
+up both the mock WFM and the device (WFM Client) as described in
+[Cleanup](#cleanup-after-a-test-run).
 
 ### Step 6 — Verify the setup without a device
 
@@ -206,7 +212,6 @@ With the mock WFM running:
 cd $HOME/workspace/conformance_test_toolkit
 bash ctt-runner/ctt-start.sh
 # Select: 2. Device Supplier → 3. Run Tests → 8) self-check
-# Press Enter at both URL prompts
 ```
 
 `self-check` runs the test client of the CTT against the mock WFM and makes no
@@ -252,7 +257,7 @@ An interactive menu is displayed. Select:
 Then:
 
 ```
-3. Run Tests              (select group, CTT simulates device-agent)
+3. Run Tests              (select group)
 ```
 
 Then select the group by its number in the list. For the full device
@@ -276,24 +281,10 @@ was executed.
 | `quick-check` | no | Device Capabilities, State Manifest, deployment, Deployment Bundle, Deployment Status (11 steps) | Verification of the URLs and the identity setup |
 | `random-order` | no | The `self-check` lifecycle scenarios in a different random order on every run | Demonstrates that no scenario depends on another |
 
-### Step 9 — Enter the mock WFM endpoints
+### Step 9 — During the run: restart the device when asked
 
-The runner prompts for two URLs:
-
-```
-Enter Mock WFM Server URL [https://<ctt-host-ip>:3001/v1alpha2/margo]:
-```
-
-Press Enter. This is the health and telemetry port of the mock WFM.
-
-```
-Enter Management Interface (mTLS) URL [https://<ctt-host-ip>:3003/v1alpha2/margo]:
-```
-
-Press Enter. This is the Margo Management Interface of the mock WFM, which the
-device uses.
-
-### Restart of the device during the run
+The run starts right after the group is selected; no URL is asked, because the CTT
+connects to its own mock WFM on this host.
 
 In `core` the CTT sends no request to the device: it assesses the requests the
 device sends to the mock WFM. Between steps the CTT changes the Desired State —
@@ -373,6 +364,66 @@ reissued X.509-SVID is installed on the device. To run it:
    [Renewal and Reissuance](https://github.com/margo/sandbox/blob/main/docs/identity-lifecycle.md#renewal-and-reissuance)
    of the sandbox Identity Lifecycle guide.
 
+### Observability (OpenTelemetry)
+
+The `observability` group verifies that the OpenTelemetry Collector of the
+device exports telemetry to the CTT. Before the run, configure the exporters of
+the collector with the following endpoints of the mock WFM:
+
+| Telemetry | Protocol | Endpoint |
+|---|---|---|
+| Traces, metrics, logs | OTLP over HTTP | `http://<ctt-host-ip>:4318` |
+| Metrics | Prometheus Remote Write | `http://<ctt-host-ip>:9090/api/v1/write` |
+
+`<ctt-host-ip>` is the address of the Management Interface printed in Step 5.
+OTLP over gRPC (port 4317) is not supported. If the collector runs on the CTT
+host, its OTLP receiver must use a port other than 4318.
+
+Vendor's device: set these endpoints as exporters of its collector.
+
+Sandbox device agent (collector installed with `device-agent.sh` option 8):
+
+```bash
+cd $HOME/sandbox/scripts/observability
+sudo cp otel-collector-config.yml otel-collector-config.yml.orig   # keep the default
+sudo nano otel-collector-config.yml
+```
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:14318      # only if the device runs on the CTT host
+      grpc:
+        endpoint: 0.0.0.0:14317      # only if the device runs on the CTT host
+exporters:
+  otlphttp/ctt:                      # replaces otlp/jaeger
+    endpoint: http://<ctt-host-ip>:4318
+  prometheusremotewrite:
+    endpoint: http://<ctt-host-ip>:9090/api/v1/write
+service:
+  pipelines:
+    traces:
+      exporters: [otlphttp/ctt, debug]
+    metrics:
+      exporters: [otlphttp/ctt, prometheusremotewrite, debug]
+```
+
+```bash
+sudo docker restart otel-collector
+curl -sk https://localhost:3001/health/telemetry     # on the CTT host
+# → {"status":"receiving", ... "otlp_total":N, ... "prom_writes":N}
+```
+
+After the run, restore the default configuration:
+
+```bash
+cd $HOME/sandbox/scripts/observability
+sudo cp otel-collector-config.yml.orig otel-collector-config.yml
+sudo docker restart otel-collector
+```
+
 ---
 
 ## Cleanup after a test run
@@ -385,10 +436,16 @@ bash ctt-runner/ctt-start.sh
 # Select: 2. Device Supplier → 4. Stop Mock WFM Server
 ```
 
+Clear the state of the device (sandbox device agent):
+
+```bash
+cd $HOME/workspace/sandbox/scripts
+sudo -E bash device-agent.sh docker stop-docker      # answer y to "delete data folder"
+```
+
 The mock WFM retains every request received since its start, and a device
-retains the manifest version it adopted. For a clean next run, stop and start
-the mock WFM, and start the device with empty state (sandbox device agent:
-answer `y` to "delete data folder" when it is stopped).
+retains the deployments and the manifest version it adopted. The next run then
+starts with Step 5 (start the mock WFM) and Step 7 (start the device).
 
 To return the sandbox device agent to Symphony, restore `WFM_HOST` and
 `WFM_PORT` in `device-agent.env`, set the local allow list policy to the WFM
@@ -421,10 +478,10 @@ Phase 1 — Identity provisioning (once; repeat when an X.509-SVID is reissued)
 
 Phase 2 — Run the conformance suite (every run)
 
-  □ Step 6: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 8) self-check; Enter at both URL prompts (90 passed, 2 not run)
+  □ Step 6: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 8) self-check (90 passed, 2 not run)
   □ Step 7: start the device (sandbox: device-agent.sh docker start-docker); tail -f /tmp/wfm-server.log shows → 201, → 200
   □ Step 8: ctt-start.sh → 2. Device Supplier → 3. Run Tests → 1) core
-  □ Step 9: Enter at both URL prompts; restart the device when requested (within 3 minutes)
+  □ Step 9: restart the device when requested (within 3 minutes)
   □ Step 10: Report:     ctt-runner/reports/device-supplier/conformance-report-<timestamp>.html
              Signed PDF: ctt-runner/reports/device-supplier/conformance-report-<timestamp>_signed.pdf (+ ca_cert.pem)
 ```
@@ -448,7 +505,7 @@ indicate a setup error:
 | FAIL | "keeps its previous state" (ApplicationDeployment YAML does not match its digest) | It stores the ETag of the State Manifest it had to reject |
 | NOT RUN | Standalone cluster role | The device agent declares Compose, not Helm |
 | NOT RUN | Deployment Bundle does not match its digest (2 steps) | This device agent retrieves the ApplicationDeployment YAML files, not the Deployment Bundle |
-| NOT RUN | Observability (2 steps) | No OpenTelemetry collector is directed at the CTT |
+| NOT RUN | Observability (2 steps) | No OpenTelemetry collector is directed at the CTT ([Observability](#observability-opentelemetry)) |
 
 The requirement verified by each step, and the requirements that cannot be
 verified, are listed in `docs/device-supplier-requirements-coverage.md`.
@@ -479,7 +536,6 @@ openssl x509 -in ctt-runner/device-supplier/certs/svid-cert.pem -noout -enddate
 | `Failed to start mock server` | Stated in the log lines printed with the error | Full log: `/tmp/wfm-server.log` |
 | Every step fails: `server presented ..., expected the WFM ...` | The WFM Client SVID was issued for a different WFM ID than the WFM SVID | Issue the WFM Client SVID for the same WFM ID and run Setup Identity again |
 | Every step fails: `x509: certificate signed by unknown authority` | The installed trust anchor is not the Root CA that issued the WFM SVID | Run Setup Identity again with the material of the correct MIS |
-| Every step fails with `403` | The mTLS URL was set to port 3001 | Press Enter at the URL prompts to use the defaults (mTLS on port 3003) |
 | `x509: certificate has expired` | An X.509-SVID has exceeded its validity | Generate new SVIDs and run Setup Identity again |
 | Device: `TLS handshake error ... is not a client of this WFM` in `/tmp/wfm-server.log` | The X.509-SVID of the device belongs to a different WFM ID | Issue the device a WFM Client SVID for the WFM ID of the mock WFM (Step 1) |
 | Device: `TLS handshake error ... unknown certificate authority` | The X.509-SVID of the device was issued by a different MIS | Use one MIS for the mock WFM and the device |
@@ -490,4 +546,5 @@ openssl x509 -in ctt-runner/device-supplier/certs/svid-cert.pem -noout -enddate
 | Sandbox device agent restarts repeatedly with `failed to retrieve margo spiffe trust bundle ... certificate signed by unknown authority` | Its HTTPS CA belongs to a different MIS | Copy the HTTPS CA of the correct MIS to the device agent and restart it ([Renewal and Reissuance](https://github.com/margo/sandbox/blob/main/docs/identity-lifecycle.md#renewal-and-reissuance)) |
 | Sandbox device agent reports `potential rollback attack: new version ... < current version ...` | The mock WFM was restarted and serves a lower manifest version than the device agent adopted | Start the device agent with empty state |
 | `Signed PDF not created` at the end of a run | Stated below the message. Typical causes: the repository folder is owned by root, or no internet access for the initial tool installation | Resolve the stated cause (ownership: `sudo chown -R $USER:$USER $HOME/workspace/conformance_test_toolkit`), then run the `pdf_ops.sh` command the run printed |
+| Sandbox `otel-collector` restarts repeatedly with `listen tcp 0.0.0.0:4318: bind: address already in use` | The collector runs on the CTT host, where the mock WFM uses port 4318 | Move the OTLP receiver of the collector to another port ([Observability](#observability-opentelemetry)) |
 | No report is written | The test runner stopped early | See `ctt-runner/reports/device-supplier/test-execution.log` |

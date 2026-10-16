@@ -1314,10 +1314,8 @@ execute_device_tests() {
     log "▶️  Running Device Conformance Tests (as device agent)..."
     echo ""
 
-    # Determine default host for URL construction
-    local cli_host_ip
-    cli_host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-    local cli_host="${cli_host_ip:-localhost}"
+    # The CTT and its mock WFM run on the same host
+    local cli_host="localhost"
     extra_flags+=("-miaf-url" "https://${cli_host}:3003/v1alpha2/margo")
 
     local test_result=0
@@ -2014,13 +2012,14 @@ device_generate_certs() {
                 echo "    $((i + 1))) ${svid_dirs[$i]##*/}"
             done
             echo ""
-            # Sorted order puts x509svid-<wfm-id> ahead of x509svid-<wfm-id>-<wfm-client-id>.
-            local wfm_n client_n=""
-            read -r -p "  Which one is the WFM SVID?    [1]: " wfm_n    < /dev/tty
-            while [[ -z "$client_n" ]]; do
-                read -r -p "  Which one is the Client SVID?: " client_n < /dev/tty
+            # No defaults: the person who generated the SVIDs picks them by name.
+            local wfm_n="" client_n=""
+            while [[ -z "$wfm_n" ]]; do
+                read -r -p "  Select the mock WFM SVID: " wfm_n < /dev/tty
             done
-            wfm_n="${wfm_n:-1}"
+            while [[ -z "$client_n" ]]; do
+                read -r -p "  Select the WFM Client SVID: " client_n < /dev/tty
+            done
             if [[ ! "$wfm_n" =~ ^[0-9]+$ || ! "$client_n" =~ ^[0-9]+$ ]] \
                 || (( wfm_n < 1 || wfm_n > ${#svid_dirs[@]} )) \
                 || (( client_n < 1 || client_n > ${#svid_dirs[@]} )) \
@@ -2202,6 +2201,19 @@ device_launch_server() {
     fi
 }
 
+# The address a device uses to reach this host: CTT_HOST_ADDRESS when set,
+# otherwise the source address of the default route (not a Docker/k3s bridge),
+# otherwise the first address of `hostname -I`, otherwise localhost.
+ctt_host_address() {
+    if [[ -n "${CTT_HOST_ADDRESS:-}" ]]; then
+        echo "$CTT_HOST_ADDRESS"; return
+    fi
+    local addr
+    addr=$(ip route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}')
+    [[ -z "$addr" ]] && addr=$(hostname -I 2>/dev/null | awk '{print $1}')
+    echo "${addr:-localhost}"
+}
+
 device_start_server() {
     local device_dir="$CONFORMANCE_DIR/device-supplier"
     local cert_dir="$device_dir/certs"
@@ -2218,9 +2230,8 @@ device_start_server() {
     log "🚀 Starting Mock WFM Server..."
     device_launch_server "$cert_dir"
 
-    local host_ip
-    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-    local server_host="${host_ip:-localhost}"
+    local server_host
+    server_host=$(ctt_host_address)
 
     echo ""
     success "Mock WFM Server is running (PID: $(cat /tmp/wfm-server.pid))"
@@ -2235,6 +2246,8 @@ device_start_server() {
     echo ""
     echo "  ➜  Option 3 (Run Tests) runs the CTT's own device-agent against this server."
     echo "  ➜  To test a real device: point it at the Management Interface URL above."
+    echo "     The device must reach this host at that address; to show a different"
+    echo "     address (e.g. the host's IP on the device network): CTT_HOST_ADDRESS=<ip-or-name>"
     echo "     Its SVID must be issued by the same MIS, as"
     echo "     <WFM SPIFFE ID>/client/<wfm-client-id>, and it must accept the WFM SPIFFE ID."
     echo ""
@@ -2289,19 +2302,9 @@ device_run_tests() {
     extra_flags+=("-claimed-app-version" "$claimed_app_version" "-ctt-margo-version" "$ctt_margo_version")
     confirm_version_mismatch "$claimed_app_version"
 
-    # Prompt user for the WFM URL — default to the detected host IP so it
-    # matches the URL shown in step 2 (Start Mock WFM Server)
-    local host_ip
-    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
-    local default_url="https://${host_ip:-localhost}:3001/v1alpha2/margo"
-    local default_miaf_url="https://${host_ip:-localhost}:3003/v1alpha2/margo"
-    echo ""
-    echo "  ➜  This simulates your device-agent connecting to the Mock WFM Server."
-    read -p "Enter Mock WFM Server URL [$default_url]: " wfm_url < /dev/tty
-    wfm_url="${wfm_url:-$default_url}"
-    echo ""
-    read -p "Enter Management Interface (mTLS) URL [$default_miaf_url]: " miaf_url < /dev/tty
-    miaf_url="${miaf_url:-$default_miaf_url}"
+    # The CTT reaches its own mock WFM on this host (fixed ports): nothing to ask.
+    local wfm_url="https://localhost:3001/v1alpha2/margo"
+    local miaf_url="https://localhost:3003/v1alpha2/margo"
     extra_flags+=("-miaf-url" "$miaf_url")
 
     log "▶️  Running Device Conformance Tests"
@@ -2377,112 +2380,6 @@ device_stop_server() {
     fi
 }
 
-device_export_sandbox_identity() {
-    local device_dir="$CONFORMANCE_DIR/device-supplier"
-    local cert_dir="$device_dir/certs"
-
-    if [[ ! -f "$cert_dir/ca-cert.pem" || ! -f "$cert_dir/ca-key.pem" ]]; then
-        warn "This option is for the self-signed setup only: it needs the CTT's own CA (ca-cert.pem, ca-key.pem) in $cert_dir."
-        warn "With a MIS-issued identity (Setup Identity), the device uses the SVID its MIS issued — see the details printed by option 2."
-        return 1
-    fi
-
-    log "🔑 Export Identity for Sandbox Device-Agent"
-    echo ""
-    echo "  This generates a SVID cert + trust bundle so the sandbox device-agent"
-    echo "  can connect to the CTT mock WFM using MIAF (mTLS + X.509-SVID)."
-    echo ""
-
-    # Prompt for SPIFFE ID
-    local default_spiffe="spiffe://margo.org/device/sandbox-device-001"
-    read -p "  SPIFFE ID for sandbox device-agent [$default_spiffe]: " device_spiffe_id < /dev/tty
-    device_spiffe_id="${device_spiffe_id:-$default_spiffe}"
-
-    # Prompt for output directory
-    local default_out="$HOME/ctt-sandbox-agent-identity"
-    read -p "  Output directory [$default_out]: " out_dir < /dev/tty
-    out_dir="${out_dir:-$default_out}"
-    mkdir -p "$out_dir"
-
-    log "Generating SVID for: $device_spiffe_id"
-
-    # Generate private key + SVID signed by CTT CA
-    openssl ecparam -name prime256v1 -genkey -noout \
-        -out "$out_dir/sandbox-device-svid-key.pem" 2>/dev/null
-
-    openssl req -new \
-        -key "$out_dir/sandbox-device-svid-key.pem" \
-        -subj "/CN=sandbox-device-agent/O=Margo CTT" \
-        -out "$out_dir/sandbox-device.csr" 2>/dev/null
-
-    openssl x509 -req -days 365 \
-        -in "$out_dir/sandbox-device.csr" \
-        -CA "$cert_dir/ca-cert.pem" -CAkey "$cert_dir/ca-key.pem" -CAcreateserial \
-        -out "$out_dir/sandbox-device-svid-cert.pem" \
-        -extfile <(printf "subjectAltName=URI:%s\nbasicConstraints=CA:FALSE\nextendedKeyUsage=clientAuth" \
-            "$device_spiffe_id") 2>/dev/null
-
-    rm -f "$out_dir/sandbox-device.csr"
-
-    # Copy CA cert as trust anchor
-    cp "$cert_dir/ca-cert.pem" "$out_dir/ctt-ca-cert.pem"
-
-    # Generate SPIFFE trust bundle in JWKS format from CTT CA cert
-    local der_b64
-    der_b64=$(openssl x509 -in "$cert_dir/ca-cert.pem" -outform DER 2>/dev/null | base64 | tr -d '\n')
-    printf '{"keys":[{"kty":"RSA","use":"x509-svid","x5c":["%s"]}]}' "$der_b64" \
-        > "$out_dir/ctt-trust-bundle.json"
-
-    # Detect mock WFM host IP
-    local host_ip
-    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
-    local mock_miaf_url="https://${host_ip}:3003/v1alpha2/margo"
-
-    echo ""
-    success "Identity files written to: $out_dir"
-    echo ""
-    echo "  sandbox-device-svid-cert.pem   ← device mTLS client cert  (copy to device-agent)"
-    echo "  sandbox-device-svid-key.pem    ← device mTLS private key   (copy to device-agent)"
-    echo "  ctt-ca-cert.pem                ← CTT CA trust anchor        (copy to device-agent)"
-    echo "  ctt-trust-bundle.json          ← SPIFFE JWKS trust bundle   (copy to device-agent)"
-    echo ""
-    echo "──────────────────────────────────────────────────────────────────────────────"
-    echo "  Apply to sandbox device-agent:"
-    echo ""
-    echo "  1. Copy the four files to your sandbox device-agent machine:"
-    echo ""
-    echo "     scp $out_dir/sandbox-device-svid-cert.pem  <agent-host>:\$HOME/sandbox/poc/device/agent/config/identity/"
-    echo "     scp $out_dir/sandbox-device-svid-key.pem   <agent-host>:\$HOME/sandbox/poc/device/agent/config/identity/"
-    echo "     scp $out_dir/ctt-trust-bundle.json          <agent-host>:\$HOME/sandbox/poc/device/agent/config/mis/"
-    echo ""
-    echo "  2. Edit \$HOME/sandbox/poc/device/agent/config/config.yaml on the agent machine:"
-    echo ""
-    printf "     wfm:\n"
-    printf "       sbiUrl: %s\n\n" "$mock_miaf_url"
-    printf "     miaf:\n"
-    printf "       x509:\n"
-    printf "         certPath: \"./config/identity/sandbox-device-svid-cert.pem\"\n"
-    printf "         keyPath:  \"./config/identity/sandbox-device-svid-key.pem\"\n"
-    printf "       mis:\n"
-    printf "         # endpoint: disabled - CTT mock WFM has no live MIS\n"
-    printf "         # caPath:   disabled\n"
-    printf "         cacheInterval: 60\n"
-    printf "         trustBundle:\n"
-    printf "           path: \"./config/mis/ctt-trust-bundle.json\"\n"
-    echo ""
-    echo "  3. Restart the device-agent:"
-    echo ""
-    echo "     bash \$HOME/sandbox/scripts/device-agent.sh docker stop-docker"
-    echo "     bash \$HOME/sandbox/scripts/device-agent.sh docker start-docker"
-    echo ""
-    echo "  4. Watch the mock WFM logs for incoming connections:"
-    echo ""
-    echo "     tail -f /tmp/wfm-server.log"
-    echo ""
-    echo "  The mock WFM will identify the device by SPIFFE ID: $device_spiffe_id"
-    echo "──────────────────────────────────────────────────────────────────────────────"
-}
-
 run_device_flow() {
     while true; do
         # Show live server status in the menu header
@@ -2501,28 +2398,25 @@ run_device_flow() {
         echo "│  Run steps in order:                                                     │"
         echo "│    1. Setup Identity         (copy MIS-issued SVIDs, run once per setup) │"
         echo "│    2. Start Mock WFM Server  (Management Interface, mTLS on :3003)       │"
-        echo "│    3. Run Tests              (select group, CTT simulates device-agent)  │"
+        echo "│    3. Run Tests              (select group)                              │"
         echo "│    4. Stop Mock WFM Server                                               │"
-        echo "│    5. Export Identity for Sandbox Device-Agent                           │"
-        echo "│         (self-signed setup only; not needed with a MIS-issued identity)  │"
         echo "│                                                                          │"
         echo "│  B) Back to main menu                                                    │"
         echo "└─────────────────────────────────────────────────────────────────────────┘"
         echo ""
 
-        read -p "Select option (1-5 or B): " device_choice < /dev/tty
+        read -p "Select option (1-4 or B): " device_choice < /dev/tty
 
         case "${device_choice,,}" in
             1) device_generate_certs || true ;;
             2) device_start_server || true ;;
             3) device_run_tests || true ;;
             4) device_stop_server || true ;;
-            5) device_export_sandbox_identity || true ;;
             b|back)
                 return 0
                 ;;
             *)
-                warn "Invalid option. Please select 1-5 or B."
+                warn "Invalid option. Please select 1-4 or B."
                 ;;
         esac
 

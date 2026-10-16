@@ -1988,8 +1988,9 @@ func handleTelemetryHealth(w http.ResponseWriter, r *http.Request) {
 		status = "receiving"
 	}
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":%q,"otlp_traces":%d,"otlp_metrics":%d,"otlp_logs":%d,"prom_writes":%d}`,
-		status, traces, metrics, logs, prom)
+	// otlp_total: every OTLP push (traces, metrics or logs) — a device may send any of them.
+	fmt.Fprintf(w, `{"status":%q,"otlp_traces":%d,"otlp_metrics":%d,"otlp_logs":%d,"otlp_total":%d,"prom_writes":%d}`,
+		status, traces, metrics, logs, traces+metrics+logs, prom)
 }
 
 // startOTLPServer starts a plain HTTP server on OTLPPort that accepts OTLP
