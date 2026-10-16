@@ -95,6 +95,12 @@ that it connects to the mock WFM instead of Symphony:
 | Add WFM SPIFFE ID in local allow list policy (`device-agent.sh` → 11) | `spiffe://margo.org/margo/wfm/ctt-mock-wfm` |
 | `/etc/hosts` entry for the MIS | The address of the MIS host. `127.0.0.1` is not usable, also on the same host, because the device agent runs in a container |
 
+> **Note:** If the device agent is already installed (for example for Symphony), place the
+> new SVID in `$HOME/certs/compose-identity` and run the installation again
+> (`cd $HOME/workspace/sandbox/scripts && sudo -E bash device-agent.sh docker install`).
+> `start-docker` takes the SVID from the device agent's own configuration folder, which only
+> the installation fills from `$HOME/certs`.
+
 **Vendor's device:** 
 From the same MIS, transfer the CA certificate and the SVID to the vendor's device.
 
@@ -160,6 +166,11 @@ openssl verify -CAfile svid-ca.pem miaf-server-cert.pem svid-cert.pem
 # → svid-cert.pem: OK
 ```
 
+> **Note:** The CTT needs no SPIFFE ID configuration. The mock WFM reads its own SPIFFE ID from
+> its X.509-SVID and accepts every WFM Client of the form `<mock WFM SPIFFE ID>/client/<wfm-client-id>`,
+> as the Margo WFM Identity Profile defines. Only the device must authorize the SPIFFE ID of the
+> mock WFM (Step 2).
+
 ### Step 5 — Start the mock WFM
 
 ```bash
@@ -216,7 +227,7 @@ On the CTT host, watch the requests of the device:
 
 ```bash
 tail -f /tmp/wfm-server.log
-# → [Router] PUT  /v1alpha2/margo/api/v1/capabilities/<device id> ... → 201
+# → [Router] PUT  /v1alpha2/margo/api/v1/capabilities/<device id> ... → 201 (200 if the device reported before)
 # → [Router] GET  /v1alpha2/margo/api/v1/deployments ... → 200
 # → [Router] POST /v1alpha2/margo/api/v1/deployments/<deployment id>/status ... → 200
 ```

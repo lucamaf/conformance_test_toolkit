@@ -136,6 +136,12 @@ openssl verify -CAfile trust-bundle-ca.pem client-svid-cert.pem
 # → client-svid-cert.pem: OK
 ```
 
+> **Note:** The CTT needs no SPIFFE ID configuration. It reads its own SPIFFE ID from its
+> X.509-SVID and accepts only the WFM that this ID belongs to: for
+> `spiffe://<trust-domain>/margo/wfm/<wfm-id>/client/ctt-client` that is
+> `spiffe://<trust-domain>/margo/wfm/<wfm-id>`. The SPIFFE ID of the CTT is added only on the
+> WFM side (Step 2).
+
 ### Step 5 — Start the WFM (Symphony)
 
 ```bash

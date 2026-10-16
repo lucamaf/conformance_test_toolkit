@@ -213,8 +213,10 @@ install_system_deps() {
 
             local missing_apt=()
             for pkg in "${WEASYPRINT_APT_DEPS[@]}"; do
-                if ! dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null \
-                        | grep -q "install ok installed"; then
+                # Ubuntu 24.04+ renamed some libraries with a "t64" suffix
+                # (libglib2.0-0 → libglib2.0-0t64); either name counts as installed.
+                if ! dpkg-query -W -f='${Status}' "${pkg}" 2>/dev/null | grep -q "install ok installed" \
+                    && ! dpkg-query -W -f='${Status}' "${pkg}t64" 2>/dev/null | grep -q "install ok installed"; then
                     missing_apt+=("${pkg}")
                 fi
             done
