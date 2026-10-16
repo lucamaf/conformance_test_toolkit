@@ -1,0 +1,14 @@
+{
+  "name": "observability",
+  "version": "1.0.0-rc.3",
+  "persona": "device-supplier",
+  "description": "Real device: its OpenTelemetry collector pushes telemetry to the CTT. Reported as SKIP when no collector is pointed at the CTT.",
+  "FolderPath": [
+    "../test-suites/device-supplier/observability/test-cases"
+  ],
+  "testCases": [
+    "rd-13-observability",
+    "rd-13-observability-otlp",
+    "rd-13-observability-remote-write"
+  ]
+}

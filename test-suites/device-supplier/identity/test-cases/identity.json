@@ -1,0 +1,244 @@
+[
+  {
+    "id": "rd-01-identity",
+    "name": "Real device \u2014 identity",
+    "description": "The device under test connects to the mock WFM over mutual TLS with its own X.509-SVID. Nothing is sent to the device: every step checks what the device sent, as the mock WFM received and judged it.",
+    "crIds": [
+      "MARGO-DEV-DEPLOYMENT-003",
+      "MARGO-DEV-MANAGEMENTINTERFACE-004",
+      "MARGO-DEV-MANAGEMENTINTERFACE-005",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
+    ],
+    "steps": [
+      {
+        "id": "rd-01-identity-accepted",
+        "name": "The device connects over mTLS with its X.509-SVID and the mock WFM accepts it",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-005",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-001",
+          "MARGO-DEV-DEPLOYMENT-003"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 180,
+          "check": [
+            {
+              "field": "client",
+              "operation": "matches_regex",
+              "value": "^spiffe://[^/]+/margo/wfm/[^/]+/client/[^/]+$"
+            }
+          ]
+        }
+      },
+      {
+        "id": "rd-01-identity-svid-profile",
+        "name": "The device's certificate is an SVID leaf: one URI SAN, not a CA",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-004",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-004"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 30,
+          "check": [
+            {
+              "field": "cert.uri_sans",
+              "operation": "equals",
+              "value": 1
+            },
+            {
+              "field": "cert.is_ca",
+              "operation": "equals",
+              "value": false
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-10-wfm-trust",
+    "name": "Real device \u2014 a WFM the MIS did not certify is refused",
+    "description": "For 50 seconds the mock WFM presents a certificate with its own SPIFFE ID that the MIS did not issue. The device must refuse the connection: it must not send any request over it. Afterwards the mock WFM presents its SVID again and the device continues.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-018",
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+    ],
+    "steps": [
+      {
+        "id": "rd-10-wfm-trust-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-10-wfm-trust-arm",
+        "name": "Mock WFM: present a certificate the MIS did not issue for 50 seconds",
+        "method": "PUT",
+        "endpoint": "/api/v1/test/server-identity",
+        "mtls": true,
+        "request_body": {
+          "untrustedSeconds": 50
+        },
+        "headers": {},
+        "expected_status": 200,
+        "validations": [],
+        "extract_context": {}
+      },
+      {
+        "id": "rd-10-wfm-trust-refused",
+        "name": "The device sends no request to a WFM whose certificate the MIS did not issue",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-018",
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-002"
+        ],
+        "observe": {
+          "expect": "absent",
+          "path_regex": "^/api/v1/",
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "untrusted"
+            }
+          ],
+          "for_seconds": 58,
+          "only_if": {
+            "method": "TLS",
+            "path_regex": "^/handshake-error$",
+            "where": [
+              {
+                "field": "server_identity",
+                "operation": "equals",
+                "value": "untrusted"
+              }
+            ]
+          },
+          "only_if_reason": "the device did not try to connect while the mock WFM presented the untrusted certificate"
+        }
+      },
+      {
+        "id": "rd-10-wfm-trust-resumed",
+        "name": "The device continues when the WFM presents its SVID again",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-018"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 180,
+          "where": [
+            {
+              "field": "server_identity",
+              "operation": "equals",
+              "value": "svid"
+            }
+          ],
+          "since": "now"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rd-12-svid-rotation",
+    "name": "Real device \u2014 access continues after SVID rotation",
+    "description": "When the device's SVID is replaced by a re-issued one for the same SPIFFE ID, the device keeps working without registering again. Reported as SKIP when the SVID was not replaced during the run.",
+    "crIds": [
+      "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
+    ],
+    "steps": [
+      {
+        "id": "rd-12-svid-rotation-connected",
+        "name": "The device is connected to the mock WFM",
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            204,
+            304,
+            400,
+            403,
+            404,
+            406,
+            422
+          ],
+          "within_seconds": 120
+        },
+        "extract_context": {
+          "deviceClient": "client",
+          "deviceCert": "cert.sha256"
+        }
+      },
+      {
+        "id": "rd-12-svid-rotation-accepted",
+        "name": "The device presents a re-issued SVID for the same SPIFFE ID and its requests are accepted",
+        "crIds": [
+          "MARGO-DEV-MANAGEMENTINTERFACE-MIAF-003"
+        ],
+        "observe": {
+          "path_regex": "^/api/v1/",
+          "status": [
+            200,
+            201,
+            304
+          ],
+          "within_seconds": 10,
+          "where": [
+            {
+              "field": "cert.sha256",
+              "operation": "not_contains",
+              "value": "{deviceCert}"
+            }
+          ],
+          "if_absent": "skip",
+          "skip_reason": "the device's SVID was not replaced during the run"
+        }
+      }
+    ]
+  }
+]

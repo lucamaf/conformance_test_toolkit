@@ -1,0 +1,15 @@
+id: {{deploymentId}}
+metadata:
+  name: ctt-compose-sample
+  namespace: margo-ctt
+  deviceId: {{deviceId}}
+spec:
+  applicationId: ctt-compose-sample
+  deploymentProfile:
+    type: compose
+    components:
+      - name: compose-sample
+        properties:
+          repository: {{repository}}
+          revision: {{revision}}
+          wait: true

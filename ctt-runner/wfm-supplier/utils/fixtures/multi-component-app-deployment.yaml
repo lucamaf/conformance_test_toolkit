@@ -1,0 +1,55 @@
+# Reference multi-component compose ApplicationDeployment for the
+# wfm-multi-component-deployment scenario.
+#
+# HOW TO USE (automated — recommended)
+#   Run the provision script BEFORE starting the CTT scenario group:
+#
+#     bash ctt-runner/wfm-supplier/utils/fixtures/provision-multi-component.sh
+#
+#   The script authenticates with the WFM NBI, registers a Margo app package
+#   from the OCI registry, and creates an ApplicationDeployment with two
+#   compose components (one wait:true, one wait:false) targeting the CTT's
+#   SPIFFE ID.  For Symphony sandbox (no args needed); for other WFMs pass
+#   --nbi-url, --nbi-user, --nbi-pass, --device-id, --compose-image.
+#   After the test run: bash provision-multi-component.sh --cleanup
+#
+# HOW TO USE (manual — fallback for WFMs without an NBI)
+#   1. Register an OCI app package in your WFM console that contains at least
+#      one compose deployment profile.
+#   2. Create an ApplicationDeployment with TWO components:
+#        - wait-true-component   (wait: true)
+#        - wait-false-component  (wait: false)
+#      and assign it to the CTT's SPIFFE ID / device ID.
+#   3. Start the CTT group run — step 2 polls until the deployment appears.
+#
+# The suite validates:
+#   - GET /api/v1/deployments returns deployments.length >= 1
+#   - The manifest ETag is sha256:<64-hex>
+#   - The deployment YAML body contains both `wait: true` and `wait: false`
+#   - The ETag equals the sha256 of the served body
+#   - No container is deployed — `wait` sequencing is the device-agent's job
+#
+# IMPORTANT: Cache-Control MUST NOT include `immutable` on the manifest endpoint.
+# `immutable` indicates the response never changes, but the manifest changes
+# whenever deployments are assigned or removed (MARGO-WFM-MANAGEMENTINTERFACE-030).
+
+id: cts-multi-component-app
+metadata:
+  name: cts-multi-component-app
+  namespace: <namespace>
+  deviceId: multi-component-test-device
+spec:
+  applicationId: cts-multi-component-app
+  deploymentProfile:
+    type: compose
+    components:
+      - name: wait-true-component
+        properties:
+          repository: oci://<your-registry>/<your-repo>
+          revision: <tag>
+          wait: true
+      - name: wait-false-component
+        properties:
+          repository: oci://<your-registry>/<your-repo>
+          revision: <tag>
+          wait: false
